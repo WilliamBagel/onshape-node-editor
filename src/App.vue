@@ -28,8 +28,8 @@ export default defineComponent({
 </template>
 
 <style scoped>
-@import './common.css';
-@import './customization/background.css';
+@use './common.css' as *;
+@use './customization/background.css' as *;
 
 header {
   line-height: 1.5;

@@ -10,14 +10,14 @@ export default {
 
 <style lang="scss" scoped>
 @use "sass:math";
-@import "./vars";
+@use "./vars";
 
 .socket {
   display: inline-block;
   cursor: pointer;
-  border: 1px solid grey;
-  width: $socket-size;
-  height: $socket-size * 2;
+  border: 1px solid rgb(52, 23, 216);
+  width: vars.$socket-size;
+  height: vars.$socket-size * 2;
   vertical-align: middle;
   background: #fff;
   z-index: 2;

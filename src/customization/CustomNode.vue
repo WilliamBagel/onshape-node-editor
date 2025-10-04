@@ -67,7 +67,7 @@ export default defineComponent({
 
 <style lang="scss" scoped>
 @use "sass:math";
-@import "./vars";
+@use "./vars" as *;
 
 .node {
   background: black;
