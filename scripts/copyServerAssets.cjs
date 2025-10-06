@@ -57,17 +57,35 @@ for (const item of items) {
         fs.copyFileSync(tsCandidate, path.join(funcDir, 'index.js'));
       }
     }
+    // copy shared compiled modules (like config.js) into function folder if present
+    const sharedFiles = ['config.js'];
+    for (const sf of sharedFiles) {
+      const srcShared = path.join(buildDir, sf);
+      if (fs.existsSync(srcShared)) {
+        fs.copyFileSync(srcShared, path.join(funcDir, sf));
+      }
+    }
   }
 }
 
 // write minimal package.json for function app (node-fetch dependency)
+// Include @azure/functions version from root package.json if available
+let azureFunctionsVersion = '^4.8.0';
+try {
+  const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  azureFunctionsVersion = (rootPkg.dependencies && rootPkg.dependencies['@azure/functions']) || (rootPkg.devDependencies && rootPkg.devDependencies['@azure/functions']) || azureFunctionsVersion;
+} catch (e) {
+  // ignore
+}
+
 const pkg = {
   name: 'onshape-node-editor-functions',
   version: '1.0.0',
   // main points to the compiled index bundle which registers functions with the programming model
   main: 'index.js',
   dependencies: {
-    'node-fetch': '^2.6.7'
+    'node-fetch': '^2.6.7',
+    '@azure/functions': azureFunctionsVersion
   }
 };
 fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(pkg, null, 2));
@@ -76,5 +94,20 @@ fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(pkg, null, 2)
 const builtIndex = path.join(buildDir, 'index.js');
 if (fs.existsSync(builtIndex)) {
   fs.copyFileSync(builtIndex, path.join(outDir, 'index.js'));
+}
+// copy required node_modules from repo root if present
+const rootNode = path.join(root, 'node_modules');
+const targetNode = path.join(outDir, 'node_modules');
+if (fs.existsSync(rootNode)) {
+  if (!fs.existsSync(targetNode)) fs.mkdirSync(targetNode, { recursive: true });
+  const deps = Object.keys(pkg.dependencies || {});
+  for (const d of deps) {
+    const src = path.join(rootNode, d);
+    const dest = path.join(targetNode, d);
+    if (fs.existsSync(src)) {
+      // copy recursively
+      copyRecursive(src, dest);
+    }
+  }
 }
 console.log('Server assets copied to', outDir);
