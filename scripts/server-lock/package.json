@@ -1,0 +1,9 @@
+﻿{
+  "name": "onshape-node-editor-functions",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "node-fetch": "^2.6.7",
+    "@azure/functions": "^4.8.0"
+  }
+}

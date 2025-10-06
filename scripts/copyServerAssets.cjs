@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const outDir = path.join(root, 'dist', 'server');
@@ -95,19 +96,49 @@ const builtIndex = path.join(buildDir, 'index.js');
 if (fs.existsSync(builtIndex)) {
   fs.copyFileSync(builtIndex, path.join(outDir, 'index.js'));
 }
-// copy required node_modules from repo root if present
-const rootNode = path.join(root, 'node_modules');
-const targetNode = path.join(outDir, 'node_modules');
-if (fs.existsSync(rootNode)) {
-  if (!fs.existsSync(targetNode)) fs.mkdirSync(targetNode, { recursive: true });
-  const deps = Object.keys(pkg.dependencies || {});
-  for (const d of deps) {
-    const src = path.join(rootNode, d);
-    const dest = path.join(targetNode, d);
-    if (fs.existsSync(src)) {
-      // copy recursively
-      copyRecursive(src, dest);
+// copy server package-lock.json into dist so consumers can run `npm ci` deterministically
+const serverLockSrc = path.join(root, 'src', 'server', 'package-lock.json');
+if (fs.existsSync(serverLockSrc)) {
+  fs.copyFileSync(serverLockSrc, path.join(outDir, 'package-lock.json'));
+} else {
+  // fallback: write the minimal lock derived from our pkg object so installs are predictable
+  const minimalLock = {
+    name: pkg.name,
+    version: pkg.version,
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      '': {
+        name: pkg.name,
+        version: pkg.version,
+        dependencies: pkg.dependencies
+      }
     }
+  };
+  fs.writeFileSync(path.join(outDir, 'package-lock.json'), JSON.stringify(minimalLock, null, 2));
+}
+
+// Attempt a deterministic install in the output folder so dist/server/node_modules is present
+function runNpmCiInOutDir() {
+  try {
+    console.log('Running npm ci in', outDir);
+    // Use shell true to be robust on Windows; inherit stdio so user sees progress
+    const res = spawnSync('npm', ['ci', '--no-audit', '--no-fund', '--omit=dev'], { cwd: outDir, stdio: 'inherit', shell: true });
+    if (res.status === 0) {
+      console.log('npm ci completed successfully');
+      return;
+    }
+    console.warn('npm ci failed with exit code', res.status, '- attempting npm install --omit=dev as fallback');
+    const res2 = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--omit=dev'], { cwd: outDir, stdio: 'inherit', shell: true });
+    if (res2.status === 0) {
+      console.log('npm install --omit=dev completed successfully');
+      return;
+    }
+    console.warn('npm install --omit=dev also failed with exit code', res2.status, '\nDist may be missing node_modules.');
+  } catch (err) {
+    console.warn('Exception while running npm install:', err && err.stack || err);
   }
 }
+
+runNpmCiInOutDir();
 console.log('Server assets copied to', outDir);
