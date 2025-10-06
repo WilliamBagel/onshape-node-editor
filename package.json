@@ -9,16 +9,17 @@
   "scripts": {
     "dev": "vite",
     "build:app": "vite build --outDir dist/app",
-  "build:server": "tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs",
+    "build:server": "tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs",
     "build": "run-p type-check \"build:app\" \"build:server\"",
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "deploy:app": "npm run build:app && npx gh-pages -d dist/app",
-  "deploy:server": "npm run build:server && node ./scripts/deployServer.cjs"
+    "deploy:server": "npm run build:server && node ./scripts/deployServer.cjs"
   },
   "dependencies": {
     "@azure/functions": "^4.8.0",
+    "dotenv": "^17.2.3",
     "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch",
     "rete": "^2.0.6",
     "rete-area-plugin": "^2.1.5",
@@ -38,11 +39,11 @@
     "@types/node": "^22.18.6",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
+    "adm-zip": "^0.5.11",
     "npm-run-all2": "^8.0.4",
     "typescript": "~5.9.0",
     "vite": "^7.1.7",
     "vite-plugin-vue-devtools": "^8.0.2",
-    "vue-tsc": "^3.1.0",
-    "adm-zip": "^0.5.11"
+    "vue-tsc": "^3.1.0"
   }
 }

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const AdmZip = require('adm-zip');
+require('dotenv').config();
 
 const root = path.resolve(__dirname, '..');
 const serverDir = path.join(root, 'dist', 'server');
