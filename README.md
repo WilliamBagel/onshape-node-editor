@@ -40,3 +40,27 @@ npm run dev
 ```sh
 npm run build
 ```
+
+### Build and deploy the client app (GitHub Pages)
+
+This builds only the web app into `dist/app`. You can publish that folder to GitHub Pages.
+
+```
+npm run build:app
+npm run deploy:app
+```
+
+Set `GH_PAGES_BRANCH` or configure `gh-pages` as needed. You can also manually publish `dist/app`.
+
+### Build and deploy the server (Azure Functions)
+
+Builds the server TypeScript into `dist/server`, producing a function app layout. Then publish using the Azure Functions Core Tools.
+
+```
+npm run build:server
+set AZURE_FUNCTIONAPP_NAME=your-functionapp-name
+npm run deploy:server
+```
+
+The `deploy:server` script calls `func azure functionapp publish` — make sure the Azure Functions Core Tools (`func`) are installed and you are logged in.
+

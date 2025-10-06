@@ -2,7 +2,6 @@
 import { createEditor as createDefaultEditor } from './default'
 import { createEditor as createPerfEditor } from './perf'
 import { createEditor as createCustomEditor } from './customization'
-import { createEditor as create3DEditor } from './3d'
 import { createEditor as createScopesEditor } from './scopes'
 import { isHeadless } from '../headless'
 
@@ -10,7 +9,6 @@ const factory = {
   'default': createDefaultEditor,
   'perf': createPerfEditor,
   'customization': createCustomEditor,
-  '3d': create3DEditor,
   'scopes': createScopesEditor
 }
 
