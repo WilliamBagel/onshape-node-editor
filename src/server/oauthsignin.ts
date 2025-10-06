@@ -36,7 +36,7 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
   const log = openalog();
   oalog(log, 'oauthsignin called');
 
-  const redirectOnshapeUri = req.query.redirectOnshapeUri || (req.body && req.body.redirectOnshapeUri);
+  const redirectOnshapeUri = req.query?.redirectOnshapeUri || req.body?.redirectOnshapeUri;
 
   if (!redirectOnshapeUri) {
     oalog(log, 'missing redirectOnshapeUri');
@@ -45,7 +45,7 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
   }
 
   // Determine script uri from request headers
-  const host = req.headers && (req.headers.host || req.headers.Host);
+  const host = req.headers?.host || req.headers?.Host;
   if (!host) {
     oalog(log, 'missing host header');
     closealog(log);

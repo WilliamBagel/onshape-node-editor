@@ -118,27 +118,4 @@ if (fs.existsSync(serverLockSrc)) {
   fs.writeFileSync(path.join(outDir, 'package-lock.json'), JSON.stringify(minimalLock, null, 2));
 }
 
-// Attempt a deterministic install in the output folder so dist/server/node_modules is present
-function runNpmCiInOutDir() {
-  try {
-    console.log('Running npm ci in', outDir);
-    // Use shell true to be robust on Windows; inherit stdio so user sees progress
-    const res = spawnSync('npm', ['ci', '--no-audit', '--no-fund', '--omit=dev'], { cwd: outDir, stdio: 'inherit', shell: true });
-    if (res.status === 0) {
-      console.log('npm ci completed successfully');
-      return;
-    }
-    console.warn('npm ci failed with exit code', res.status, '- attempting npm install --omit=dev as fallback');
-    const res2 = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--omit=dev'], { cwd: outDir, stdio: 'inherit', shell: true });
-    if (res2.status === 0) {
-      console.log('npm install --omit=dev completed successfully');
-      return;
-    }
-    console.warn('npm install --omit=dev also failed with exit code', res2.status, '\nDist may be missing node_modules.');
-  } catch (err) {
-    console.warn('Exception while running npm install:', err && err.stack || err);
-  }
-}
-
-runNpmCiInOutDir();
 console.log('Server assets copied to', outDir);

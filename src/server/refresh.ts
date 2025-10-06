@@ -36,7 +36,7 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
   const log = openalog();
   oalog(log, 'refresh called');
 
-  const refresh_token = req.query.refresh_token || (req.body && (req.body.refresh_token || req.body.refreshToken));
+  const refresh_token = req.query?.refresh_token || req.body?.refresh_token || req.body?.refreshToken;
   if (!refresh_token) {
     oalog(log, 'missing refresh token');
     closealog(log);

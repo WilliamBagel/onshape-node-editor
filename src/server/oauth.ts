@@ -37,8 +37,8 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
   oalog(log, '\n-------\nREQUEST for oauth');
 
   // For token exchange, expect code and redirect_uri in query or body
-  const code = req.query.code || (req.body && req.body.code);
-  const redirect_uri = req.query.redirect_uri || (req.body && req.body.redirect_uri);
+  const code = req.query?.code || req.body?.code;
+  const redirect_uri = req.query?.redirect_uri || req.body?.redirect_uri;
 
   if (!code) {
     oalog(log, 'missing code');

@@ -37,7 +37,7 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
   oalog(log, '\n****Making getfile request');
   oalog(log, JSON.stringify(req.headers || {}));
 
-  const url = req.query.url || (req.body && req.body.url);
+  const url = req.query?.url || req.body?.url;
   if (!url) {
     oalog(log, 'missing url');
     closealog(log);

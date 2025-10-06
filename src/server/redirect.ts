@@ -32,10 +32,10 @@ import { openalog, oalog, closealog, APP_NAME } from "./config";
 
 export default async function (_context: any, req: any): Promise<HttpResponseInit> {
   const log = openalog();
-  const client_id = req.query.client_id || (req.body && req.body.client_id);
-  const documentId = req.query.documentId || (req.body && req.body.documentId);
-  const workspaceId = req.query.workspaceId || (req.body && req.body.workspaceId);
-  const elementId = req.query.elementId || (req.body && req.body.elementId);
+  const client_id = req.query?.client_id || req.body?.client_id;
+  const documentId = req.query?.documentId || req.body?.documentId;
+  const workspaceId = req.query?.workspaceId || req.body?.workspaceId;
+  const elementId = req.query?.elementId || req.body?.elementId;
 
   if (!client_id || !documentId || !workspaceId || !elementId) {
     oalog(log, `Missing params client_id=${client_id} documentId=${documentId} workspaceId=${workspaceId} elementId=${elementId}`);
@@ -51,7 +51,7 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
 
   const appName = APP_NAME || '';
 
-  const redirectUrl = `https://oauth.onshape.com/oauth/authorize?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(`https://ftconshape.com/${APP_NAME}/?documentId=${documentId}&workspaceId=${workspaceId}&elementId=${elementId}`)}`;
+  const redirectUrl = `https://oauth.onshape.com/oauth/authorize?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(`https://ftconshape.com/${appName}/?documentId=${documentId}&workspaceId=${workspaceId}&elementId=${elementId}`)}`;
   oalog(log, 'Redirecting to: ' + redirectUrl);
   closealog(log);
   return { status: 302, headers: { Location: redirectUrl } };
