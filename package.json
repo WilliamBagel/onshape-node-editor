@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@types/three": "^0.156.0",
+    "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch",
     "rete": "^2.0.6",
     "rete-area-3d-plugin": "^2.0.5",
     "rete-area-plugin": "^2.1.5",

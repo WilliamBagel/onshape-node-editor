@@ -1,11 +1,6 @@
 {
-  "files": [],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    },
-    {
-      "path": "./tsconfig.app.json"
-    }
+  "include": [
+    "env.d.ts",
+    "src/**/**/*"
   ]
 }
