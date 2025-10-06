@@ -43,6 +43,14 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
     return { status: 400, body: 'Missing required parameters' };
   }
 
+  if (typeof client_id !== 'string' || typeof documentId !== 'string' || typeof workspaceId !== 'string' || typeof elementId !== 'string') {
+    oalog(log, 'invalid parameter types');
+    closealog(log);
+    return { status: 400, body: 'invalid parameter types' };
+  }
+
+  const appName = APP_NAME || '';
+
   const redirectUrl = `https://oauth.onshape.com/oauth/authorize?response_type=code&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(`https://ftconshape.com/${APP_NAME}/?documentId=${documentId}&workspaceId=${workspaceId}&elementId=${elementId}`)}`;
   oalog(log, 'Redirecting to: ' + redirectUrl);
   closealog(log);

@@ -46,6 +46,18 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
     return { status: 400, body: 'missing code' };
   }
 
+  if (!CLIENT_URL) {
+    oalog(log, 'server misconfiguration: CLIENT_URL not set');
+    closealog(log);
+    return { status: 500, body: 'server configuration error' };
+  }
+
+  if (typeof code !== 'string') {
+    oalog(log, 'invalid code');
+    closealog(log);
+    return { status: 400, body: 'invalid code' };
+  }
+
   try {
     const params = new URLSearchParams();
     params.append('grant_type', 'authorization_code');

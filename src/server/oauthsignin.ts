@@ -46,8 +46,13 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
 
   // Determine script uri from request headers
   const host = req.headers && (req.headers.host || req.headers.Host);
-  const proto = req.headers && (req.headers['x-forwarded-proto'] || 'https');
-  const script_uri = `${proto}://${host}${req.url}`;
+  if (!host) {
+    oalog(log, 'missing host header');
+    closealog(log);
+    return { status: 400, body: 'missing host header' };
+  }
+  const proto = req.headers && (req.headers['x-forwarded-proto'] || req.protocol || 'https');
+  const script_uri = `${proto}://${host}${req.url || ''}`;
 
   const onshape_uri = `https://oauth.onshape.com/oauth/authorize?response_type=code&redirect_uri=${encodeURIComponent(script_uri + '?redirectOnshapeUri=' + redirectOnshapeUri)}&client_id=${CLIENT_ID}`;
 

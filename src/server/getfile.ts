@@ -44,6 +44,20 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
     return { status: 400, body: "missing url" };
   }
 
+  // validate URL
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      oalog(log, 'invalid url protocol');
+      closealog(log);
+      return { status: 400, body: 'invalid url protocol' };
+    }
+  } catch (e) {
+    oalog(log, 'invalid url format');
+    closealog(log);
+    return { status: 400, body: 'invalid url' };
+  }
+
   try {
     const response = await fetch(url, { method: req.method || 'GET', headers: req.headers });
     const buf = await response.arrayBuffer();
