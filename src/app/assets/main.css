@@ -1,9 +1,14 @@
 @use './base.css' as *;
 
 #app {
-  max-width: 1280px;
+  position: fixed;
+  display: grid;
+  grid-template-rows: 5% 1fr 5%;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   margin: 0 auto;
-  padding: 2rem;
   font-weight: normal;
 }
 
@@ -22,14 +27,14 @@ a,
 }
 
 @media (min-width: 1024px) {
-  body {
-    display: flex;
-    place-items: center;
-  }
+}
 
-  #app {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    padding: 0 2rem;
-  }
+.toolbar {
+  width: 100%;
+  height: 100%;
+  overflow-block: clip;
+  display: flex;
+  flex-direction: row-reverse;
+  z-index: 1;
+  background-color: rgb(231, 231, 231);
 }

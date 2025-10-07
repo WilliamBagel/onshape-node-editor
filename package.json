@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build:app": "vite build --outDir dist/app",
+    "build:app": "vite build",
     "build:server": "tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs",
     "build": "run-p type-check \"build:app\" \"build:server\"",
     "preview": "vite preview",

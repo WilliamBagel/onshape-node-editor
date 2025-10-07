@@ -5,7 +5,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="greetings">
+  <div id="top-bar" class="toolbar">
     <h1 class="green">{{ msg }}</h1>
     <h3>
       You’ve successfully created a project with
@@ -17,10 +17,8 @@ defineProps<{
 
 <style scoped>
 h1 {
-  font-weight: 500;
-  font-size: 2.6rem;
-  position: relative;
-  top: -10px;
+  font-weight: 300;
+  font-size: 1rem;
 }
 
 h3 {
@@ -33,9 +31,14 @@ h3 {
 }
 
 @media (min-width: 1024px) {
+
   .greetings h1,
   .greetings h3 {
     text-align: left;
   }
+}
+
+.toolbar {  
+    border-bottom: 1px solid rgb(88, 88, 88);
 }
 </style>
