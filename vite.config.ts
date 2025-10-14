@@ -30,4 +30,5 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src/app', import.meta.url))
     },
   },
+  base: '/onshape-node-editor/'
 })

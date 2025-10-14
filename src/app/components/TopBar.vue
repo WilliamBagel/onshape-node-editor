@@ -39,6 +39,6 @@ h3 {
 }
 
 .toolbar {  
-    border-bottom: 1px solid rgb(88, 88, 88);
+    border-bottom-width: 1px;
 }
 </style>

@@ -26,38 +26,33 @@
 //  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // This file is generated via GPT-5 mini using the reference file php https://github.com/Team2901/OnshapeInsertTool/blob/main/server/oauthsignin.php
+// and improved with Claude
 // Copyright notice included from reference file
 
-import { HttpResponseInit } from "@azure/functions";
-import { openalog, oalog, closealog, CLIENT_ID } from "./config";
+import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { CLIENT_ID } from "./config";
+require('dotenv').config()
 
 // This endpoint constructs an Onshape OAuth authorize redirect similar to the PHP original
-export default async function (_context: any, req: any): Promise<HttpResponseInit> {
-  const log = openalog();
-  oalog(log, 'oauthsignin called');
-
-  const redirectOnshapeUri = req.query?.redirectOnshapeUri || req.body?.redirectOnshapeUri;
+export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+  const qs = request.query as URLSearchParams | undefined;
+  const redirectOnshapeUri = qs ? qs.get('redirectOnshapeUri') : undefined;
 
   if (!redirectOnshapeUri) {
-    oalog(log, 'missing redirectOnshapeUri');
-    closealog(log);
     return { status: 400, body: 'missing redirectOnshapeUri' };
   }
 
   // Determine script uri from request headers
-  const host = req.headers?.host || req.headers?.Host;
+  const headers = request.headers || {};
+  const host = headers['host'] || headers['Host'];
   if (!host) {
-    oalog(log, 'missing host header');
-    closealog(log);
     return { status: 400, body: 'missing host header' };
   }
-  const proto = req.headers && (req.headers['x-forwarded-proto'] || req.protocol || 'https');
-  const script_uri = `${proto}://${host}${req.url || ''}`;
+  const proto = headers['x-forwarded-proto'] || (request as any).protocol || 'https';
+  const script_uri = `${proto}://${host}${request.url || ''}`;
 
   const onshape_uri = `https://oauth.onshape.com/oauth/authorize?response_type=code&redirect_uri=${encodeURIComponent(script_uri + '?redirectOnshapeUri=' + redirectOnshapeUri)}&client_id=${CLIENT_ID}`;
 
-  oalog(log, 'redirecting to ' + onshape_uri);
-  closealog(log);
   return { status: 302, headers: { Location: onshape_uri } };
 }
 

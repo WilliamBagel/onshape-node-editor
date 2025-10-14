@@ -28,8 +28,8 @@
 
 'use strict';
 
-import { createDocumentElement } from './common/htmldom';
-import { Messaging } from './messaging';
+import { createDocumentElement } from './htmldom';
+import { Messaging } from '../onshape-utils/messaging';
 import { onshapeConfig, OnshapeAPI } from './onshapeapi';
 
 /**
@@ -44,6 +44,7 @@ export class BaseApp {
     public elementId = '';
     public server = 'https://cad.onshape.com';
     public myserver = ''; // Fill in with your server
+    public myclient = ''; // Fill with client url
     public onshape: OnshapeAPI;
     public messaging: Messaging;
 
@@ -113,7 +114,7 @@ export class BaseApp {
     public getOnshapeFile(url: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             let xhr = new XMLHttpRequest();
-            let uri = `${this.myserver}/getfile.php?url=${url}`;
+            let uri = `${this.myserver}/getfile?url=${url}`;
             xhr.open('GET', uri, true);
 
             xhr.onreadystatechange = function () {
@@ -164,9 +165,8 @@ export class BaseApp {
                                 if (css !== null && css.length > 1) {
                                     // We did.  Create a link element in the DOM
                                     var cssLink = createDocumentElement('link', {
-                                        href: `${this.myserver}/getfile.php?url=${
-                                            this.server + css[1]
-                                        }`,
+                                        href: `${this.myserver}/getfile?url=${this.server + css[1]
+                                            }`,
                                         rel: 'stylesheet',
                                         type: 'text/css',
                                     });
@@ -209,7 +209,7 @@ export class BaseApp {
     /**
      * The main entry point for an app
      */
-    public startApp(): void {}
+    public startApp(): void { }
     /**
      * This is called when there is a problem in the application that can't be recovered from
      * @param reason Initialization failure reason
@@ -232,7 +232,7 @@ export class BaseApp {
      * The main initialization routine.  This is invoked once the web page is initially loaded
      */
     public init(): void {
-        let config: onshapeConfig = { myserver: this.myserver };
+        let config: onshapeConfig = { myserver: this.myserver, myclient: this.myclient };
 
         // Parse query parameters
         let queryParameters = decodeURIComponent(window.location.search.substring(1));
@@ -276,10 +276,9 @@ export class BaseApp {
         this.documentId = config.documentId;
         this.elementId = config.elementId;
         this.workspaceId = config.workspaceId;
-        // this.server = config.server;
 
-        promises.push(this.onshape.init().then(()=>{
-          this.initApp();
+        promises.push(this.onshape.init().then(() => {
+            this.initApp();
         }))
 
         this.displayReady = Promise.all(promises)

@@ -1,0 +1,22 @@
+<html>
+
+<head></head>
+
+<body>
+    <script>
+        const query = new URLSearchParams(window.location.search);
+        const client_id = query.get('client_id');
+        const documentId = query.get('documentId');
+        const workspaceId = query.get('workspaceId');
+        const elementId = query.get('elementId');
+
+        if (!client_id || !documentId || !workspaceId || !elementId) {
+            alert("Error: Missing required parameters\nSupport Email: onshapenodeeditor@gmail.com");
+        }
+
+        const redirectUrl = `https://oauth.onshape.com/oauth/authorize?response_type=code&client_id=${client_id}&redirect_uri=${encodeURIComponent(`https://williambagel.github.io/onshape-node-editor/?documentId=${documentId}&workspaceId=${workspaceId}&elementId=${elementId}`)}`;
+        window.location = redirectUrl;
+    </script>
+</body>
+
+</html>

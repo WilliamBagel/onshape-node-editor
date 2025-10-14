@@ -26,21 +26,18 @@
 //  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // This file is generated via GPT-5 mini using the reference file php https://github.com/Team2901/OnshapeInsertTool/blob/main/server/getfile.php
+// and improved with Claude
 // Copyright notice included from reference file
 
 import fetch from "node-fetch";
-import { HttpResponseInit } from "@azure/functions";
-import { openalog, oalog, closealog } from "./config";
+import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 
-export default async function (_context: any, req: any): Promise<HttpResponseInit> {
-  const log = openalog();
-  oalog(log, '\n****Making getfile request');
-  oalog(log, JSON.stringify(req.headers || {}));
+export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
 
-  const url = req.query?.url || req.body?.url;
+  const q = request.query;
+  const body = request.method === 'POST' ? request.body : undefined;
+  const url = (q && q.get('url')) || (body && body['url']);
   if (!url) {
-    oalog(log, 'missing url');
-    closealog(log);
     return { status: 400, body: "missing url" };
   }
 
@@ -48,30 +45,46 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
   try {
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) {
-      oalog(log, 'invalid url protocol');
-      closealog(log);
       return { status: 400, body: 'invalid url protocol' };
     }
   } catch (e) {
-    oalog(log, 'invalid url format');
-    closealog(log);
     return { status: 400, body: 'invalid url' };
   }
 
   try {
-    const response = await fetch(url, { method: req.method || 'GET', headers: req.headers });
+    // Filter out headers that shouldn't be forwarded
+    const forwardHeaders: Record<string, string> = {};
+    const skipHeaders = ['host', 'connection', 'content-length', 'transfer-encoding'];
+    
+    request.headers.forEach((value, key) => {
+      if (!skipHeaders.includes(key.toLowerCase())) {
+        forwardHeaders[key] = value;
+      }
+    });
+
+    const response = await fetch(url, { 
+      method: request.method || 'GET', 
+      headers: forwardHeaders
+    });
+    
     const buf = await response.arrayBuffer();
-    const headers = Object.fromEntries(response.headers.entries());
-    oalog(log, `status ${response.status}`);
-    closealog(log);
+    
+    // Get the content-type from the response
+    const contentType = response.headers.get('content-type');
+    const responseHeaders: Record<string, string> = {
+      'Access-Control-Allow-Origin': '*'
+    };
+    
+    if (contentType) {
+      responseHeaders['Content-Type'] = contentType;
+    }
+    
     return {
       status: response.status,
-      headers,
+      headers: responseHeaders,
       body: Buffer.from(buf)
     };
   } catch (err: any) {
-    oalog(log, 'error: ' + String(err));
-    closealog(log);
     return { status: 502, body: String(err.message || err) };
   }
 }

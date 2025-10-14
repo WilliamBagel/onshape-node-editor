@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "node-fetch": "^2.6.7",
-    "@azure/functions": "^4.8.0"
+    "@azure/functions": "^4.8.0",
+    "dotenv": "^17.2.3"
   }
 }

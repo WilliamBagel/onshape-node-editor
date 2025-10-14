@@ -2,7 +2,6 @@ import { app } from "@azure/functions";
 import getfile from "./getfile";
 import oauth from "./oauth";
 import oauthsignin from "./oauthsignin";
-import redirect from "./redirect";
 import refresh from "./refresh";
 
 // Register HTTP functions
@@ -22,12 +21,6 @@ app.http("oauthsignin", {
   methods: ["GET"],
   authLevel: "anonymous",
   handler: oauthsignin,
-});
-
-app.http("redirect", {
-  methods: ["GET"],
-  authLevel: "anonymous",
-  handler: redirect,
 });
 
 app.http("refresh", {

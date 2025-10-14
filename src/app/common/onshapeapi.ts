@@ -73,7 +73,7 @@ import {
     WorkflowApi,
     BTThumbnailInfo,
 } from 'onshape-typescript-fetch';
-import { createDocumentElement } from './common/htmldom';
+import { createDocumentElement } from './htmldom';
 
 // Optional parameters when creating a thumbnail
 type createThumbnailOptions = {
@@ -99,6 +99,7 @@ export type onshapeConfig = {
     companyId?: string;
     code?: string;
     myserver?: string;
+    myclient?: string;
     failApp?: failAppFunc;
 };
 /**
@@ -118,6 +119,7 @@ export class OnshapeAPI {
     public companyId = '';
     public code = '';
     public myserver = '';
+    public myclient = '';
     public access_token: string;
     public refresh_token: string;
     public expires_token: Date;
@@ -196,6 +198,9 @@ export class OnshapeAPI {
             if (config.myserver !== undefined) {
                 this.myserver = config.myserver;
             }
+            if (config.myclient !== undefined) {
+                this.myclient = config.myclient;
+            }
             if (config.failApp !== undefined) {
                 this.failApp = config.failApp;
             }
@@ -209,7 +214,7 @@ export class OnshapeAPI {
      */
     public refreshtoken(): void {
         let xhr = new XMLHttpRequest();
-        let url = this.myserver + '/refresh.php?code=' + this.clientId;
+        let url = this.myserver + '/refresh?code=' + this.clientId;
         xhr.open('GET', url, true);
         xhr.setRequestHeader('Content-Type', 'application/json');
 
@@ -229,7 +234,7 @@ export class OnshapeAPI {
         return new Promise<string>((resolve, reject) => {
             const now = new Date();
             if (now >= this.expires_token) {
-                RefreshToken(this.myserver + '/refresh.php', this.refresh_token)
+                RefreshToken(this.myserver + '/refresh', this.refresh_token)
                     .then((v: IExchangeToken) => {
                         const now = new Date();
 
@@ -264,13 +269,13 @@ export class OnshapeAPI {
         // It must match EXACTLY what is put into the ActionURL redirect_uri for the extension
         // See https://onshape-public.github.io/docs/oauth/#exchanging-the-code-for-a-token
         //
-        const redirect_uri = `${this.myserver}/?documentId=${this.documentId}&workspaceId=${this.workspaceId}&elementId=${this.elementId}`;
+        const redirect_uri = `${this.myclient}/?documentId=${this.documentId}&workspaceId=${this.workspaceId}&elementId=${this.elementId}`;
         //
         // Next we need to take the code and exchange it for authentication tokens
         // Until we get a response, we don't do anything
         //
         return new Promise((resolve, reject) => {
-            ExchangeToken(this.myserver + '/oauth.php', redirect_uri, this.code)
+            ExchangeToken(this.myserver + '/oauth', redirect_uri, this.code)
                 .then((v: IExchangeToken) => {
                     const now = new Date();
                     const expires = new Date(now.getTime() + v.expires_in * 1000);
@@ -492,7 +497,7 @@ export class OnshapeAPI {
                 }
             }
         }
-        if(thumbnailId !== undefined && thumbnailId !== null)imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
+        if (thumbnailId !== undefined && thumbnailId !== null) imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
         // if (retry) {s
         //     imageURL += '&rejectEmpty=true';
         // }

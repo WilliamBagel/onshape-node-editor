@@ -29,29 +29,21 @@
 // Copyright notice included from reference file
 
 import fetch from "node-fetch";
-import { HttpResponseInit } from "@azure/functions";
-import { openalog, oalog, closealog, CLIENT_URL, CLIENT_ID, CLIENT_SECRET } from "./config";
+import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { CLIENT_URL, CLIENT_ID, CLIENT_SECRET } from "./config";
 
-export default async function (_context: any, req: any): Promise<HttpResponseInit> {
-  const log = openalog();
-  oalog(log, 'refresh called');
-
-  const refresh_token = req.query?.refresh_token || req.body?.refresh_token || req.body?.refreshToken;
+export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+  const qs = request.query as URLSearchParams | undefined;
+  const refresh_token = qs ? (qs.get('refresh_token') || qs.get('refreshToken')) : undefined;
   if (!refresh_token) {
-    oalog(log, 'missing refresh token');
-    closealog(log);
     return { status: 400, body: 'missing refresh token' };
   }
 
   if (!CLIENT_URL) {
-    oalog(log, 'server misconfiguration: CLIENT_URL not set');
-    closealog(log);
     return { status: 500, body: 'server configuration error' };
   }
 
   if (typeof refresh_token !== 'string') {
-    oalog(log, 'invalid refresh token type');
-    closealog(log);
     return { status: 400, body: 'invalid refresh token' };
   }
 
@@ -68,12 +60,8 @@ export default async function (_context: any, req: any): Promise<HttpResponseIni
       body: params.toString()
     });
     const json = await response.json();
-    oalog(log, 'REFRESH RESPONSE: ' + JSON.stringify(json));
-    closealog(log);
     return { status: response.status, body: JSON.stringify(json), headers: Object.fromEntries(response.headers.entries()) };
   } catch (err: any) {
-    oalog(log, 'error: ' + String(err));
-    closealog(log);
     return { status: 502, body: String(err.message || err) };
   }
 }

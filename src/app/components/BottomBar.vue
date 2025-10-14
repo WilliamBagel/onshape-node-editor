@@ -17,6 +17,6 @@ h1 {
 }
 
 .toolbar {
-    border-top: 2px solid rgb(88, 88, 88);
+    border-top-width: 1px;
 }
 </style>

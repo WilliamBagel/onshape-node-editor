@@ -35,6 +35,12 @@ if (fs.existsSync(hostSrc)) {
   fs.copyFileSync(hostSrc, path.join(outDir, 'host.json'));
 }
 
+// copy env file if present
+const envSrc = path.join(root, 'src', 'server', '.env');
+if (fs.existsSync(envSrc)) {
+  fs.copyFileSync(envSrc, path.join(outDir, '.env'));
+}
+
 // For each function (files with .function.json in src/server), create a folder and copy built JS and function.json
 const serverSrc = path.join(root, 'src', 'server');
 const items = fs.readdirSync(serverSrc);
@@ -59,9 +65,17 @@ for (const item of items) {
       }
     }
     // copy shared compiled modules (like config.js) into function folder if present
-    const sharedFiles = ['config.js'];
-    for (const sf of sharedFiles) {
+    const sharedJS = ['config.js'];
+    for (const sf of sharedJS) {
       const srcShared = path.join(buildDir, sf);
+      if (fs.existsSync(srcShared)) {
+        fs.copyFileSync(srcShared, path.join(funcDir, sf));
+      }
+    }
+    // copy shared json (like config.json) into function folder if present
+    const sharedFiles = ['config.json'];
+    for (const sf of sharedFiles) {
+      const srcShared = path.join(serverSrc, sf);
       if (fs.existsSync(srcShared)) {
         fs.copyFileSync(srcShared, path.join(funcDir, sf));
       }
@@ -86,7 +100,8 @@ const pkg = {
   main: 'index.js',
   dependencies: {
     'node-fetch': '^2.6.7',
-    '@azure/functions': azureFunctionsVersion
+    '@azure/functions': azureFunctionsVersion,
+    "dotenv": "^17.2.3",
   }
 };
 fs.writeFileSync(path.join(outDir, 'package.json'), JSON.stringify(pkg, null, 2));
@@ -97,7 +112,7 @@ if (fs.existsSync(builtIndex)) {
   fs.copyFileSync(builtIndex, path.join(outDir, 'index.js'));
 }
 // copy server package-lock.json into dist so consumers can run `npm ci` deterministically
-const serverLockSrc = path.join(root, 'src', 'server', 'package-lock.json');
+const serverLockSrc = path.join(root, 'scripts', 'server-lock', 'package-lock.json');
 if (fs.existsSync(serverLockSrc)) {
   fs.copyFileSync(serverLockSrc, path.join(outDir, 'package-lock.json'));
 } else {

@@ -9,12 +9,14 @@
   "scripts": {
     "dev": "vite",
     "build:app": "vite build",
+    "build:app-dev": "vite build --mode development",
     "build:server": "tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs",
     "build": "run-p type-check \"build:app\" \"build:server\"",
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
     "deploy:app": "npm run build:app && npx gh-pages -d dist/app",
+    "deploy:app-dev": "npm run build:app-dev && npx gh-pages -d dist/app",
     "deploy:server": "npm run build:server && node ./scripts/deployServer.cjs"
   },
   "dependencies": {
