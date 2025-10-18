@@ -11,7 +11,7 @@
   margin: 0 auto;
   font-weight: normal;
   border-left: 1px solid;
-  border-color: var(--os-tree-outline);
+  border-color: var(--os-tree-outline, #d7d7d7);
 }
 
 a,

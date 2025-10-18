@@ -15,6 +15,9 @@
         "./src/app/*"
       ]
     },
-    "allowJs": true
+    "allowJs": true,
+    "lib": [
+      "ES2021.String"
+    ]
   }
 }

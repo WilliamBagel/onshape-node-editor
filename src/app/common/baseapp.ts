@@ -308,10 +308,8 @@ export class BaseApp {
         this.elementId = config.elementId;
         this.workspaceId = config.workspaceId;
 
-        promises.push(this.onshape.init().then(() => {
-        }))
+        promises.push(this.onshape.init())
 
-        this.displayReady = Promise.all(promises)
         Promise.all(promises).then(() => {
             this.initApp();
         })
