@@ -136,10 +136,10 @@ export class BaseApp {
      */
     public insertOnshapeCSS(url: string): Promise<boolean> {
         return new Promise<boolean>((resolve, reject) => {
-            this.getOnshapeFile(url).then((css: string) => {
+            this.getOnshapeFile(url).then((html: string) => {
                 // Extract all the <link html elements from the file.
                 const re = new RegExp(/<link[^>]*>/g);
-                const found = css.match(re);
+                const found = html.match(re);
                 // Find the head element of the iframe so that we know where to patch in the stylesheets
                 let headElement = document.getElementsByTagName('head')[0];
                 if (headElement !== null && headElement !== undefined) {
@@ -164,19 +164,50 @@ export class BaseApp {
                                 // Did we get a match at all?
                                 if (css !== null && css.length > 1) {
                                     // We did.  Create a link element in the DOM
-                                    var cssLink = createDocumentElement('link', {
-                                        href: `${this.myserver}/getfile?url=${this.server + css[1]
-                                            }`,
-                                        rel: 'stylesheet',
-                                        type: 'text/css',
-                                    });
-                                    cssPromises.push(
-                                        new Promise((resolve, reject) => {
-                                            cssLink.onload = () => resolve();
-                                        })
-                                    );
-                                    // Insert the element into the head of the IFrame
-                                    headElement.appendChild(cssLink);
+
+                                    if (!item.includes("woolsthorpe")) {
+                                        // It is a normal css file so create a link element in the DOM
+                                        var cssLink = createDocumentElement('link', {
+                                            href: `${this.myserver}/getfile?url=${this.server + css[1]
+                                                }`,
+                                            rel: 'stylesheet',
+                                            type: 'text/css',
+                                        });
+
+                                        // Insert the element into the head of the IFrame
+                                        headElement.appendChild(cssLink);
+
+                                        cssPromises.push(
+                                            new Promise((resolve, reject) => {
+                                                cssLink.onload = () => resolve();
+                                            })
+                                        );
+                                    } else {
+                                        // If it is the woolsthorpe general css file, fetch the css as text, the replace font references to
+                                        // Try to load fonts from client source instead of from Onshape
+                                        cssPromises.push(new Promise((resolve, reject) => {
+                                            this.getOnshapeFile(`${this.server + css[1]}`).then((css) => {
+
+                                                // Replace relative references in url() css function
+                                                // But include original path as fallback
+                                                const relativePathRegex = /url\([.\/]*([\w\/\-\.\?#]*)\) (format\([\w\"]*\))/gm
+                                                const replaceString = `url(${this.myclient}/$1) $2, $&`
+                                                css = css.replaceAll(relativePathRegex, replaceString);
+
+                                                const cssLink = createDocumentElement('style');
+
+                                                cssLink.innerHTML = css;
+
+                                                // Insert the element into the head of the IFrame
+                                                headElement.appendChild(cssLink);
+
+                                                cssLink.onload = () => {
+                                                    console.log("loaded", cssLink);
+                                                    resolve();
+                                                }
+                                            });
+                                        }));
+                                    }
                                 }
                             }
                         });
@@ -278,10 +309,12 @@ export class BaseApp {
         this.workspaceId = config.workspaceId;
 
         promises.push(this.onshape.init().then(() => {
-            this.initApp();
         }))
 
         this.displayReady = Promise.all(promises)
+        Promise.all(promises).then(() => {
+            this.initApp();
+        })
 
         // Promise.all(promises)
         //     .then(() => {
