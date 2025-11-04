@@ -16,6 +16,22 @@ window.onload = () => {
  *     - the app.ts object is passed through this so that the nodes events
  *        can call functions like loading or saving a featurestudio
  *
- * 3. get user-app file 
- *     - determine if user have any featurestudios in the active workspace
+ * 3. get user-app file
+ *     - determine if user has any featurestudios in the active workspace
+ * 
+ * 4. search active document
+ *     - attempt to locate featurestudios, and get the contents of them to check if they are node-editor generated
+ *     - read the linked nodestore location, read permissions on the location
+ *          - enter view or edit mode accordingly
+ *          - view mode has banner to request edit access to nodestore location
+ * 
+ * 
+ * 
+ * New feature creation:
+ *  - prompt user for embedded or external saving
+ *      - embedded is save node-data inside active document
+ *      - external is save node-data in a new document
+ *      - either way, the generated featurescript will still live in the active document
+ * 
+ * 
  */
