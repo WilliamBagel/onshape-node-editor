@@ -25,112 +25,145 @@
 //  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 //  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Converted from PHP to TypeScript Azure Function using Claude
-// Original source: https://github.com/Team2901/OnshapeInsertTool/blob/main/server/api/api.php
+// This file is generated via GPT-5 mini using the reference file php https://github.com/Team2901/OnshapeInsertTool/blob/main/server/api/api.php
+// Copyright notice included from reference file
+// Manual edits by William Degele
 
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
-require('dotenv').config()
+require('dotenv').config();
 
 export default async function (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+  try {
+    // Prefer the bound wildcard path (route: "api/{*path}") provided by Azure Functions.
+    // This yields only the portion after /api/, which is what we want to forward.
+    const boundPath = (context && (context as any).bindingData && (context as any).bindingData.path) as string | undefined;
 
-  try {    
-    // Log request information
-    const requestInfo = {
-      url: request.url,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      query: request.query ? Object.fromEntries(request.query.entries()) : {}
-    };
-
-    // Extract the API path from the request URL
-    // In Azure Functions, the route is available in the request
-    const url = new URL(request.url);
-    const apiurl = url.pathname;
-
-    // Capture all relevant parameters from the request
-    const authorization = request.headers.get('authorization') || '';
-    const querystring = url.search.substring(1); // Remove the leading '?'
-    const method = request.method || 'GET';
-    const content_type = request.headers.get('content-type') || '';
-    const user_agent = request.headers.get('user-agent') || '';
-    const platform = request.headers.get('sec-ch-ua-platform') || '';
-    const accept = request.headers.get('accept') || '';
-    const onshapeserver = request.headers.get('x-server') || '';
-
-    // Construct the Onshape API URL
-    const onshapeapi = onshapeserver + apiurl + (querystring ? '?' + querystring : '');
-
-    // Prepare headers for the outgoing request
-    const headers: Record<string, string> = {
-      'Content-Type': content_type,
-      'User-Agent': user_agent,
-      'accept': accept
-    };
-
-    if (authorization) {
-      headers['authorization'] = authorization;
-    }
-    if (platform) {
-      headers['sec-ch-ua-platform'] = platform;
+    // Fallback: if no bindingData.path, remove leading "/api" from request.pathname
+    const parsedUrl = new URL(request.url);
+    let forwardPath = '';
+    if (boundPath && boundPath.length > 0) {
+      forwardPath = '/' + boundPath.replace(/^\/+/, '');
+    } else {
+      // remove first /api segment if present
+      forwardPath = parsedUrl.pathname.replace(/^\/api(\/|$)/, '/');
     }
 
-    // Get POST data if applicable
-    let postData: string | undefined;
-    if (method === "POST") {
+    // Preserve original query string
+    const queryString = parsedUrl.search ? parsedUrl.search : '';
+
+    // Grab x-server header (target Onshape host), fallback to CLIENT_URL or cad.onshape.com
+    const headersMap: Record<string, string> = {};
+    request.headers.forEach((v, k) => (headersMap[k.toLowerCase()] = v));
+    const onshapeserver = (headersMap['x-server'] || 'https://cad.onshape.com') + "/api" //.replace(/\/+$/, '');
+
+    const targetUrl = onshapeserver + forwardPath + queryString;
+
+    // Build outgoing headers (filter hop-by-hop)
+    const hopByHop = new Set([
+      'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te',
+      'trailers', 'transfer-encoding', 'upgrade', 'host'
+    ]);
+
+    const forwardHeaders: Record<string, string> = {};
+    // Build headers once, skip hop-by-hop. Sanitize Content-Type (remove invalid params like "; qs=0.09"),
+    // and normalize its casing to "Content-Type" to avoid duplicates.
+    request.headers.forEach((value, key) => {
+      const lk = key.toLowerCase();
+      if (hopByHop.has(lk)) return;
+      if (lk === 'content-type') {
+        // Remove any "qs" param or other unknown params but keep charset if present.
+        let sanitized = value.replace(/;\s*qs=[^;]+/i, '');
+        // Trim stray trailing semicolons/whitespace
+        sanitized = sanitized.replace(/;\s*$/, '').trim();
+        forwardHeaders['Content-Type'] = sanitized;
+      } else {
+        // Preserve original header key casing as provided
+        forwardHeaders[key] = value;
+      }
+    });
+
+    // Only include body for methods that allow it
+    const method = (request.method || 'GET').toUpperCase();
+    let body: any = undefined;
+
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       try {
-        const body = await request.text();
-        postData = body;
-      } catch (err) {
+        body = await request.arrayBuffer()
+        // If no Content-Type was forwarded but the body looks like JSON, set a sensible default.
+        if (!forwardHeaders['Content-Type'] && body && typeof body === 'string') {
+          const t = body.trim();
+          if (t.startsWith('{') || t.startsWith('[')) {
+            forwardHeaders['Content-Type'] = 'application/json';
+          }
+        }
+      } catch (e) {
+        return {
+          status: 400,
+          headers: { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' },
+          body: 'Failed to read request body'
+        };
       }
     }
 
-    // Make the request
+    let responseBody
+
     const fetchOptions: any = {
-      method: method,
-      headers: headers
+      method,
+      headers: forwardHeaders,
+      redirect: 'manual'
     };
 
-    if (postData && method === "POST") {
-      fetchOptions.body = postData;
+    if (body !== undefined) {
+      fetchOptions.body = body;
     }
 
-    const response = await fetch(onshapeapi, fetchOptions);
-    const responseBuffer = await response.arrayBuffer();
-    const responseBytes = Buffer.from(responseBuffer);
+    let upstream: fetch.Response;
+    try {
+      // Fetch upstream
+      upstream = await fetch(targetUrl, fetchOptions);
+      // If error response, try to get error details
+      if (!upstream.ok) {
+        let errBody = '';
+        try {
+          errBody = await upstream.text();
+        } catch (e) {
+          errBody = `Status ${upstream.status}`;
+        }
+        throw new Error(errBody)
+      }
+    } catch(err) {
+      return {
+        status: err?.status || 400,
+        headers: { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' },
+        body: err
+      };
+    }
+    // Read upstream response
+    responseBody = await upstream.arrayBuffer();
 
-    // Log response info
-    const info = {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-      content_type: response.headers.get('content-type')
-    };
-    console.log(info);
-
-    // Return the response with appropriate headers
+    // Build response headers (keep consistent no-cache/CORS headers used elsewhere)
     const responseHeaders: Record<string, string> = {
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'max-age=0, no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': 'Thu, 1 Jan 1970 00:00:00 GMT'
     };
-
-    const responseContentType = response.headers.get('content-type');
-    if (responseContentType) {
-      responseHeaders['Content-Type'] = responseContentType;
-    }
+    const contentType = upstream.headers.get('content-type');
+    if (contentType) responseHeaders['Content-Type'] = contentType;
+    responseHeaders['Proxy-Url'] = targetUrl;
 
     return {
-      status: response.status,
+      status: upstream.status,
       headers: responseHeaders,
-      body: responseBytes
+      body: responseBody
     };
 
   } catch (err: any) {
     return {
       status: 502,
-      body: String(err.message || err)
+      headers: { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' },
+      body: err
     };
   }
 }
