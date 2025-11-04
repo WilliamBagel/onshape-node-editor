@@ -70,7 +70,7 @@ export class BaseApp {
         // h2.innerHTML = 'Initializing';
         // this.setAppElements(h2);
         const container = createDocumentElement('div', {
-            style: `width:${document.documentElement.clientWidth}px;height:${document.documentElement.clientHeight}px;display:flex;justify-content:center;align-content:center;align-items:center;`,
+            style: `width:100%;height:${document.documentElement.clientHeight}px;display:flex;justify-content:center;align-content:center;align-items:center;`,
         });
         const style = createDocumentElement('style');
         style.innerHTML = `
@@ -103,7 +103,7 @@ export class BaseApp {
      */
     public initApp() {
         this.messaging = new Messaging(this.documentId, this.workspaceId, this.elementId);
-        this.startApp();
+        this.start();
     }
 
     /**
@@ -240,7 +240,7 @@ export class BaseApp {
     /**
      * The main entry point for an app
      */
-    public startApp(): void { }
+    public start(): void { }
     /**
      * This is called when there is a problem in the application that can't be recovered from
      * @param reason Initialization failure reason
@@ -286,10 +286,10 @@ export class BaseApp {
             return;
         }
         this.showInitializing();
-        const url =
-            window.location != window.parent.location
-                ? document.referrer
-                : document.location.href;
+        const url = //encodeURI('cad.onshape.com/login');
+             window.location != window.parent.location
+                 ? document.referrer
+                 : document.location.href;
 
         const promises: Promise<any>[] = [];
 
