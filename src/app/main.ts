@@ -5,6 +5,16 @@ import { App } from './app'
 const app = new App();
 
 window.onload = () => {
+    if (process.env.NODE_ENV === 'development') {
+        console.log("Development mode; for UI only");
+
+        app.initDev().then(() => {
+            app.startVueApp();
+        });
+
+        return;
+    }
+
     app.init();
 }
 

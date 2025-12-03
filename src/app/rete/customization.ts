@@ -1,35 +1,30 @@
-import { NodeEditor, type GetSchemes, ClassicPreset } from 'rete';
+import { NodeEditor, ClassicPreset } from 'rete';
 
 import { AreaPlugin } from 'rete-area-plugin';
 import {
-  ConnectionPlugin,
-  Presets as ConnectionPresets,
+  Presets as ConnectionPresets
 } from 'rete-connection-plugin';
 
 import {
-  VuePlugin,
-  type VueArea2D,
-  Presets as VuePresets,
+  VuePlugin, Presets as VuePresets
 } from 'rete-vue-plugin';
 
-import CustomNode from '../customization/CustomNode.vue';
+import CustomFeatureComp from '../customization/CustomFeature.vue';
 import CustomConnection from '../customization/CustomConnection.vue';
 import CustomSocket from '../customization/CustomSocket.vue';
 
 import { addCustomBackground } from '../customization/custom-background';
-
-type Schemes = GetSchemes<
-  ClassicPreset.Node,
-  ClassicPreset.Connection<ClassicPreset.Node, ClassicPreset.Node>
->;
-type AreaExtra = VueArea2D<Schemes>;
+import { ResizeController } from '../utils/resizecontroller';
+import { ConnectionSnappingPlugin, useConnectionSnapping } from './connection-snapping/connectionsnapping';
+import { AreaExtra, Schemes } from './types';
+import { CustomFeatureNode } from './nodes/customfeaturenode';
 
 const socket = new ClassicPreset.Socket('socket');
 
 export async function createEditor(container: HTMLElement) {
   const editor = new NodeEditor<Schemes>();
   const area = new AreaPlugin<Schemes, AreaExtra>(container);
-  const connection = new ConnectionPlugin<Schemes, AreaExtra>();
+  const connection = new ConnectionSnappingPlugin<Schemes, AreaExtra>();
 
   const vueRender = new VuePlugin<Schemes, AreaExtra>();
 
@@ -37,8 +32,8 @@ export async function createEditor(container: HTMLElement) {
     VuePresets.classic.setup({
       customize: {
         node(context) {
-          if (context.payload.label === 'Custom') {
-            return CustomNode;
+          if (context.payload.type === 'CustomFeature') {
+            return CustomFeatureComp;
           }
           return VuePresets.classic.Node;
         },
@@ -49,8 +44,11 @@ export async function createEditor(container: HTMLElement) {
           return CustomConnection;
         },
       },
+      socketPositionWatcher: connection.socketPositionWatcher
     })
   );
+
+  useConnectionSnapping(connection, area);
 
   connection.addPreset(ConnectionPresets.classic.setup());
 
@@ -61,17 +59,35 @@ export async function createEditor(container: HTMLElement) {
 
   area.use(vueRender);
 
-  const aLabel = 'Custom';
-  const bLabel = 'Custom';
+  area.addPipe(context => {
+    if (context.type === 'nodetranslate' && ResizeController.isResizeActive()) { return; }
+    if (context.type === 'zoom' && context.data.source === 'dblclick') { return; }
 
-  const a = new ClassicPreset.Node(aLabel);
-  a.addOutput('a', new ClassicPreset.Output(socket));
-  a.addInput('a', new ClassicPreset.Input(socket));
+    return context
+  })
+
+  editor.addPipe(context => {
+    if (context.type === 'nodecreate') {
+      const node = context.data;
+      node.updateCallback = () => {
+        area.update('node', node.id);
+      }
+      node['area'] = area;
+    }
+    return context;
+  })
+
+  const aType = 'Mirror';
+  const bType = 'Something';
+
+  const a = new CustomFeatureNode(aType);
+  a.addOutput('a', new ClassicPreset.Output(socket, 'label1'));
+  a.addInput('a', new ClassicPreset.Input(socket, 'label2'));
   await editor.addNode(a);
 
-  const b = new ClassicPreset.Node(bLabel);
-  b.addOutput('a', new ClassicPreset.Output(socket));
-  b.addInput('a', new ClassicPreset.Input(socket));
+  const b = new CustomFeatureNode(bType);
+  b.addOutput('a', new ClassicPreset.Output(socket, 'label3'));
+  b.addInput('a', new ClassicPreset.Input(socket, 'label4'));
   await editor.addNode(b);
 
   await area.translate(a.id, { x: 0, y: 0 });
@@ -83,3 +99,4 @@ export async function createEditor(container: HTMLElement) {
     destroy: () => area.destroy(),
   };
 }
+

@@ -49,6 +49,41 @@ export class BaseApp {
     public messaging: Messaging;
 
     public displayReady: Promise<any>;
+
+    /**
+     * Init the application in development mode so it will only do UI rendering and handling
+     */
+    public initDev(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const headElement = document.getElementsByTagName('head')[0];
+
+            const promises = [];
+
+            /**
+             * Load onshape css for ui to render properly
+             */
+            for (let cssPath of ['onshape-design-tokens.min', 'vendor-bundle', 'woolsthorpe']) {
+                const cssLink = createDocumentElement('link', {
+                    href: `./onshape/${cssPath}.css`,
+                    rel: 'stylesheet',
+                    type: 'text/css'//cssPath !== 'onshape-design-tokens.min' ? 'text/css' : '',
+                });
+
+                headElement.appendChild(cssLink);
+
+                promises.push(new Promise<void>((resolve) => {
+                    cssLink.onload = () => {
+                        resolve();
+                    }
+                }));
+            }
+
+            Promise.all(promises).then(() => {
+                resolve();
+            })
+        });
+    }
+
     /**
      * Replace the main app elements.  Note if there is no app div, the elements are appended to the main body so that they aren't lost
      * @param elem Element to replace
@@ -287,9 +322,9 @@ export class BaseApp {
         }
         this.showInitializing();
         const url = //encodeURI('cad.onshape.com/login');
-             window.location != window.parent.location
-                 ? document.referrer
-                 : document.location.href;
+            window.location != window.parent.location
+                ? document.referrer
+                : document.location.href;
 
         const promises: Promise<any>[] = [];
 

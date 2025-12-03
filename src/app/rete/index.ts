@@ -1,5 +1,5 @@
 /* eslint-disable */
-import { createEditor as createDefaultEditor } from './default'
+import { createEditor as createDefaultEditor } from './customization'
 
 const create = createDefaultEditor
 
@@ -8,7 +8,5 @@ if (!create) {
 }
 
 export const createEditor = ((...args: Parameters<typeof create>) => {
-    args[0].classList.add('headless')
-    document.body.style.overflow = 'hidden';
   return create.apply(this, args)
 }) as typeof create
