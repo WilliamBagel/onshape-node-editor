@@ -9,7 +9,7 @@ window.onload = () => {
         console.log("Development mode; for UI only");
 
         app.initDev().then(() => {
-            app.startVueApp();
+            app.startVueApp(true);
         });
 
         return;

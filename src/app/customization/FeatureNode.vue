@@ -1,5 +1,5 @@
 <template>
-  <div id="feature-dialog" class="ns-dialog-panel feature-dialog" :class="{ selected: data.selected }" :style="{
+  <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected }" :style="{
     'width': Number.isFinite(width) ? `${width}px` : '',
     'height': Number.isFinite(height) ? `${height}px` : '',
     'min-width': Number.isFinite(data.minWidth) ? `${data.minWidth}px` : '',
@@ -35,28 +35,44 @@
       </div>
       <div class="dialog-content">
         <!-- Outputs-->
-        <div class="output os-param-subgroup-row" v-for="[key, output] in outputs()" :key="'output' + key + seed"
-          :data-testid="'output-' + key">
-          <div class="output-title os-param-label" data-testid="output-title">{{ output.label }}</div>
-          <Ref class="output-socket" :emit="emit"
-            :data="{ type: 'socket', side: 'output', key: key, nodeId: data.id, payload: output.socket }"
-            data-testid="output-socket" />
+        <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
+          :key="'output' + key + seed" :data-testid="'output-' + key">
+          <TranslateLock>
+            <Ref class="output-socket os-param-subgroup-row" :emit="proxyEmit"
+              :data="{ type: 'socket', side: 'output', key: key, btType: output.socket.name, nodeId: data.id, payload: output.socket }"
+              data-testid="output-socket" />
+          </TranslateLock>
+          <div class="os-param-wrapper os-param-container" style="width:100%">
+            <div class="output-title os-param-label" data-testid="output-title">{{
+              output.label
+            }}
+            </div>
+          </div>
         </div>
         <!-- Controls-->
-        <Ref class="control" v-for="[key, control] in controls()" :key="'control' + key + seed" :emit="emit"
+        <Ref class="control" v-for="[key, control] in controls()" :key="'control' + key + seed" :emit="proxyEmit"
           :data="{ type: 'control', payload: control }" :data-testid="'control-' + key" />
         <!-- Inputs-->
-        <div class="input" v-for="[key, input] in inputs()" :key="'input' + key + seed" :data-testid="'input-' + key">
-          <Ref class="input-socket os-param-subgroup-row" :emit="emit"
-            :data="{ type: 'socket', side: 'input', key: key, nodeId: data.id, payload: input.socket }"
-            data-testid="input-socket" />
-          <div class="input-title os-param-label" v-show="!input.control || !input.showControl"
-            data-testid="input-title">{{
+        <div class="input os-parameter-list-item os-param-fill-first-column" v-for="[key, input] in visibleInputs"
+          :key="'input' + key + seed" :data-testid="'input-' + key">
+          <TranslateLock>
+            <Ref class="input-socket os-param-subgroup-row" :emit="proxyEmit"
+              :data="{ type: 'socket', side: 'input', key: key, btType: input.socket.name, nodeId: data.id, payload: input.socket }"
+              data-testid="input-socket" />
+          </TranslateLock>
+          <div class="os-param-wrapper os-param-container"
+            :class="{ 'os-param-select': input.parameterInfo.btType === 'BTParameterSpecEnum-171' }" style="width:100%">
+            <div class="input-title os-param-label" data-testid="input-title">{{
               input.label
             }}
+            </div>
+            <!-- <Ref class="input-control" v-show="input.control && input.showControl" :emit="proxyEmit"
+            :data="{ type: 'control', payload: input.control }" data-testid="input-control" /> -->
+            <TranslateLock>
+              <OnshapeControl :show="input.showControl" :parameter-spec="input.parameterInfo" :control="input.control"
+                @value-change="contextValueChange"></OnshapeControl>
+            </TranslateLock>
           </div>
-          <Ref class="input-control" v-show="input.control && input.showControl" :emit="emit"
-            :data="{ type: 'control', payload: input.control }" data-testid="input-control" />
         </div>
       </div>
       <div class="dialog-help-container"><a class="os-help-link os-center-content"
@@ -77,6 +93,10 @@ import type { PropType } from 'vue'
 import { Ref } from 'rete-vue-plugin'
 import ResizeHandle from '../components/ResizeHandle.vue'
 import { CustomFeatureNode } from '../rete/nodes/customfeaturenode'
+import OnshapeControl from './OnshapeControl.vue'
+import { OnshapeInput } from '../rete/inputoutput/onshapeinput'
+import TranslateLock from '../components/TranslateLock.vue'
+import { BTMParameter1 } from 'onshape-typescript-fetch'
 
 
 function sortByIndex(entries) {
@@ -90,7 +110,6 @@ function sortByIndex(entries) {
 }
 
 export default defineComponent({
-  // props: ['data', 'emit', 'seed'],
   props: {
     data: {
       required: true,
@@ -101,23 +120,40 @@ export default defineComponent({
   },
   data() {
     return {
-      title: this.data.subtype,
+      title: this.data.getTitle(),
       titleEditFocus: false,
       titleHover: false,
 
       width: this.data.width,
-      height: this.data.height
+      height: this.data.height,
+
+      hiddenParameters: this.data.hiddenParameters,
+
+      updateComponent: 0
+    }
+  },
+  computed: {
+    visibleInputs() {
+      // make updateComponent changes update this computed property
+      this.updateComponent;
+      return this.inputs().filter((param) => this.hiddenParameters[param[0]] !== true);
     }
   },
   methods: {
-    inputs() {
-      return sortByIndex(Object.entries(this.data.inputs))
+    proxyEmit(...args) {
+      this.emit(...args);
+    },
+    inputs(): Array<[string, OnshapeInput]> {
+      return Object.entries(this.data.inputs);
     },
     controls() {
       return sortByIndex(Object.entries(this.data.controls))
     },
     outputs() {
       return sortByIndex(Object.entries(this.data.outputs))
+    },
+    contextValueChange(value: BTMParameter1) {
+      this.data.updateParameter(value.parameterId, value);
     },
     updateTitle(e) {
       this.emit('update:title', e.target.value)
@@ -148,9 +184,16 @@ export default defineComponent({
       this.width = this.data.width;
     }
   },
+  mounted() {
+    this.data.updateComponent = () => {
+      this.updateComponent++;
+    }
+  },
   components: {
     Ref,
-    ResizeHandle
+    ResizeHandle,
+    OnshapeControl,
+    TranslateLock
   }
 });
 </script>
@@ -163,27 +206,37 @@ export default defineComponent({
   z-index: -1;
 
   &.selected {
-    border: solid 2px black;
-    z-index: 0.5;
+    .ns-dialog-frame {
+      box-shadow: 0 5px 10px #393939;
+    }
+
+    z-index: 0;
   }
 }
 
 .output {
   text-align: right;
   font-size: 0px;
+  display: flex;
+  flex-direction: row-reverse;
+
+  .os-param-wrapper {
+    flex-direction: inherit;
+  }
 }
 
 .input {
   text-align: left;
   font-size: 0px;
+  display: flex;
 }
 
 @mixin io-socket {
-  vertical-align: middle;
-  line-height: normal;
   height: auto;
   text-align: right;
-  display: inline-block;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 
@@ -197,13 +250,30 @@ export default defineComponent({
   margin-left: - round($socket-overflow, 1px);
 }
 
-.input-title,
-.output-title {
-  vertical-align: middle;
-  display: inline-block;
-  // font-size: 14px;
-  margin: $socket-margin;
-  // line-height: $socket-size;
+.ns-dialog-title,
+.os-dialog-header-rename-textbox {
+  color: black !important;
+  font-size: 17px !important;
+  outline: none;
+}
+
+.os-param-wrapper {
+  flex-wrap: nowrap;
+  overflow: visible;
+
+  .input-title,
+  .output-title,
+  .os-param-label {
+    vertical-align: middle;
+    display: inline-block;
+    margin: $socket-margin;
+    user-select: none;
+    color: black;
+    padding-top: 0px;
+    font-size: 15px;
+    overflow: visible;
+    align-self: center;
+  }
 }
 
 .input-control {

@@ -1,0 +1,545 @@
+<!-- 
+
+    Source: cad.onshape.com ; Onshape Chamfer Feature 12-7-25 
+
+-->
+<div id="feature-dialog" class="ns-dialog-panel feature-dialog feature-dialog-resize" feature-type="chamfer"
+    style="max-height: 755px; position: absolute; inset: 158px auto auto 295px; width: 220px; height: auto;">
+    <div class="feature-dialog-main ns-dialog-frame">
+        <div class="ns-dialog-header" role="dialog" data-backdrop="false">
+            <div class="ns-drag-area">
+                <div class="ns-dialog-title-container">
+                    <span class="ns-dialog-title has-regen-error" data-bs-placement="right"
+                        data-bs-original-title="Chamfer 1 did not regenerate properly: Select edges or faces to chamfer.">
+                        Chamfer 1
+                    </span>
+                </div>
+                <input maxlength="256" class="os-dialog-header-rename-textbox ns-dialog-default-hidden has-regen-error">
+                <div class="os-dialog-button-edit-name ns-dialog-default-hidden">
+                    <osc-svg-icon icon="edit-button" class="osc-svg-vertical-align" style="display: inline-flex;">
+                        <svg height="20" width="20" data-automation="edit-button">
+                            <use href="#svg-icon-edit-button"></use>
+                        </svg></osc-svg-icon>
+                </div>
+                <div class="ns-dialog-edit-hover-area"></div>
+            </div>
+            <div class="ns-dialog-button-ok button-ok">
+                <osc-svg-icon icon="ok-button" class="osc-svg-vertical-align" height="24" width="28"
+                    style="display: inline-flex;">
+                    <svg height="24" width="28" data-automation="ok-button">
+                        <use href="#svg-icon-ok-button"></use>
+                    </svg></osc-svg-icon>
+            </div>
+            <div class="ns-dialog-button-cancel backbone-cancel">
+                <osc-svg-icon icon="cancel-button" class="osc-svg-vertical-align" height="24" width="28"
+                    style="display: inline-flex;">
+                    <svg height="24" width="28" data-automation="cancel-button">
+                        <use href="#svg-icon-cancel-button"></use>
+                    </svg></osc-svg-icon>
+            </div>
+        </div>
+        <div class="ns-dialog-fixed-content">
+            <ul class="ns-parameter-list" style="max-height: 675px; overflow-y: hidden;">
+                <os-parameter-list-view bt-parameters="btParameters" on-parameter-views-ready="onParameterViewsReady"
+                    build-context-menu-for-parameter="buildContextMenuForParameter"
+                    disable-context-menu-for-parameter="disableContextMenuForParameter" has-help-button="hasHelpButton"
+                    feature-model="featureModel" full-width="fullWidth" parent-dialog-id="feature-dialog"
+                    ng-class="{'is-showing-inline-select-item': isShowingInlineSelectItemWidget}">
+                    <!----><os-parameter-group ng-repeat="group in $ctrl.btParameterGroups track by group.startIndex"
+                        bt-parameters="$ctrl.btParameters" group="group" ng-class="{'full-width': $ctrl.fullWidth}"
+                        full-width="$ctrl.fullWidth" get-fills-first-column="$ctrl.getFillsFirstColumnCallback"
+                        get-fits-in-right-column="$ctrl.getFitsInRightColumnCallback"
+                        build-context-menu-for-parameter="$ctrl.buildContextMenuForParameter"
+                        disable-context-menu-for-parameter="$ctrl.disableContextMenuForParameter"
+                        parent-dialog-id="feature-dialog">
+                        <!----><!---->
+                        <div ng-repeat="btParameter in $ctrl.btParameters|limitTo:$ctrl.group.len:$ctrl.group.startIndex"
+                            ng-if="btParameter.getIsVisible() &amp;&amp; !$ctrl.group.getIsCollapsible()"
+                            class="os-parameter-list-item os-param-fill-both-columns os-param-requires-margin" ng-class="{'full-width': $ctrl.fullWidth,
+                  'os-param-fill-first-column': $ctrl.getFillsFirstColumn(btParameter) &amp;&amp; !$ctrl.fullWidth,
+                  'os-param-fill-both-columns': btParameter.getBtParameterForCurrentConfiguration().getCanFillBothColumns(),
+                  'os-param-display-short': btParameter.getBtParameterForCurrentConfiguration().getCanDisplayShort(),
+                  'os-param-fits-in-right-column': $ctrl.getFitsInRightColumn(btParameter),
+                  'os-param-requires-margin': btParameter.getBtParameterForCurrentConfiguration().getRequiresMargin(),
+                  'enabled-button-with-readonly-view-overlay': btParameter.getIsReadonlyButtonEnabled(),
+                  'os-disabled-overlay-button': btParameter.getIsReadonlyButton() &amp;&amp; !btParameter.getCanBeConfigured(),
+                  'os-param-equally-spaced-column': btParameter.useEquallySpacedColumnLayout,
+                  'os-param-grow': btParameter.getIsButton(),
+                  'os-param-half': btParameter.getIsButton() &amp;&amp; btParameter.getCanDisplayShort(),
+                  'os-controlled-marker': btParameter.getIsControlled(),
+                  'os-override-marker': btParameter.getIsOverriden()}" os-parameter="btParameter"
+                            os-context-menu="$ctrl.buildContextMenuForParameter(btParameter)"
+                            os-context-menu-disabled="$ctrl.disableContextMenuForParameter"
+                            os-context-menu-class="enterprise-context-menu" data-parameter-id="entities"
+                            parent-dialog-id="feature-dialog">
+                            <!---->
+                            <os-query-list-parameter bt-parameter="btParameter" parent-dialog-id="feature-dialog">
+                                <!---->
+                                <!---->
+                                <div ng-if="!$ctrl.btParameter.getIsNotApplicable()"
+                                    class="os-param-wrapper os-param-query-list-container os-param-container"
+                                    ng-class="{'os-param-readonly': $ctrl.btParameter.getIsReadOnly()}"
+                                    data-parameter-id="entities">
+                                    <!---->
+                                    <!---->
+                                    <div ng-if="!$ctrl.btParameter.getIsInTable()" class="os-row os-grow">
+                                        <div class="os-param-query-list os-param-selection-list os-grow os-param-query-list-resize os-param-query-list-focus os-param-query-list-invalid"
+                                            ng-class="{'os-param-query-list-focus': $ctrl.btParameter.getIsSelectionFocus(),
+                    'os-param-query-list-smart-selection-focus': $ctrl.btParameter.getIsSmartSelectionFocus(),
+                    'os-param-query-list-invalid': $ctrl.btParameter.getHasParameterError()}" tabindex="0"
+                                            ng-keydown="$ctrl.onKeyDown($event)"
+                                            ng-focus="$ctrl.onParameterFocused($event)"
+                                            ng-blur="$ctrl.onParameterFocusLost($event)"
+                                            ng-click="$ctrl.focusOnQlvIfAble()">
+                                            <div class="slimScrollDiv"
+                                                style="position: relative; overflow: hidden; width: auto;">
+                                                <div class="os-param-query-list-scroll-box"
+                                                    data-node-id="YtKDyjRGJNFBUck2"
+                                                    os-slim-scroll="$ctrl.btParameter.queryListItems"
+                                                    os-scroll-to-end-on-add="!$ctrl.btParameter.getIsReadOnly()"
+                                                    style="overflow: hidden; width: calc(100% + 20px); padding-right: 20px; height: auto; min-height: auto;">
+                                                    <div class="os-param-query-list-header">
+                                                        <label class="os-param-query-list-label os-grow"
+                                                            ng-class="{'os-param-query-list-small-label': $ctrl.btParameter.hasAnyVisibleItems()}"
+                                                            data-bs-html="true"
+                                                            data-bs-original-title="Select edges or faces to chamfer."
+                                                            data-bs-placement="right">Entities to chamfer</label>
+                                                        <!---->
+                                                        <!---->
+                                                    </div>
+                                                    <ul class="os-param-list-container" os-resize-observer=""
+                                                        os-resize-set-height="$ctrl.setMaxArrayParamHeight(maxHeight)">
+                                                        <drop-indicator class="drop-indicator"
+                                                            drop-info-observable="$ctrl.dropInfoObservable"
+                                                            item-height="$ctrl.nodeHeight" style="display: none;">
+                                                            <div class="drop-indicator-dot"></div>
+                                                        </drop-indicator>
+                                                        <!---->
+                                                        <!---->
+                                                    </ul>
+                                                    <osc-resize-handle enable-vertical-resize="false" class="osc-y"
+                                                        boundry-selector="#feature-dialog"
+                                                        target-selector=".os-param-query-list-scroll-box[data-node-id='YtKDyjRGJNFBUck2']"
+                                                        target-min-height="102" target-max-height="20"
+                                                        resize-direction="vertical" style="display: none;">
+                                                    </osc-resize-handle>
+                                                </div>
+                                                <div class="slimScrollRail"
+                                                    style="width: 7px; height: 100%; position: absolute; top: 0px; display: none; border-radius: 7px; background: var(--os-accent-quaternary); opacity: 0.2; z-index: 98; right: 1px;">
+                                                </div>
+                                                <div class="slimScrollBar"
+                                                    style="background: var(--os-text-primary); width: 7px; position: absolute; top: 0px; opacity: 0.4; display: none; border-radius: 7px; z-index: 99; right: 1px; height: 24px;">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!---->
+                                        <!---->
+
+                                        <!---->
+
+                                    </div><!---->
+                                </div><!---->
+                            </os-query-list-parameter>
+                        </div><!----><!----><!---->
+                        <div ng-repeat="btParameter in $ctrl.btParameters|limitTo:$ctrl.group.len:$ctrl.group.startIndex"
+                            ng-if="btParameter.getIsVisible() &amp;&amp; !$ctrl.group.getIsCollapsible()"
+                            class="os-parameter-list-item os-param-fill-first-column" ng-class="{'full-width': $ctrl.fullWidth,
+                  'os-param-fill-first-column': $ctrl.getFillsFirstColumn(btParameter) &amp;&amp; !$ctrl.fullWidth,
+                  'os-param-fill-both-columns': btParameter.getBtParameterForCurrentConfiguration().getCanFillBothColumns(),
+                  'os-param-display-short': btParameter.getBtParameterForCurrentConfiguration().getCanDisplayShort(),
+                  'os-param-fits-in-right-column': $ctrl.getFitsInRightColumn(btParameter),
+                  'os-param-requires-margin': btParameter.getBtParameterForCurrentConfiguration().getRequiresMargin(),
+                  'enabled-button-with-readonly-view-overlay': btParameter.getIsReadonlyButtonEnabled(),
+                  'os-disabled-overlay-button': btParameter.getIsReadonlyButton() &amp;&amp; !btParameter.getCanBeConfigured(),
+                  'os-param-equally-spaced-column': btParameter.useEquallySpacedColumnLayout,
+                  'os-param-grow': btParameter.getIsButton(),
+                  'os-param-half': btParameter.getIsButton() &amp;&amp; btParameter.getCanDisplayShort(),
+                  'os-controlled-marker': btParameter.getIsControlled(),
+                  'os-override-marker': btParameter.getIsOverriden()}" os-parameter="btParameter"
+                            os-context-menu="$ctrl.buildContextMenuForParameter(btParameter)"
+                            os-context-menu-disabled="$ctrl.disableContextMenuForParameter"
+                            os-context-menu-class="enterprise-context-menu" data-parameter-id="chamferMethod"
+                            parent-dialog-id="feature-dialog">
+                            <!---->
+                            <os-enum-parameter bt-parameter="btParameter" parent-dialog-id="feature-dialog">
+                                <!---->
+                                <!----><span
+                                    ng-if="!$ctrl.btParameter.getIsNotApplicable() &amp;&amp; ($ctrl.btParameter.getDisplayStyle() === $ctrl.EnumDisplayStyle.DROPDOWN)"
+                                    class="os-param-wrapper os-param-select">
+                                    <!----><label
+                                        ng-if="::($ctrl.btParameter.getCanShowControlLabel() &amp;&amp; !$ctrl.hasImageUrl())"
+                                        class="os-param-label" ng-click="$ctrl.openDropdown($event)"
+                                        ng-disabled="$ctrl.btParameter.getIsReadOnly()"><span>Measurement</span></label><!---->
+                                    <!---->
+                                    <div class="select-container-wrapper">
+                                        <div class="select-input os-select-container os-select-bootstrap dropdown ng-not-empty ng-valid"
+                                            ng-class="{'os-param-readonly': $ctrl.btParameter.getIsReadOnly(), 'os-invalid-textbox': $ctrl.btParameter.getHasParameterError(), 'os-is-within-spreadsheet': $ctrl.btParameter.getIsInTable(), open: $select.open}"
+                                            ng-model="$ctrl.btParameter.pendingEnumValue"
+                                            ng-readonly="$ctrl.btParameter.getIsReadOnly()" theme="bootstrap"
+                                            ng-change="$ctrl.onParameterChange()"
+                                            os-select-key-down="$ctrl.btParameter.onKeyPressed($event)"
+                                            os-open-close="$ctrl.onOpenClose(isOpen)" enter-activate="true"
+                                            skip-focusser="false" append-to-body="true" focus-on="FOCUS_ELEMENT"
+                                            os-reposition-when="$ctrl.btParameter.getDialogChangedObservable()"
+                                            ng-disabled="$ctrl.btParameter.getIsReadOnly()" backspace-reset="false"
+                                            data-bs-html="true" data-bs-original-title="Measurement"
+                                            data-bs-placement="right" data-parameter-id="chamferMethod">
+                                            <div class="os-select-match"
+                                                ng-hide="$select.hideMatch || $select.open &amp;&amp; $select.searchEnabled"
+                                                ng-disabled="$select.disabled"
+                                                ng-class="{'btn-default-focus':$select.focus, 'btn-open': $select.open}"
+                                                placeholder="">
+                                                <span tabindex="-1"
+                                                    class="btn btn-secondary form-control os-select-toggle"
+                                                    aria-label="Select box activate" ng-disabled="$select.disabled"
+                                                    ng-click="$select.activate()" style="outline: 0;">
+                                                    <span ng-show="$select.getIsEmpty()"
+                                                        class="os-select-placeholder text-muted ng-hide"></span>
+                                                    <span ng-hide="$select.getIsEmpty()"
+                                                        class="os-select-match-text float-start"
+                                                        ng-class="{'os-select-allow-clear': $select.allowClear &amp;&amp; !$select.getIsEmpty()}"
+                                                        ng-transclude="">
+                                                        <!---->
+                                                        <span
+                                                            ng-bind="$ctrl.btParameter.getCurrentValueForDisplay()">Offset</span></span>
+                                                    <i class="caret float-end"></i>
+                                                    <a ng-show="$select.allowClear &amp;&amp; !$select.getIsEmpty() &amp;&amp; ($select.disabled !== true)"
+                                                        aria-label="Select box clear" style="margin-right: 10px"
+                                                        ng-click="$select.clearSelect($event)"
+                                                        class="btn btn-sm btn-link float-end ng-hide">
+                                                        <i class="glyphicon glyphicon-remove" aria-hidden="true"></i>
+                                                    </a>
+                                                </span>
+                                            </div>
+                                            <span
+                                                ng-show="$select.open &amp;&amp; $select.refreshing  &amp;&amp; $select.spinnerEnabled"
+                                                class="os-spinner-small os-spinner-spinning ng-hide"></span>
+                                            <input type="search" autocomplete="off" tabindex="-1" aria-expanded="true"
+                                                aria-label="Select box" aria-owns="os-select-choices-0"
+                                                class="form-control os-select-search ng-pristine ng-untouched ng-valid ng-empty ng-hide"
+                                                ng-class="{ 'os-select-search-hidden' : !$select.searchEnabled, 'os-select-search-clear-icon': $select.searchClearIcon }"
+                                                placeholder="" ng-model="$select.search"
+                                                ng-click="$select.hideMatch &amp;&amp; $select.activate()"
+                                                ng-show="$select.open || $select.hideMatch">
+                                            <!---->
+                                            <ul class="os-enum-param-select-choices os-select-choices os-select-choices-content os-select-dropdown dropdown-menu ng-hide"
+                                                oncontextmenu="return false;"
+                                                ng-show="$select.open &amp;&amp; $select.items.length &gt; 0"
+                                                repeat="option.value.value as (key, option) in $ctrl.btParameter.visibleOptions | osSelectParameterSearch: $select.search">
+                                                <li class="os-select-choices-group" id="os-select-choices-0">
+                                                    <div class="dropdown-divider ng-hide"
+                                                        ng-show="$select.isGrouped &amp;&amp; $index &gt; 0"></div>
+                                                    <div ng-show="$select.isGrouped"
+                                                        class="os-select-choices-group-label dropdown-header ng-hide"
+                                                        ng-bind="$group.name"></div>
+                                                    <!----><!----><!----><!----><!---->
+                                                </li>
+                                            </ul>
+                                            <div class="os-select-no-choice"></div>
+                                            <os-select-single></os-select-single><input ng-disabled="$select.disabled"
+                                                class="os-select-focusser os-select-offscreen" type="text"
+                                                id="focusser-0" aria-label="Select box focus" aria-haspopup="true"
+                                                role="button">
+                                        </div>
+                                        <!---->
+                                    </div>
+                                </span><!---->
+
+                                <!---->
+
+                                <!---->
+
+                                <!---->
+                            </os-enum-parameter>
+                        </div><!----><!----><!---->
+                        <div ng-repeat="btParameter in $ctrl.btParameters|limitTo:$ctrl.group.len:$ctrl.group.startIndex"
+                            ng-if="btParameter.getIsVisible() &amp;&amp; !$ctrl.group.getIsCollapsible()"
+                            class="os-parameter-list-item os-param-fill-first-column" ng-class="{'full-width': $ctrl.fullWidth,
+                  'os-param-fill-first-column': $ctrl.getFillsFirstColumn(btParameter) &amp;&amp; !$ctrl.fullWidth,
+                  'os-param-fill-both-columns': btParameter.getBtParameterForCurrentConfiguration().getCanFillBothColumns(),
+                  'os-param-display-short': btParameter.getBtParameterForCurrentConfiguration().getCanDisplayShort(),
+                  'os-param-fits-in-right-column': $ctrl.getFitsInRightColumn(btParameter),
+                  'os-param-requires-margin': btParameter.getBtParameterForCurrentConfiguration().getRequiresMargin(),
+                  'enabled-button-with-readonly-view-overlay': btParameter.getIsReadonlyButtonEnabled(),
+                  'os-disabled-overlay-button': btParameter.getIsReadonlyButton() &amp;&amp; !btParameter.getCanBeConfigured(),
+                  'os-param-equally-spaced-column': btParameter.useEquallySpacedColumnLayout,
+                  'os-param-grow': btParameter.getIsButton(),
+                  'os-param-half': btParameter.getIsButton() &amp;&amp; btParameter.getCanDisplayShort(),
+                  'os-controlled-marker': btParameter.getIsControlled(),
+                  'os-override-marker': btParameter.getIsOverriden()}" os-parameter="btParameter"
+                            os-context-menu="$ctrl.buildContextMenuForParameter(btParameter)"
+                            os-context-menu-disabled="$ctrl.disableContextMenuForParameter"
+                            os-context-menu-class="enterprise-context-menu" data-parameter-id="chamferType"
+                            parent-dialog-id="feature-dialog">
+                            <!---->
+                            <os-enum-parameter bt-parameter="btParameter" parent-dialog-id="feature-dialog">
+                                <!---->
+                                <!----><span
+                                    ng-if="!$ctrl.btParameter.getIsNotApplicable() &amp;&amp; ($ctrl.btParameter.getDisplayStyle() === $ctrl.EnumDisplayStyle.DROPDOWN)"
+                                    class="os-param-wrapper os-param-select">
+                                    <!----><label
+                                        ng-if="::($ctrl.btParameter.getCanShowControlLabel() &amp;&amp; !$ctrl.hasImageUrl())"
+                                        class="os-param-label" ng-click="$ctrl.openDropdown($event)"
+                                        ng-disabled="$ctrl.btParameter.getIsReadOnly()"><span>Chamfer
+                                            type</span></label><!---->
+                                    <!---->
+                                    <div class="select-container-wrapper">
+                                        <div class="select-input os-select-container os-select-bootstrap dropdown ng-not-empty ng-valid"
+                                            ng-class="{'os-param-readonly': $ctrl.btParameter.getIsReadOnly(), 'os-invalid-textbox': $ctrl.btParameter.getHasParameterError(), 'os-is-within-spreadsheet': $ctrl.btParameter.getIsInTable(), open: $select.open}"
+                                            ng-model="$ctrl.btParameter.pendingEnumValue"
+                                            ng-readonly="$ctrl.btParameter.getIsReadOnly()" theme="bootstrap"
+                                            ng-change="$ctrl.onParameterChange()"
+                                            os-select-key-down="$ctrl.btParameter.onKeyPressed($event)"
+                                            os-open-close="$ctrl.onOpenClose(isOpen)" enter-activate="true"
+                                            skip-focusser="false" append-to-body="true" focus-on="FOCUS_ELEMENT"
+                                            os-reposition-when="$ctrl.btParameter.getDialogChangedObservable()"
+                                            ng-disabled="$ctrl.btParameter.getIsReadOnly()" backspace-reset="false"
+                                            data-bs-html="true" data-bs-original-title="Chamfer type"
+                                            data-bs-placement="right" data-parameter-id="chamferType">
+                                            <div class="os-select-match"
+                                                ng-hide="$select.hideMatch || $select.open &amp;&amp; $select.searchEnabled"
+                                                ng-disabled="$select.disabled"
+                                                ng-class="{'btn-default-focus':$select.focus, 'btn-open': $select.open}"
+                                                placeholder="">
+                                                <span tabindex="-1"
+                                                    class="btn btn-secondary form-control os-select-toggle"
+                                                    aria-label="Select box activate" ng-disabled="$select.disabled"
+                                                    ng-click="$select.activate()" style="outline: 0;">
+                                                    <span ng-show="$select.getIsEmpty()"
+                                                        class="os-select-placeholder text-muted ng-hide"></span>
+                                                    <span ng-hide="$select.getIsEmpty()"
+                                                        class="os-select-match-text float-start"
+                                                        ng-class="{'os-select-allow-clear': $select.allowClear &amp;&amp; !$select.getIsEmpty()}"
+                                                        ng-transclude="">
+                                                        <!---->
+                                                        <span
+                                                            ng-bind="$ctrl.btParameter.getCurrentValueForDisplay()">Equal
+                                                            distance</span></span>
+                                                    <i class="caret float-end"></i>
+                                                    <a ng-show="$select.allowClear &amp;&amp; !$select.getIsEmpty() &amp;&amp; ($select.disabled !== true)"
+                                                        aria-label="Select box clear" style="margin-right: 10px"
+                                                        ng-click="$select.clearSelect($event)"
+                                                        class="btn btn-sm btn-link float-end ng-hide">
+                                                        <i class="glyphicon glyphicon-remove" aria-hidden="true"></i>
+                                                    </a>
+                                                </span>
+                                            </div>
+                                            <span
+                                                ng-show="$select.open &amp;&amp; $select.refreshing  &amp;&amp; $select.spinnerEnabled"
+                                                class="os-spinner-small os-spinner-spinning ng-hide"></span>
+                                            <input type="search" autocomplete="off" tabindex="-1" aria-expanded="true"
+                                                aria-label="Select box" aria-owns="os-select-choices-1"
+                                                class="form-control os-select-search ng-pristine ng-untouched ng-valid ng-empty ng-hide"
+                                                ng-class="{ 'os-select-search-hidden' : !$select.searchEnabled, 'os-select-search-clear-icon': $select.searchClearIcon }"
+                                                placeholder="" ng-model="$select.search"
+                                                ng-click="$select.hideMatch &amp;&amp; $select.activate()"
+                                                ng-show="$select.open || $select.hideMatch">
+                                            <!---->
+                                            <ul class="os-enum-param-select-choices os-select-choices os-select-choices-content os-select-dropdown dropdown-menu ng-hide"
+                                                oncontextmenu="return false;"
+                                                ng-show="$select.open &amp;&amp; $select.items.length &gt; 0"
+                                                repeat="option.value.value as (key, option) in $ctrl.btParameter.visibleOptions | osSelectParameterSearch: $select.search">
+                                                <li class="os-select-choices-group" id="os-select-choices-1">
+                                                    <div class="dropdown-divider ng-hide"
+                                                        ng-show="$select.isGrouped &amp;&amp; $index &gt; 0"></div>
+                                                    <div ng-show="$select.isGrouped"
+                                                        class="os-select-choices-group-label dropdown-header ng-hide"
+                                                        ng-bind="$group.name"></div>
+                                                    <!----><!----><!----><!----><!----><!----><!---->
+                                                </li>
+                                            </ul>
+                                            <div class="os-select-no-choice"></div>
+                                            <os-select-single></os-select-single><input ng-disabled="$select.disabled"
+                                                class="os-select-focusser os-select-offscreen" type="text"
+                                                id="focusser-1" aria-label="Select box focus" aria-haspopup="true"
+                                                role="button">
+                                        </div>
+                                        <!---->
+                                    </div>
+                                </span><!---->
+
+                                <!---->
+
+                                <!---->
+
+                                <!---->
+                            </os-enum-parameter>
+                        </div><!----><!----><!---->
+                        <div ng-repeat="btParameter in $ctrl.btParameters|limitTo:$ctrl.group.len:$ctrl.group.startIndex"
+                            ng-if="btParameter.getIsVisible() &amp;&amp; !$ctrl.group.getIsCollapsible()"
+                            class="os-parameter-list-item os-param-fill-first-column" ng-class="{'full-width': $ctrl.fullWidth,
+                  'os-param-fill-first-column': $ctrl.getFillsFirstColumn(btParameter) &amp;&amp; !$ctrl.fullWidth,
+                  'os-param-fill-both-columns': btParameter.getBtParameterForCurrentConfiguration().getCanFillBothColumns(),
+                  'os-param-display-short': btParameter.getBtParameterForCurrentConfiguration().getCanDisplayShort(),
+                  'os-param-fits-in-right-column': $ctrl.getFitsInRightColumn(btParameter),
+                  'os-param-requires-margin': btParameter.getBtParameterForCurrentConfiguration().getRequiresMargin(),
+                  'enabled-button-with-readonly-view-overlay': btParameter.getIsReadonlyButtonEnabled(),
+                  'os-disabled-overlay-button': btParameter.getIsReadonlyButton() &amp;&amp; !btParameter.getCanBeConfigured(),
+                  'os-param-equally-spaced-column': btParameter.useEquallySpacedColumnLayout,
+                  'os-param-grow': btParameter.getIsButton(),
+                  'os-param-half': btParameter.getIsButton() &amp;&amp; btParameter.getCanDisplayShort(),
+                  'os-controlled-marker': btParameter.getIsControlled(),
+                  'os-override-marker': btParameter.getIsOverriden()}" os-parameter="btParameter"
+                            os-context-menu="$ctrl.buildContextMenuForParameter(btParameter)"
+                            os-context-menu-disabled="$ctrl.disableContextMenuForParameter"
+                            os-context-menu-class="enterprise-context-menu" data-parameter-id="width"
+                            parent-dialog-id="feature-dialog">
+                            <!---->
+                            <os-quantity-parameter bt-parameter="btParameter" auto-complete-menu-right-align="true"
+                                parent-dialog-id="feature-dialog">
+                                <!---->
+                                <!---->
+                                <div ng-if="!$ctrl.btParameter.getIsNotApplicable()"
+                                    class="os-param-wrapper os-param-container"
+                                    ng-class="{'os-param-readonly': $ctrl.btParameter.getIsReadOnly()}"
+                                    data-parameter-id="width">
+                                    <!---->
+                                    <!----><label
+                                        ng-if="::($ctrl.btParameter.getCanShowControlLabel() &amp;&amp; !$ctrl.getImageUrl())"
+                                        class="os-param-label" ng-click="$ctrl.focusOnTextbox()"
+                                        ng-disabled="$ctrl.btParameter.getIsReadOnly()"><span>Distance</span>
+                                    </label><!---->
+                                    <!---->
+                                    <!---->
+                                    <!---->
+
+                                    <!----><!-- Space after computed so that italics are not cut off -->
+                                    <div class="quantity-autocomplete-holder dropdown" os-transient-panel-trigger=""
+                                        is-open="$ctrl.btParameter.isAutocompleteOpen"
+                                        ng-click="$ctrl.btParameter.togglePrecision()">
+                                        <!---->
+                                        <!----><input ng-if="!$ctrl.btParameter.getIsComputedConfigurationInput()"
+                                            class="os-param-number dropdown-source ng-pristine ng-untouched ng-valid ng-not-empty os-param-form-item"
+                                            type="text" autocomplete="off"
+                                            ng-readonly="$ctrl.btParameter.getIsReadOnly()"
+                                            ng-model="$ctrl.btParameter.pendingQuantity.boundDisplayValue"
+                                            ng-change="$ctrl.btParameter.pendingQuantity.updateExpressionToMatchBoundValue()"
+                                            ng-keydown="$ctrl.onKeyDown($event)"
+                                            ng-focus="$ctrl.onParameterFocused($event)"
+                                            ng-mousedown="$ctrl.onTextInputMouseDown($event)"
+                                            ng-mouseup="$ctrl.onTextInputMouseUp($event)"
+                                            ng-blur="$ctrl.onParameterFocusLost($event)"
+                                            os-select-text-when="::$ctrl.btParameter.getFocusRequestObservable()"
+                                            ng-class="{'os-invalid-textbox': $ctrl.btParameter.getHasParameterError(),
+                      'os-param-form-item': !$ctrl.btParameter.getIsInTable(),
+                      'os-canvas-text-edit': $ctrl.btParameter.getIsCanvasTextBox()}" data-bs-html="true"
+                                            data-bs-animation="false" data-bs-original-title="Distance: 0.03 in"
+                                            data-bs-placement="right"
+                                            ng-attr-tabindex="{{::($ctrl.btParameter.getIsReadonlyButton() ? '-1' : undefined)}}"
+                                            ng-disabled="$ctrl.getDisabledState()"><!---->
+                                        <ul class="quantity-parameter-autocomplete-menu os-col ng-hide dropdown-menu-end"
+                                            os-transient-panel=""
+                                            ng-class="{'open-quantity-autocomplete-menu': $ctrl.btParameter.isAutocompleteOpen, 'dropdown-menu-end': $ctrl.autoCompleteMenuRightAlign}"
+                                            ng-show="$ctrl.quantityAutocomplete.getAutocompleteOptions().length &gt; 0">
+                                            <!---->
+                                        </ul>
+                                    </div>
+                                    <!---->
+                                    <!---->
+                                </div><!---->
+                            </os-quantity-parameter>
+                        </div><!----><!----><!----><!----><!----><!----><!----><!----><!----><!----><!----><!---->
+                        <!---->
+                    </os-parameter-group><!----><os-parameter-group
+                        ng-repeat="group in $ctrl.btParameterGroups track by group.startIndex"
+                        bt-parameters="$ctrl.btParameters" group="group" ng-class="{'full-width': $ctrl.fullWidth}"
+                        full-width="$ctrl.fullWidth" get-fills-first-column="$ctrl.getFillsFirstColumnCallback"
+                        get-fits-in-right-column="$ctrl.getFitsInRightColumnCallback"
+                        build-context-menu-for-parameter="$ctrl.buildContextMenuForParameter"
+                        disable-context-menu-for-parameter="$ctrl.disableContextMenuForParameter"
+                        parent-dialog-id="feature-dialog">
+                        <!----><!---->
+                        <div ng-repeat="btParameter in $ctrl.btParameters|limitTo:$ctrl.group.len:$ctrl.group.startIndex"
+                            ng-if="btParameter.getIsVisible() &amp;&amp; !$ctrl.group.getIsCollapsible()"
+                            class="os-parameter-list-item os-param-fill-first-column" ng-class="{'full-width': $ctrl.fullWidth,
+                  'os-param-fill-first-column': $ctrl.getFillsFirstColumn(btParameter) &amp;&amp; !$ctrl.fullWidth,
+                  'os-param-fill-both-columns': btParameter.getBtParameterForCurrentConfiguration().getCanFillBothColumns(),
+                  'os-param-display-short': btParameter.getBtParameterForCurrentConfiguration().getCanDisplayShort(),
+                  'os-param-fits-in-right-column': $ctrl.getFitsInRightColumn(btParameter),
+                  'os-param-requires-margin': btParameter.getBtParameterForCurrentConfiguration().getRequiresMargin(),
+                  'enabled-button-with-readonly-view-overlay': btParameter.getIsReadonlyButtonEnabled(),
+                  'os-disabled-overlay-button': btParameter.getIsReadonlyButton() &amp;&amp; !btParameter.getCanBeConfigured(),
+                  'os-param-equally-spaced-column': btParameter.useEquallySpacedColumnLayout,
+                  'os-param-grow': btParameter.getIsButton(),
+                  'os-param-half': btParameter.getIsButton() &amp;&amp; btParameter.getCanDisplayShort(),
+                  'os-controlled-marker': btParameter.getIsControlled(),
+                  'os-override-marker': btParameter.getIsOverriden()}" os-parameter="btParameter"
+                            os-context-menu="$ctrl.buildContextMenuForParameter(btParameter)"
+                            os-context-menu-disabled="$ctrl.disableContextMenuForParameter"
+                            os-context-menu-class="enterprise-context-menu" data-parameter-id="tangentPropagation"
+                            parent-dialog-id="feature-dialog">
+                            <!---->
+                            <os-boolean-parameter bt-parameter="btParameter" parent-dialog-id="feature-dialog">
+                                <!---->
+                                <!---->
+                                <div ng-if="!$ctrl.btParameter.getIsNotApplicable()"
+                                    class="os-param-wrapper os-param-container"
+                                    ng-class="{'os-param-readonly': $ctrl.btParameter.getIsReadOnly()}"
+                                    data-parameter-id="tangentPropagation">
+                                    <!---->
+                                    <!----><label
+                                        ng-if="::($ctrl.btParameter.getIsCheckbox() &amp;&amp; !$ctrl.btParameter.getShouldOnlyShowHeading())"
+                                        class="os-param-checkbox" data-bs-html="true"
+                                        data-bs-original-title="Tangent propagation" data-bs-placement="right"
+                                        ng-class="{'os-param-readonly-checkbox': $ctrl.btParameter.getIsReadOnly()}">
+                                        <input
+                                            class="os-param-checkbox-input ng-pristine ng-untouched ng-valid ng-not-empty"
+                                            type="checkbox" ng-readonly="$ctrl.btParameter.getIsReadOnly()"
+                                            ng-model="$ctrl.btParameter.pendingBooleanValue" data-parameter-value="true"
+                                            ng-focus="$ctrl.onParameterFocused($event)"
+                                            ng-blur="$ctrl.onParameterFocusLost($event)"
+                                            ng-change="$ctrl.onParameterChange()" ng-keydown="$ctrl.onKeyDown($event)"
+                                            ng-disabled="$ctrl.btParameter.getIsReadOnly()"
+                                            ng-attr-tabindex="{{::($ctrl.btParameter.getIsReadonlyButton() ? '-1' : undefined)}}"
+                                            os-select-text-when="$ctrl.btParameter.getFocusRequestObservable()">
+                                        <span class="os-checkbox-indicator"></span>
+                                        <!---->
+
+                                        <!----><span class="os-param-checkbox-label"
+                                            ng-if="::!$ctrl.btParameter.getIsInTable()">Tangent propagation
+                                        </span><!---->
+                                    </label><!---->
+
+                                    <!---->
+                                    <!---->
+                                </div><!---->
+                            </os-boolean-parameter>
+                        </div><!----><!---->
+                        <!---->
+                    </os-parameter-group><!---->
+                    <!---->
+                </os-parameter-list-view>
+            </ul>
+            <div class="ns-preview-control">
+                <div>
+                    <div class="clearfix"></div>
+                    <div class="ns-preview-slider-container">
+                        <div class="ns-preview-alpha-slider active noUi-target"
+                            data-bs-original-title="Preview before and after this feature" data-bs-placement="bottom">
+                            <div class="noUi-base noUi-background noUi-horizontal">
+                                <div class="noUi-origin noUi-origin-lower" style="left: 70%;">
+                                    <div class="noUi-handle noUi-handle-lower"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-secondary btn-sm ns-preview-final-button"
+                        data-bs-original-title="Preview Part Studio up to the rollback bar" data-bs-placement="bottom"
+                        style="display: none;">Final</button>
+                    <div class="clearfix"></div>
+                </div>
+            </div>
+            <div class="clearfix"></div>
+        </div>
+        <div class="dialog-help-container"><a class="os-help-link os-center-content"
+                href="/help/index.htm#cshid=chamfer" target="help"><svg class="os-svg-icon os-help-btn"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <use xlink:href="#svg-icon-help-button"></use>
+                </svg></a></div>
+    </div>
+    <osc-resize-handle class="osc-x" target-selector="#feature-dialog" resize-direction="horizontal"
+        add-backdrop-on-resize="true"></osc-resize-handle><osc-resize-handle class="osc-x"
+        target-selector="#feature-dialog" resize-direction="horizontal"
+        add-backdrop-on-resize="true"></osc-resize-handle>
+</div>

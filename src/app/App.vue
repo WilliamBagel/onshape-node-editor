@@ -1,8 +1,10 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import TopBar from './components/TopBar.vue'
-import { createEditor } from './rete';
+import { createEditor, createEditorDev } from './rete';
 import BottomBar from './components/BottomBar.vue';
+
+import { inject } from 'vue'
 
 export default defineComponent({
   components: {
@@ -10,7 +12,12 @@ export default defineComponent({
     BottomBar: BottomBar
   },
   async mounted() {
-    await createEditor(this.$refs.rete as HTMLElement)
+    const dev = inject('developerMode');
+    if (dev === true) {
+      await createEditorDev(this.$refs.rete as HTMLElement);
+    } else {
+      await createEditor(this.$refs.rete as HTMLElement);
+    }
   }
 })
 </script>

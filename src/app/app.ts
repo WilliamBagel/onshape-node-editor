@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 William Degele
+ * Copyright 2025 "WilliamBagel" William Degele
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
  * and associated documentation files (the “Software”), to deal in the Software without
@@ -24,6 +24,8 @@ import { createApp } from 'vue'
 import AppRoot from './App.vue'
 import { UserInfo } from "./onshape-utils/userinfo";
 
+const STDLIB_SOURCE = 'fe6ffc0ddd95b29b5a9dd532';
+
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
     public myclient = 'https://williambagel.github.io/onshape-node-editor';
@@ -35,6 +37,8 @@ export class App extends BaseApp {
         this.startVueApp();
 
         this.processUserInfo();
+
+        this.getStandardLibrary();
     }
 
     public processUserInfo(): void {
@@ -55,7 +59,7 @@ export class App extends BaseApp {
         })
     }
 
-    public startVueApp(): void {
+    public startVueApp(developerMode: boolean = false): void {
         const tryMount = () => {
             if (!document.getElementById('app')) {
                 requestAnimationFrame(tryMount);
@@ -64,11 +68,31 @@ export class App extends BaseApp {
             const vueApp = createApp(AppRoot);
 
             vueApp.provide('app', this);
+            vueApp.provide('developerMode', developerMode);
 
             vueApp.mount('#app');
 
-            this.messaging.showMessageBubble("App initialized")
+            // this.messaging.showMessageBubble("App initialized")
         };
         tryMount();
+    }
+
+    public getStandardLibrary(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.onshape.documentApi.getDocument({ did: STDLIB_SOURCE }).then((res) => {
+                if (res == null) {
+                    resolve(undefined);
+                    return;
+                }
+                this.onshape.featureStudioApi.getFeatureStudioSpecs({
+                    did: STDLIB_SOURCE,
+                    wvm: 'w',
+                    wvmid: res.defaultWorkspace?.id,
+                    eid: '6e648f0784c53a069512657b'
+                }).then((res) => {
+                    console.log(res);
+                })
+            })
+        })
     }
 }

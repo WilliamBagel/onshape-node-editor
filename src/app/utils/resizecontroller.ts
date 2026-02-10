@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 William Degele
+ * Copyright 2025 "WilliamBagel" William Degele
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
  * and associated documentation files (the “Software”), to deal in the Software without
@@ -31,9 +31,9 @@ export class ResizeController {
     private static resizeActive = false;
 
     static {
-        document.addEventListener('mousemove', ResizeController.mousemove, {passive: true});
-        document.addEventListener('mouseleave', ResizeController.mouseleave);
-        document.addEventListener('mouseup', ResizeController.mouseup);
+        document.addEventListener('pointermove', ResizeController.pointermove, {passive: true});
+        document.addEventListener('pointerleave', ResizeController.pointerleave);
+        document.addEventListener('pointerup', ResizeController.pointerup);
     }
 
     public static resizeBegin(onResize: (e: Event) => void): void {
@@ -54,7 +54,7 @@ export class ResizeController {
         return ResizeController.resizeActive;
     }
 
-    private static mousemove(e: MouseEvent): void {
+    private static pointermove(e: MouseEvent): void {
         // e.stopImmediatePropagation();
         // e.stopPropagation();
         // e.preventDefault();
@@ -62,11 +62,11 @@ export class ResizeController {
         ResizeController.onResize(e);
     }
 
-    private static mouseup(e: MouseEvent): void {
+    private static pointerup(e: MouseEvent): void {
         ResizeController.resizeEnd(ResizeController.onResize);
     }
 
-    private static mouseleave(e: MouseEvent): void {
+    private static pointerleave(e: MouseEvent): void {
         ResizeController.resizeActive = false;
     }
 }

@@ -50,7 +50,7 @@ main.rete.pseudo-connection-active .snap-target {
   z-index: 2 !important;
 }
 
-.connection-fixed-left svg .path-outline {
+/* .connection-fixed-left svg .path-outline {
   marker-start: url(#circleMarker);
 }
 
@@ -61,7 +61,7 @@ main.rete.pseudo-connection-active .snap-target {
 .connection-snapped svg .path-outline {
   marker-start: url(#circleMarker);
   marker-end: url(#circleMarker);
-}
+} */
 
 .ns-dialog-panel {
   line-height: round(1.8em, 1px);

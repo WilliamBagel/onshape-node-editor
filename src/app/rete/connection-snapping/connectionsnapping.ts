@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 William Degele
+ * Copyright 2025 "WilliamBagel" William Degele
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy of this software
  * and associated documentation files (the “Software”), to deal in the Software without
@@ -22,7 +22,7 @@
 import { Position } from "rete-area-plugin/_types/types";
 import { ConnectionPlugin, EventType } from "rete-connection-plugin";
 import { ClassicScheme, SocketData } from "rete-connection-plugin/_types/types";
-import { AreaExtra, Connection, Schemes } from "../types";
+import { AreaExtra, Connection, OnshapeSocketData, Schemes } from "../types";
 import { OnshapeNode } from "../nodes/onshapenode";
 import { AreaPlugin } from "rete-area-plugin";
 import { getDOMSocketPosition } from "rete-render-utils";
@@ -32,6 +32,7 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
     public active: Connection<OnshapeNode, OnshapeNode>;
     public pointerSnapped: boolean = false;
     public snappedPointer: Position = { x: 0, y: 0 };
+    public snappedType: string;
     public socketPositionWatcher = getDOMSocketPosition({
         offset: (position) => {
             return position;
@@ -52,7 +53,7 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
         this.pointerSnapped = false;
 
         if (foundSocket != null) {
-            const { socket, element } = foundSocket; 
+            const { socket, element } = foundSocket;
             let picked: SocketData
             if (this['currentFlow']) {
                 picked = this['currentFlow'].getPickedSocket();
@@ -60,7 +61,7 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
             const connection = this['editor'].getConnections()
                 .find(item => (item.target === socket.nodeId && item.targetInput === socket.key) || (item.source === socket.nodeId && item.sourceOutput === socket.key))
 
-            if ((connection == null && picked != null && !sameSocket(socket, picked)) || (connection != null && socket.side === 'input')) {
+            if ((connection == null) || (connection != null && socket.side === 'input')) {
                 this.pointerSnapped = true;
 
                 const area = this['areaPlugin'] as AreaPlugin<Schemes, AreaExtra>;
@@ -89,14 +90,16 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
 
 export function useConnectionSnapping(
     connection: ConnectionSnappingPlugin<Schemes, AreaExtra>,
-    area: AreaPlugin<Schemes, AreaExtra>
+    area: AreaPlugin<Schemes, AreaExtra>,
+    onSnapRender: (payload: Schemes['Connection']) => void = () => { },
+    mutateOnSnapMove: (payload: SocketData) => void = () => { }
 ) {
     connection.addPipe(async (context) => {
         const type = context.type;
         if (type === 'render') {
             const data = context.data;
-            const payload = data['payload'];
-            if (payload && payload?.isPseudo && (data['start'] || data['end'])) {
+            const payload = data['payload'] as Schemes['Connection'];
+            if (payload && payload['isPseudo'] && (data['start'] || data['end'])) {
                 area.container?.classList.add('pseudo-connection-active');
                 data.element?.classList?.add('connection-selected');
                 const classAdd = 'connection-fixed-' + (payload['target'] === '' ? 'left' : 'right');
@@ -107,12 +110,13 @@ export function useConnectionSnapping(
                     data.element?.classList.add('connection-snapped');
                     let hangingPosition: Position;
                     if (data['start'] != null) {
-                        hangingPosition = data['start']
+                        hangingPosition = data['start'];
                     } else {
-                        hangingPosition = data['end']
+                        hangingPosition = data['end'];
                     }
                     hangingPosition.x = connection.snappedPointer.x;
                     hangingPosition.y = connection.snappedPointer.y;
+                    onSnapRender(payload);
                 } else {
                     data.element?.classList.remove('connection-snapped');
                 }
@@ -158,6 +162,9 @@ export function useConnectionSnapping(
             }
 
             connection.pointerSnapped = true;
+
+            mutateOnSnapMove(socket);
+
         } else if (type === 'connectiondrop') {
             area.container?.classList.remove('pseudo-connection-active');
         }

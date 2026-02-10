@@ -51,40 +51,6 @@ export class BaseApp {
     public displayReady: Promise<any>;
 
     /**
-     * Init the application in development mode so it will only do UI rendering and handling
-     */
-    public initDev(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const headElement = document.getElementsByTagName('head')[0];
-
-            const promises = [];
-
-            /**
-             * Load onshape css for ui to render properly
-             */
-            for (let cssPath of ['onshape-design-tokens.min', 'vendor-bundle', 'woolsthorpe']) {
-                const cssLink = createDocumentElement('link', {
-                    href: `./onshape/${cssPath}.css`,
-                    rel: 'stylesheet',
-                    type: 'text/css'//cssPath !== 'onshape-design-tokens.min' ? 'text/css' : '',
-                });
-
-                headElement.appendChild(cssLink);
-
-                promises.push(new Promise<void>((resolve) => {
-                    cssLink.onload = () => {
-                        resolve();
-                    }
-                }));
-            }
-
-            Promise.all(promises).then(() => {
-                resolve();
-            })
-        });
-    }
-
-    /**
      * Replace the main app elements.  Note if there is no app div, the elements are appended to the main body so that they aren't lost
      * @param elem Element to replace
      */
@@ -101,9 +67,6 @@ export class BaseApp {
      * Create the initial page showing that we are initializing
      */
     public showInitializing() {
-        // var h2 = document.createElement('h2');
-        // h2.innerHTML = 'Initializing';
-        // this.setAppElements(h2);
         const container = createDocumentElement('div', {
             style: `width:100%;height:${document.documentElement.clientHeight}px;display:flex;justify-content:center;align-content:center;align-items:center;`,
         });
@@ -140,6 +103,41 @@ export class BaseApp {
         this.messaging = new Messaging(this.documentId, this.workspaceId, this.elementId);
         this.start();
     }
+
+    /**
+     * Init the application in development mode so it will only do UI rendering and handling
+     */
+    public initDev(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const headElement = document.getElementsByTagName('head')[0];
+
+            const promises = [];
+
+            /**
+             * Load onshape css for ui to render properly
+             */
+            for (let cssPath of ['onshape-design-tokens.min', 'vendor-bundle', 'woolsthorpe']) {
+                const cssLink = createDocumentElement('link', {
+                    href: `./onshape/${cssPath}.css`,
+                    rel: 'stylesheet',
+                    type: 'text/css'//cssPath !== 'onshape-design-tokens.min' ? 'text/css' : '',
+                });
+
+                headElement.appendChild(cssLink);
+
+                promises.push(new Promise<void>((resolve) => {
+                    cssLink.onload = () => {
+                        resolve();
+                    }
+                }));
+            }
+
+            Promise.all(promises).then(() => {
+                resolve();
+            })
+        });
+    }
+
 
     /**
      * Get the contents of a file from Onshape
@@ -321,7 +319,7 @@ export class BaseApp {
             return;
         }
         this.showInitializing();
-        const url = //encodeURI('cad.onshape.com/login');
+        const url =
             window.location != window.parent.location
                 ? document.referrer
                 : document.location.href;
@@ -348,16 +346,5 @@ export class BaseApp {
         Promise.all(promises).then(() => {
             this.initApp();
         })
-
-        // Promise.all(promises)
-        //     .then(() => {
-        //         //
-        //         // Initialize app
-        //         //
-        //         this.initApp();
-        //     })
-        //     .catch((reason: string) => {
-        //         this.failApp(reason);
-        //     });
     }
 }
