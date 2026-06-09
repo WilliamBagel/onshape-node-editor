@@ -47,11 +47,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build application
-        run: npm run build:app
+        run: pnpm run build:app
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist/app'
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist/app
-          cname: # Optional: add custom domain if needed
+        id: deployment
+        uses: actions/deploy-pages@v4
