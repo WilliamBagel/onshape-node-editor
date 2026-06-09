@@ -43,9 +43,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      - name: Approve Builds
-        run: pnpm approve-builds
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
