@@ -28,7 +28,6 @@ import { snapGrid } from "./modified-rete/areasnap";
 import { StyleSettings } from "./stylesettings";
 import { CustomConnectionPlugin } from "./customconnectionplugin";
 import { OnshapeNode, VariablePointer } from "./nodes/onshapenode";
-import { structures } from "rete-structures";
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { ReteOnshapeNodeProcessor } from './rete-onshape-nodeprocessor';
