@@ -1,8 +1,6 @@
 <script lang="ts">
 import { defineComponent, PropType } from 'vue';
 
-
-import { BTParameterSpecBoolean170, BTParameterSpecEnum171, BTParameterSpecQuantity173 } from 'onshape-typescript-fetch';
 import QuantityControl from './controls/QuantityControl.vue';
 import EnumControl from './controls/EnumControl.vue';
 import BooleanControl from './controls/BooleanControl.vue';

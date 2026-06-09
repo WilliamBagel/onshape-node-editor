@@ -30,6 +30,10 @@
  * Source: https://github.com/Team2901/OnshapeInsertTool/blob/main/app/messaging.ts
  */
 
+/**
+ * Improvements made by William Degele, 2026
+ */
+
 export interface Selection {
     entityType: string;
     occurencePath: string[];

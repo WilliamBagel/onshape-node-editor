@@ -18,7 +18,6 @@
 -->
 
 <script setup lang="ts">
-import { ref } from 'vue'
 // Claude Sonnet 4.6: Import shared icon + tooltip sub-components
 import SvgIcon from './SvgIcon.vue'
 
