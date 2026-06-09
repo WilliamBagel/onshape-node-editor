@@ -9,6 +9,8 @@
 import { defineComponent } from 'vue';
 import SnappingSocket from '../rete/connection-snapping/SnappingSocket.vue';
 import { OnshapeSocket } from '../rete/onshapesockets';
+import { OnshapeOutput } from '../rete/inputoutput/onshapeoutput.js';
+import { OnshapeInput } from '../rete/inputoutput/onshapeinput.js';
 
 export default defineComponent({
     props: ['data'],
@@ -25,8 +27,9 @@ export default defineComponent({
     },
     computed: {
         color() {
-            const data = this.data as OnshapeSocket
-            const color = data.styleSettings.getStyle(this.data.name);
+            const data = this.data as OnshapeInput<any> | OnshapeOutput;
+            const socket = data.socket as OnshapeSocket;
+            const color = socket.styleSettings.getStyle(data.type);
             return color;
         },
     }

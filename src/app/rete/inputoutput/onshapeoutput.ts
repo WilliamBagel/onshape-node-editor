@@ -1,14 +1,13 @@
-import { BTParameterSpec6 } from "onshape-typescript-fetch";
 import { ClassicPreset } from "rete";
 
 export class OnshapeOutput extends ClassicPreset.Output<ClassicPreset.Socket> {
-    private _btType: string
+    private _type: string
 
-    constructor(socket: ClassicPreset.Socket, btType: string) {
-        super(socket, btType);
-        this._btType = btType;
+    constructor(socket: ClassicPreset.Socket, type: string) {
+        super(socket, socket.name);
+        this._type = type;
     }
-    public get btType(){
-        return this._btType;
+    public get type(){
+        return this._type;
     }
 }

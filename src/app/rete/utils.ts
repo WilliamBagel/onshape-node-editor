@@ -1,12 +1,12 @@
 import { NodeEditor } from "rete";
 import { Schemes } from "./types";
-import { OnshapeInput } from "./inputoutput/onshapeinput";
 import { OnshapeOutput } from "./inputoutput/onshapeoutput";
 import { OnshapeNode } from "./nodes/onshapenode";
 import { Socket } from "rete/_types/presets/classic";
+import { OnshapeInput } from "./inputoutput/onshapeinput";
 
 
-type Input = OnshapeInput;
+type Input = OnshapeInput<any>;
 type Output = OnshapeOutput;
 
 /**
@@ -18,7 +18,7 @@ type Output = OnshapeOutput;
 export function getConnectionNodes(
     editor: NodeEditor<Schemes>,
     connection: Schemes["Connection"]
-): { source: OnshapeNode, target: OnshapeNode } {
+): { source: OnshapeNode | undefined, target: OnshapeNode | undefined } {
     const source = editor.getNode(connection.source);
     const target = editor.getNode(connection.target);
 
@@ -32,14 +32,18 @@ export function getConnectionNodes(
 export function getConnectionIO(
     editor: NodeEditor<Schemes>,
     connection: Schemes["Connection"]
-): { output: Output, input: Input, source: OnshapeNode, target: OnshapeNode } {
+): { output: Output, input: Input, source: OnshapeNode, target: OnshapeNode } | undefined {
     const { source, target } = getConnectionNodes(editor, connection);
+
+    if (source == null || target == null) { return undefined };
 
     const output =
         source &&
         (source.outputs as Record<string, Output>)[connection.sourceOutput];
     const input =
         target && (target.inputs as unknown as Record<string, Input>)[connection.targetInput];
+
+    if (output == null || input == null) { return undefined };
 
     return {
         output: output,
@@ -52,8 +56,12 @@ export function getConnectionIO(
 export function getConnectionSockets(
     editor: NodeEditor<Schemes>,
     connection: Schemes["Connection"]
-): { source: Socket, target: Socket } {
-    const { output, input } = getConnectionIO(editor, connection);
+): { source: Socket, target: Socket } | undefined {
+    const connectionIO = getConnectionIO(editor, connection);
+    if (connectionIO == null) {
+        return undefined;
+    }
+    const { output, input } = connectionIO;
 
     return {
         source: output?.socket,

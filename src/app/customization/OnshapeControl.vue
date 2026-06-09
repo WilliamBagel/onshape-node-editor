@@ -1,23 +1,19 @@
 <script lang="ts">
 import { defineComponent, PropType } from 'vue';
 
-import QuantityControl from './controls/QuantityControl.vue';
+
 import { BTParameterSpecBoolean170, BTParameterSpecEnum171, BTParameterSpecQuantity173 } from 'onshape-typescript-fetch';
+import QuantityControl from './controls/QuantityControl.vue';
 import EnumControl from './controls/EnumControl.vue';
 import BooleanControl from './controls/BooleanControl.vue';
-import { OnshapeInputControl } from '../rete/controls/onshapeinputcontrol';
+import StringControl from './controls/StringControl.vue';
+import { OnshapeInputControl } from '../rete/controls/onshapeinputcontrol.js';
+import StringConcatControl from './controls/IdControl.vue';
+import QueryListControl from './controls/QueryListControl.vue';
 
 export default defineComponent({
     emits: ['value-change'],
     props: {
-        parameterSpec: {
-            required: true,
-            type: Object as PropType<
-                BTParameterSpecQuantity173 |
-                BTParameterSpecEnum171 |
-                BTParameterSpecBoolean170
-            >
-        },
         control: {
             required: true,
             type: Object as PropType<OnshapeInputControl<any>>
@@ -30,21 +26,35 @@ export default defineComponent({
     components: {
         QuantityControl,
         EnumControl,
-        BooleanControl
+        BooleanControl,
+        StringControl,
+        StringConcatControl,
+        QueryListControl
     }
 })
 </script>
 
 <template>
-    <QuantityControl v-show="show" :parameter-spec="parameterSpec" :control="control"
-        v-if="parameterSpec.btType === 'BTParameterSpecQuantity-173'" @value-change="$emit('value-change', $event)">
+    <QueryListControl v-show="show" :control="control"
+        v-if="control.type === 'QueryList'"
+        @value-change="$emit('value-change', $event)">
+    </QueryListControl>
+    <QuantityControl v-show="show" :control="control"
+        v-if="control.type === 'Quantity' || control.type === 'ValueWithUnits'"
+        @value-change="$emit('value-change', $event)">
     </QuantityControl>
-    <EnumControl v-show="show" :parameter-spec="parameterSpec" :control="control"
-        v-if="parameterSpec.btType === 'BTParameterSpecEnum-171'" @value-change="$emit('value-change', $event)">
+    <EnumControl v-show="show" :control="control" v-if="control.type === 'Enum'"
+        @value-change="$emit('value-change', $event)">
     </EnumControl>
-    <BooleanControl v-show="show" :parameter-spec="parameterSpec" :control="control"
-        v-if="parameterSpec.btType === 'BTParameterSpecBoolean-170'" @value-change="$emit('value-change', $event)">
+    <BooleanControl v-show="show" :control="control" v-if="control.type === 'Boolean'"
+        @value-change="$emit('value-change', $event)">
     </BooleanControl>
+    <StringControl v-show="show" :control="control" v-if="control.type === 'String'"
+        @value-change="$emit('value-change', $event)">
+    </StringControl>
+    <StringConcatControl v-show="show" :control="control" v-if="control.type === 'Id'"
+        @value-change="$emit('value-change', $event)">
+    </StringConcatControl>
 </template>
 
 <style scoped>

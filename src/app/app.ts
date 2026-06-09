@@ -23,13 +23,13 @@ import { BaseApp } from "./common/baseapp";
 import { createApp } from 'vue'
 import AppRoot from './App.vue'
 import { UserInfo } from "./onshape-utils/userinfo";
-
-const STDLIB_SOURCE = 'fe6ffc0ddd95b29b5a9dd532';
+import { STD } from "./onshape-utils/stdlib";
+import { tooltipDirective } from "./components/tooltip/TooltipDirective";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
     public myclient = 'https://williambagel.github.io/onshape-node-editor';
-    public userinfo: UserInfo;
+    public userinfo!: UserInfo;
 
     public start(): void {
         this.userinfo = new UserInfo(this.onshape);
@@ -69,6 +69,8 @@ export class App extends BaseApp {
 
             vueApp.provide('app', this);
             vueApp.provide('developerMode', developerMode);
+            vueApp.directive('tooltip', tooltipDirective);
+
 
             vueApp.mount('#app');
 
@@ -79,15 +81,15 @@ export class App extends BaseApp {
 
     public getStandardLibrary(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.onshape.documentApi.getDocument({ did: STDLIB_SOURCE }).then((res) => {
-                if (res == null) {
+            this.onshape.documentApi.getDocument({ did: STD.DOCUMENT_ID }).then((res) => {
+                if (res == null || res?.defaultWorkspace?.id == null) {
                     resolve(undefined);
                     return;
                 }
                 this.onshape.featureStudioApi.getFeatureStudioSpecs({
-                    did: STDLIB_SOURCE,
+                    did: STD.DOCUMENT_ID,
                     wvm: 'w',
-                    wvmid: res.defaultWorkspace?.id,
+                    wvmid: res.defaultWorkspace.id,
                     eid: '6e648f0784c53a069512657b'
                 }).then((res) => {
                     console.log(res);

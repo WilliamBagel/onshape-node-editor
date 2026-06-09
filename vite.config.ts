@@ -47,7 +47,6 @@ export default defineConfig({
   build: {
     outDir: outDirRelativeToRoot, // will resolve to ../../dist/app when root=src/app
     emptyOutDir: true,
-    // base: '/onshape-node-editor/' // uncomment and set if deploying to GitHub Pages subpath
   },
   resolve: {
     alias: {

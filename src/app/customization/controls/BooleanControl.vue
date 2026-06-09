@@ -1,26 +1,24 @@
 <template>
     <label class="os-param-checkbox align-right">
-        <input class="os-param-checkbox-input" type="checkbox" :class="{ 'ng-not-empty': value.value }"
-            :checked="value.value" @click="toggle()">
+        <input class="os-param-checkbox-input" type="checkbox" :class="{ 'ng-not-empty': value }" :checked="value"
+            @click="toggle()">
         <span class="os-checkbox-indicator"></span>
     </label>
 </template>
 
 <script lang="ts">
-import { BTMParameterBoolean144, BTParameterSpecBoolean170 } from 'onshape-typescript-fetch';
 import { PropType } from 'vue';
-import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
+import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrolrol';
+import { BooleanType } from '../../onshape-utils/featurescripttypes';
+
+type BooleanControl = OnshapeInputControl<BooleanType>;
 
 export default {
     emits: ['value-change'],
     props: {
-        parameterSpec: {
-            required: true,
-            type: Object as PropType<BTParameterSpecBoolean170>
-        },
         control: {
             required: true,
-            type: Object as PropType<OnshapeInputControl<BTMParameterBoolean144>>
+            type: Object as PropType<BooleanControl>
         }
     },
     data() {
@@ -30,8 +28,8 @@ export default {
     },
     methods: {
         toggle() {
-            this.value.value = !this.value.value;
-            this.$emit('value-change', { ... this.value });
+            this.value = !this.value;
+            this.$emit('value-change', this.value);
         }
     }
 }

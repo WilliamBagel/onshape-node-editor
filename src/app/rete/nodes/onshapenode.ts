@@ -1,9 +1,33 @@
 import { ClassicPreset } from "rete";
 import { DataflowNode } from "rete-engine";
 import { OnshapeOutput } from "../inputoutput/onshapeoutput";
+import { BTMParameter1 } from "onshape-typescript-fetch";
 import { OnshapeInput } from "../inputoutput/onshapeinput";
+import { AreaPlugin } from "rete-area-plugin";
+import { AreaExtra, Schemes } from "../types";
+import { NodeFeaturescriptInfo } from "../../onshape-utils/featurestudiogenerator";
+
+export interface BTMParameter1_Valued extends BTMParameter1 {
+  value: string | number | boolean;
+}
+
+export interface EngineNodeData {
+  code: {
+    before: string[];
+    after: string[];
+    whitespace: number;
+  },
+  source: string;
+}
+
+export interface VariablePointer {
+  name: string;
+  id: string;
+}
 
 export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
+  protected title: string = 'node';
+
   public type: string
 
   public width: number = 220;
@@ -16,15 +40,65 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
   public updateCallback: () => void = () => { };
   public updateComponent: () => void = () => { };
 
-  constructor(type: string) {
+  // protected configuredParameters: { [parameterId: string]: BTMParameter1_Valued } = {};
+  // protected connectedParameters: { [parameterId: string]: boolean } = {};
+  public hiddenParameters: { [parameterId: string]: boolean } = {};
+
+  constructor(type: string, title?: string) {
     super("");
     this.type = type;
-  }
-  public data(inputs: Record<string, any>): Promise<Record<string, any>> | Record<string, any> {
-    return {
-      output: "generic node"
+    if (title != null) {
+      this.title = title;
     }
   }
+
+  /**
+   * Get the variable symbols that this node creates, intended to be overridden by parent classes if applicable
+   * ie. A define feature node creates context, id, definition
+   */
+  public getVariableSymbols(): string[] {
+    return [];
+  }
+
+  /**
+   * Returns the variable pointers this node outputs
+   * @param inputs the outputs from the parent nodes' data that go to this nodes' inputs
+   * @returns 
+   */
+  public data(inputs: Record<string, any>): Promise<Record<string, any>> | Record<string, any> {
+    console.log(inputs);
+    const data: Record<string, VariablePointer> = {};
+    const variableSymbols = this.getVariableSymbols();
+    for (const key in this.outputs) {
+      if (variableSymbols.indexOf(key) !== -1) {
+        // the variable is created by this node
+        data[key] = { id: this.id, name: key }
+      } else if (inputs[key]) {
+        // pass through
+        // 0 index because rete bundles all inputs with same name into an array (even if there is only 1)
+        data[key] = inputs[key][0];
+      } else {
+        console.warn(`Could not find source for variable ${key}`);
+      }
+    }
+    console.log(data);
+    return data;
+  }
+
+  public getFeatureScriptInfo(variableMapping: Record<string, string>): NodeFeaturescriptInfo {
+    return {
+      line: "generic node"
+    }
+  }
+
+  public getTitle(): string {
+    return this.title;
+  }
+
+  setTitle(newTitle: any) {
+    this.title = newTitle;
+  }
+
   public resizeX(dx: number) {
     this.width = Math.max(this.width + dx, this.minWidth);
   }
@@ -33,12 +107,16 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     this.updateComponent();
   }
 
+  public updateParameter(parameterId: string, value: any): void { }
+
+  public updateVisibilities(): void { }
+
   public sendComponentUpdate() {
     this.updateComponent();
   }
 
-  public addConnection(thisIO: OnshapeOutput | OnshapeInput, connectedIO: OnshapeOutput | OnshapeInput): void {
-    let object = this.outputs;
+  public addConnection(thisIO: OnshapeOutput | OnshapeInput<any>, connectedIO: OnshapeOutput | OnshapeInput<any>): void {
+    let object: any = this.outputs;
     let input = false;
     if (thisIO instanceof OnshapeInput) {
       object = this.inputs;
@@ -49,12 +127,12 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     }
 
     if (input) {
-      (thisIO as OnshapeInput).addConnection(connectedIO as OnshapeOutput);
+      (thisIO as OnshapeInput<any>).addConnection(connectedIO as OnshapeOutput);
     }
   }
 
-  public removeConnection(thisIO: OnshapeOutput | OnshapeInput, connectedIO: OnshapeOutput | OnshapeInput): void {
-    let object = this.outputs;
+  public removeConnection(thisIO: OnshapeOutput | OnshapeInput<any>, connectedIO: OnshapeOutput | OnshapeInput<any>): void {
+    let object: any = this.outputs;
     let input = false;
     if (thisIO instanceof OnshapeInput) {
       object = this.inputs;
@@ -65,11 +143,14 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     }
 
     if (input) {
-      (thisIO as OnshapeInput).removeConnection(connectedIO as OnshapeOutput);
+      (thisIO as OnshapeInput<any>).removeConnection(connectedIO as OnshapeOutput);
     }
   }
 
-  private validateOwnership(array, thisIO: OnshapeOutput | OnshapeInput): boolean {
+  private validateOwnership(
+    array: { [x: string]: ClassicPreset.Output<ClassicPreset.Socket> | undefined; },
+    thisIO: OnshapeOutput | OnshapeInput<any>
+  ): boolean {
     let input = false;
     if (thisIO instanceof OnshapeInput) {
       input = true;
@@ -81,4 +162,8 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     }
     return true;
   }
+
+  public area!: AreaPlugin<Schemes, AreaExtra>
+  declare public inputs: { [key: string]: OnshapeInput<any> };
+  declare public outputs: { [key: string]: OnshapeOutput };
 }

@@ -53,8 +53,8 @@ export function elementsFromPoint(x: number, y: number, root: ShadowRoot | Docum
  *  if .socket-container, and its parent, which should be the in socket cache
  * Allows snapping box element to give the same result as socket element
 */
-export function findSocket(socketsCache: WeakMap<Element, SocketData>, elements: Element[]): { element: Element, socket: SocketData } {
-    let snapped: { element: Element, socket: SocketData };
+export function findSocket(socketsCache: WeakMap<Element, SocketData>, elements: Element[]): { element: Element, socket: SocketData } | undefined {
+    let snapped: { element: Element, socket: SocketData }| undefined = undefined;
     for (const element of elements) {
         const found = socketsCache.get(element);
 
@@ -63,7 +63,8 @@ export function findSocket(socketsCache: WeakMap<Element, SocketData>, elements:
         }
 
         const container = element.parentElement;
-        if (container != null && container instanceof HTMLElement && container.classList.contains('socket-container')) {
+        if (container != null && container instanceof HTMLElement &&
+            container.classList.contains('socket-container') && container.parentElement) {
             const data = socketsCache.get(container.parentElement);
             if (data != null) {
                 snapped = { element: container, socket: data };

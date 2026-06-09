@@ -1,25 +1,35 @@
-import { BTParameterSpec6 } from "onshape-typescript-fetch";
 import { ClassicPreset } from "rete";
 import { OnshapeInputControl } from "../controls/onshapeinputcontrol";
 import { OnshapeOutput } from "./onshapeoutput";
-import { BTParameterInfo } from "../../onshape-utils/extended-types";
+import { OnshapeType } from "../../onshape-utils/featurescripttypes";
 
-
-
-export class OnshapeInput extends ClassicPreset.Input<ClassicPreset.Socket> {
-    private parameterSpec: BTParameterSpec6
-    public parameterInfo: BTParameterInfo;
+export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Input<ClassicPreset.Socket> {
     public connections: OnshapeOutput[] = [];
+    private _type: string;
+    declare public control: OnshapeInputControl<any>;
+    public showControl: boolean = true;
+    public showLabel: boolean = true;
 
-    constructor(socket: ClassicPreset.Socket, parameterSpec: BTParameterSpec6) {
-        super(socket, parameterSpec.parameterName);
-        this.parameterSpec = parameterSpec;
-        this.parameterInfo = JSON.parse(JSON.stringify(parameterSpec));
-        this.parameterInfo.currentValue = this.parameterInfo.defaultValue.value;
+    // expanded for map types
+    public expanded: boolean = true;
 
-        const control = new OnshapeInputControl(parameterSpec.btType);
-        control.setValue({ ...parameterSpec.defaultValue });
-        this.addControl(control);
+    constructor(socket: ClassicPreset.Socket, label: string, type: string, spec?: T) {
+        super(socket, label);
+
+        // Store parameter spec info
+        if (type === 'map') {
+            // const control = new OnshapeInputControl<T>(this.type, { value: "NaM" } as T);
+            // this.addControl(control);
+        } else {
+            const control = new OnshapeInputControl<T>(type, spec || { type: "none", value: "none" } as T, label);
+            this.addControl(control);
+        }
+
+        this._type = type;
+    }
+
+    public get type(): string {
+        return this._type;
     }
 
     public addConnection(output: OnshapeOutput): void {

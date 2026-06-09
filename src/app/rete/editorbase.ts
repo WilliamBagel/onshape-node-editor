@@ -1,3 +1,4 @@
+import { inject } from 'vue';
 import { NodeEditor } from "rete";
 import { AreaExtensions, AreaPlugin, Drag } from "rete-area-plugin";
 import { VuePlugin, Presets as VuePresets } from "rete-vue-plugin";
@@ -12,30 +13,40 @@ import {
     getSourceTarget
 } from 'rete-connection-plugin';
 
-
-import CustomFeatureComp from '../customization/FeatureNode.vue';
+import CustomFeatureComp from '../customization/OnshapeNode.vue';
 import OutlineConnection from '../customization/OutlineConnection.vue';
 import { ExtractPayload } from "rete-vue-plugin/_types/presets/classic/types";
 import CustomControl from "../customization/controls/QuantityControl.vue";
-import { OnshapeInputControl } from "./controls/onshapeinputcontrol";
+import { OnshapeInputControl } from "./controls/onshapeinputcontrol"
 import { Zoom } from "./modified-rete/improvedzoom";
 import OnshapeSocketComponent from "../customization/OnshapeSocket.vue";
-import { OnshapeSocket} from "./onshapesockets";
+import { OnshapeSocket } from "./onshapesockets";
 import { TranslateLock } from "../utils/translatelock";
 import { getConnectionIO, getConnectionNodes } from "./utils";
 import { CustomFeatureNode } from "./nodes/customfeaturenode";
 import { snapGrid } from "./modified-rete/areasnap";
 import { StyleSettings } from "./stylesettings";
 import { CustomConnectionPlugin } from "./customconnectionplugin";
+import { OnshapeNode, VariablePointer } from "./nodes/onshapenode";
+import { structures } from "rete-structures";
+import { DataflowEngine } from 'rete-engine';
+import { FixSelector } from './modified-rete/fixselector';
+import { ReteOnshapeNodeProcessor } from './rete-onshape-nodeprocessor';
+import { FeatureStudioGenerator, NodeFeaturescriptInfo } from '../onshape-utils/featurestudiogenerator';
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
 type EditorBaseInfo = {
     editor: NodeEditor<Schemes>,
     area: AreaPlugin<Schemes, AreaExtra>,
-    connection: ConnectionSnappingPlugin<Schemes, AreaExtra>
+    connection: ConnectionSnappingPlugin<Schemes, AreaExtra>,
+    buildStudio: () => Promise<string | undefined>;
 }
 
 export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo> {
+    const app = inject('app');
+    if (app == null) {
+        console.error('app could not be found');
+    }
 
     const styleSettings = new StyleSettings();
     OnshapeSocket.setStyleSettings(styleSettings);
@@ -48,8 +59,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     vueRender.addPreset(
         VuePresets.classic.setup({
             customize: {
-                node(context) {
-                    if (context.payload.type === 'CustomFeature') {
+                node(context: any) {
+                    if (context.payload instanceof OnshapeNode) {
                         return CustomFeatureComp;
                     }
                     return VuePresets.classic.Node;
@@ -117,13 +128,25 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 const [source, target] = getSourceTarget(from, to) || [null, null];
                 const { editor } = context;
 
+                if (source == null || target == null) {
+                    return;
+                }
+
+                const sourceNode = editor.getNode(source.nodeId);
+
+                const targetNode = editor.getNode(target.nodeId);
+
+                if (sourceNode == null || targetNode == null) {
+                    return;
+                }
+
                 if (source && target) {
                     editor.addConnection(
                         new Connection(
-                            editor.getNode(source.nodeId),
+                            sourceNode,
                             source.key as never,
                             (source as OnshapeSocketData).btType,
-                            editor.getNode(target.nodeId),
+                            targetNode,
                             target.key as never,
                             (target as OnshapeSocketData).btType,
                             styleSettings
@@ -177,30 +200,26 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             }
             node['area'] = area;
         } else if (context.type === 'connectioncreate') {
-
             const data = context.data;
-
 
             if (data.source === data.target) {
                 return;
             }
 
-            const { source, target, output, input } = getConnectionIO(editor, data);
+            const connectionIO = getConnectionIO(editor, data);
+            if (connectionIO == undefined) return;
+            const { source, target, output, input } = connectionIO
 
             source.addConnection(output, input);
             target.addConnection(input, output);
 
-            if (target instanceof CustomFeatureNode) {
-                (target as CustomFeatureNode).updateVisibilities();
+            if (target instanceof OnshapeNode) {
+                (target as OnshapeNode).updateVisibilities();
             }
-
-            //  console.log()
-            // } else if (context.type === 'connectioncreated'){
-            //     console.log(context,editor);
-            // } else if (context.type === 'connectionremoved'){
-            //     console.log(context,editor);
         } else if (context.type === 'connectionremove') {
-            const { source, target, output, input } = getConnectionIO(editor, context.data);
+            const connectionIO = getConnectionIO(editor, context.data);
+            if (connectionIO == undefined) return;
+            const { source, target, output, input } = connectionIO
 
             source.removeConnection(output, input);
             target.removeConnection(input, output);
@@ -219,7 +238,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         capture: true
     });
 
-    const selector = AreaExtensions.selector();
+    const selector = new FixSelector();
 
     AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
@@ -229,9 +248,138 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         }
     });
 
+
+    /**
+     * Modified by Claude 4.5 Haiku
+     */
+    // TODO move this is another file
+    const engine = new DataflowEngine<Schemes>();
+    editor.use(engine);
+
+    const buildStudio: () => Promise<string | undefined> = async () => {
+        const nodeProcessor = new ReteOnshapeNodeProcessor(editor);
+        const nodeArray = nodeProcessor.processNodes();
+
+        if (!nodeArray) {
+            console.warn('No nodes to process');
+            return;
+        }
+
+        // Track local variables: {variableName: {nodeId: actualVariableName}}
+        const localVariableIdentifiers: Record<string, Record<string, string>> = {};
+
+        // // Maps nodeId to a record of output names to their actual variable names
+        // const nodeOutputVariables: Record<string, Record<string, string>> = {};
+
+        // Helper function to populate a unique variable name
+        const createLocalVariableIndentifier = (desired: string, nodeId: string, outputKey: string): string => {
+            let identifier = desired;
+            let counter = 0;
+
+            // Check if this name already exists
+            if (!localVariableIdentifiers[desired]) {
+                localVariableIdentifiers[desired] = {};
+            }
+
+            // Check if identifier already exists
+            if (localVariableIdentifiers[desired][nodeId]) {
+                return localVariableIdentifiers[desired][nodeId]
+            }
+
+            // If the preferred name is taken, append a counter
+            while (Object.values(localVariableIdentifiers[desired]).includes(identifier)) {
+                identifier = `${desired}${counter}`;
+                counter++;
+            }
+
+            // Store the mapping
+            localVariableIdentifiers[desired][nodeId] = identifier;
+
+            // // Track which output produced this variable
+            // if (!nodeOutputVariables[nodeId]) {
+            //     nodeOutputVariables[nodeId] = {};
+            // }
+            // nodeOutputVariables[nodeId][outputKey] = identifier;
+
+            return identifier;
+        };
+
+        const nodeDataMap: Record<string, Record<string, VariablePointer>[]> = {};
+
+        // First pass: fetch data for all nodes and assign variable names to their outputs
+        for (const nodeId of nodeArray) {
+            const node = editor.getNode(nodeId);
+            if (node == null) {
+                console.warn(`Could not find node with id ${nodeId}`);
+                continue;
+            }
+
+            // Fetch the node's inputs 
+            // Returns a Record<string, VariablePointer> for inputs to the node
+            const nodeData = await engine.fetchInputs(nodeId);
+            nodeDataMap[nodeId] = nodeData as Record<string, VariablePointer>[];
+
+            if (!(nodeData && typeof nodeData === 'object')) {
+                console.warn(`Node ${nodeId} did not return valid data`);
+                continue;
+            }
+
+            // Iterate over each output that defines a variable
+            for (const inputKey in nodeData) {
+                const variablePointer = nodeData[inputKey]?.[0];
+                if (variablePointer && variablePointer.name) {
+                    // Assign a unique variable name for this output
+                    const actualName = createLocalVariableIndentifier(variablePointer.name, variablePointer.id, inputKey);
+                    console.log(`Node ${nodeId} output '${inputKey}' assigned variable name: ${actualName}`);
+                }
+            }
+
+        }
+
+        // Second pass: build variable mappings for each node's inputs and generate feature scripts
+        const featureScriptInfo: NodeFeaturescriptInfo[] = [];
+
+        for (const nodeId of nodeArray) {
+            const node = editor.getNode(nodeId);
+            if (node == null) {
+                continue;
+            }
+
+            // Build the variable mapping for this node's inputs
+            const variableMapping: Record<string, string> = {};
+
+            const nodeData = nodeDataMap[nodeId];
+            for (const key in nodeData) {
+                const variablePointer = nodeData[key]?.[0];
+                // Look up the variable name from the source node's output
+                const localVariableUsages = localVariableIdentifiers[key];
+                if (localVariableUsages && localVariableUsages[variablePointer.id]) {
+                    // set variable name to unique identifier
+                    variableMapping[key] = localVariableUsages[variablePointer.id];
+                } else {
+                    console.warn(`Could not find ${key} and ${variablePointer.id} in variableMapping:`, variableMapping);
+                }
+            }
+
+            // Get the feature script info with the variable mapping
+            // if (typeof node.getFeatureScriptInfo === 'function') {
+            const info = node.getFeatureScriptInfo(variableMapping);
+            featureScriptInfo.push(info);
+            console.log(`Generated feature script for node ${nodeId}:`, info);
+            // }
+        }
+
+        console.log('Final featureScriptInfo array:', featureScriptInfo);
+
+        const featureStudioGenerator = new FeatureStudioGenerator();
+
+        return featureStudioGenerator.generateFeatureStudioCode(featureScriptInfo);
+    }
+
     return {
         editor,
         area,
-        connection
+        connection,
+        buildStudio
     }
 }

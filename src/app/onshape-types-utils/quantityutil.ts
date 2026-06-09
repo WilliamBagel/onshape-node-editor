@@ -1,5 +1,6 @@
 import { BTMParameterQuantity147, BTParameterSpecQuantity173 } from "onshape-typescript-fetch";
 import { UnitUtil } from "./unitutil";
+import { ValueWithUnits, ValueWithUnitsType } from "../onshape-utils/featurescripttypes";
 
 const TYPE_UNITS: { [quantityType: string]: Array<string> } = {
     'LENGTH': [
@@ -23,11 +24,13 @@ const TYPE_UNITS: { [quantityType: string]: Array<string> } = {
 }
 
 export class QuantityUtil {
-    public static getText(value: BTMParameterQuantity147): string {
+
+    public static getText(value: ValueWithUnits): string {
         const units = UnitUtil.shorten(value.units);
         return value.value + ' ' + units;
     }
-    public static getValue(text: string): BTMParameterQuantity147 {
+
+    public static getValue(text: string): ValueWithUnits | undefined {
         if (text === '') {
             return undefined;
         }
@@ -43,7 +46,7 @@ export class QuantityUtil {
             const units = UnitUtil.extend(abr);
             if (units != null && !isNaN(number)) {
                 return {
-                    btType: 'BTMParameterQuantity-147',
+                    type: 'ValueWithUnits',
                     units,
                     value: number
                 };
@@ -51,7 +54,16 @@ export class QuantityUtil {
         }
         return undefined;
     }
+
     public static validate(value: BTMParameterQuantity147, parameterSpec: BTParameterSpecQuantity173): boolean {
+        if (parameterSpec.quantityType == null) {
+            console.warn("BTParameterSpecQuantity173 missing property 'quantityType'", parameterSpec);
+            return false;
+        }
+        if (value.units == null) {
+            console.warn("BTMParameterQuantity147 missing property 'units'", value);
+            return false;
+        }
         const validUnitsForType = TYPE_UNITS[parameterSpec.quantityType];
         if (validUnitsForType == null) {
             console.error(`Invalid quantity type encountered, ${parameterSpec.quantityType} cannot be found in Quantity Types: ${QuantityUtil.getValidTypes()}`);

@@ -1,41 +1,40 @@
 <template>
   <div class="select-container-wrapper">
     <div class="select-input os-select-container os-select-bootstrap dropdown">
-      <Multiselect ref="select" v-model="current.value" :options="enumOptions()" mode="single" :value-prop="'option'"
-        :label="'name'" track-by="'option'" :can-clear="false" class="dropdown-menu" :can-deselect="false">
+      <Multiselect ref="select" v-model="value" :options="enumOptions()" mode="single" :value-prop="'option'"
+        :label="'name'" track-by="'option'" :can-clear="false" class="dropdown-menu enum-multiselect" :can-deselect="false">
       </Multiselect>
     </div>
   </div>
 </template>
 
 <script lang="ts">
-import { BTMParameterEnum145 } from 'onshape-typescript-fetch';
 import { PropType } from 'vue';
 import Multiselect from '@vueform/multiselect'
 import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
+import { EnumType } from '../../onshape-utils/featurescripttypes';
+
+type EnumControl = OnshapeInputControl<EnumType>;
 
 export default {
   emits: ['value-change'],
   props: {
-    parameterSpec: {
-      required: true,
-      type: Object as PropType<BTMParameterEnum145>
-    },
     control: {
       required: true,
-      type: Object as PropType<OnshapeInputControl<BTMParameterEnum145>>
+      type: Object as PropType<EnumControl>
     }
   },
   data() {
     return {
-      current: this.control.getCurrentValue()
+      value: this.control.getCurrentValue()
     }
   },
   methods: {
     enumOptions() {
       const enumOptions: Array<{ option: string, name: string }> = [];
-      const options: string[] = this.parameterSpec.options;
-      const names: string[] = this.parameterSpec.optionNames;
+      const spec = (this.control as EnumControl).getSpec();
+      const options: string[] = spec.options;
+      const names: string[] = spec.optionNames;
       for (const index in options) {
         enumOptions.push({
           option: options[index],
@@ -46,12 +45,11 @@ export default {
     }
   },
   watch: {
-    'current.value'() {
-      this.$emit('value-change', this.current);
+    value() {
+      this.$emit('value-change', this.value);
     }
   },
   components: {
-    // VueSelect: VueSelect
     Multiselect
   }
 }
@@ -59,7 +57,6 @@ export default {
 
 <style lang="scss" scoped>
 @use "sass:math";
-// @use "./vars" as *;
 
 .select-container-wrapper {
   height: 100%;
@@ -75,6 +72,10 @@ export default {
   padding: 0px;
   display: inline-block;
   margin-top: 0px;
+}
+
+.enum-multiselect {
+  --ms-bg: #00000000;
 }
 </style>
 <style src="./EnumControl_multiselect-onshape.scss"></style>

@@ -5,11 +5,13 @@ import { createEditor, createEditorDev } from './rete';
 import BottomBar from './components/BottomBar.vue';
 
 import { inject } from 'vue'
+import ToolTip from './components/tooltip/ToolTip.vue';
 
 export default defineComponent({
   components: {
     TopBar: TopBar,
-    BottomBar: BottomBar
+    BottomBar: BottomBar,
+    ToolTip: ToolTip
   },
   async mounted() {
     const dev = inject('developerMode');
@@ -18,14 +20,35 @@ export default defineComponent({
     } else {
       await createEditor(this.$refs.rete as HTMLElement);
     }
-  }
+  },
+  methods: {
+    onBuild() {
+
+    },
+    onRun() {
+
+    },
+    onSave() {
+
+    },
+    onOpen() {
+
+    },
+    onSettings() {
+
+    },
+    onSearch() {
+
+    },
+  },
 })
 </script>
 
 <template>
-  <TopBar msg="tool"></TopBar>
+  <TopBar project-name="My Graph" @build="onBuild" @run="onRun" @save="onSave" @open="onOpen" @settings="onSettings" />
   <main class="rete" ref="rete"></main>
-  <BottomBar msg="some tools on the bottom"></BottomBar>
+  <BottomBar graph-name="My Graph" @search="onSearch" />
+  <ToolTip />
 </template>
 
 <style scoped>

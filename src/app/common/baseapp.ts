@@ -29,7 +29,7 @@
 'use strict';
 
 import { createDocumentElement } from './htmldom';
-import { Messaging } from '../onshape-utils/messaging';
+import { ClientMessaging } from '../onshape-utils/clientmessaging';
 import { onshapeConfig, OnshapeAPI } from './onshapeapi';
 
 /**
@@ -45,10 +45,10 @@ export class BaseApp {
     public server = 'https://cad.onshape.com';
     public myserver = ''; // Fill in with your server
     public myclient = ''; // Fill with client url
-    public onshape: OnshapeAPI;
-    public messaging: Messaging;
+    public onshape!: OnshapeAPI;
+    public clientMessaging!: ClientMessaging;
 
-    public displayReady: Promise<any>;
+    public displayReady!: Promise<any>;
 
     /**
      * Replace the main app elements.  Note if there is no app div, the elements are appended to the main body so that they aren't lost
@@ -93,6 +93,7 @@ export class BaseApp {
         container.appendChild(spinner);
         this.setAppElements(container);
     }
+
     /**
      * Initialize the app because we have gotten permission from Onshape to access content
      * @param access_token Access token returned by Onshape
@@ -100,7 +101,7 @@ export class BaseApp {
      * @param expires Time when the token expires and needs to be updated
      */
     public initApp() {
-        this.messaging = new Messaging(this.documentId, this.workspaceId, this.elementId);
+        this.clientMessaging = new ClientMessaging(this.documentId, this.workspaceId, this.elementId);
         this.start();
     }
 

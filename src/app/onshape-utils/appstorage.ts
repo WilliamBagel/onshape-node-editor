@@ -27,11 +27,11 @@ import { DocumentSummary } from "./documentinfo";
 
 export class AppStorage<Data> {
     public onshape: OnshapeAPI
-    protected documentId: string;
-    protected workspaceId: string;
-    protected elementId: string;
-    protected documentInfo: BTDocumentInfo;
-    protected lastElements: BTDocumentElementInfo[]
+    protected documentId!: string;
+    protected workspaceId!: string;
+    protected elementId!: string;
+    protected documentInfo!: BTDocumentInfo;
+    protected lastElements!: BTDocumentElementInfo[]
 
     /**
      * Create a new app storage element
@@ -60,7 +60,7 @@ export class AppStorage<Data> {
     * @param eid element id
     * @param elementName element name
     */
-    protected _initFromExisting(did: string, eid: string, elementName: string): Promise<void> {
+    protected _initFromExisting(did: string, eid: string | undefined, elementName: string): Promise<void> {
         return new Promise(async (resolve, reject) => {
             this.documentId = did;
             if (this.documentInfo == null) {
@@ -71,8 +71,14 @@ export class AppStorage<Data> {
                 const element = await this._getElement(elementName);
                 if (element == null) {
                     const appElementInfo = await this._createAppElement(elementName);
+                    if (appElementInfo.elementId == null) {
+                        return reject("Missing a")
+                    }
                     this.elementId = appElementInfo.elementId;
                 } else {
+                    if (element.id == null) {
+                        return reject(`Missing element id in element ${elementName}`)
+                    }
                     this.elementId = element.id;
                 }
             } else {
@@ -93,7 +99,7 @@ export class AppStorage<Data> {
         return new Promise(async (resolve, reject) => {
             const documentSummary = await this._fetchDocumentSummary();
 
-            if (documentSummary == null) {
+            if (documentSummary == null || documentSummary?.id == null) {
                 await this._initNew(this._getDocumentName(), elementName);
             } else {
                 this.documentId = documentSummary.id;
@@ -127,9 +133,9 @@ export class AppStorage<Data> {
         return await this._setAppElement(this.elementId, undefined, data);
     }
 
-    protected _setAppElement(eid: string, fallbackName: string, data: Data): Promise<void> {
+    protected _setAppElement(eid: string, fallbackName: string | undefined, data: Data): Promise<void> {
         return new Promise((resolve, reject) => {
-            let elementName: string;
+            let elementName: string | undefined = undefined;
             if (this.lastElements == null) {
                 this._fetchDocumentElements().then(() => {
                     // try again
@@ -230,9 +236,9 @@ export class AppStorage<Data> {
                         transactionId
                     }
                 }).then((res) => {
-                    if (res == null) {
+                    if (res == null || res?.transactionId == null) {
                         console.error("something isn't right here");
-                        resolve(undefined);
+                        return resolve(undefined);
                     }
                     this.onshape.appElementApi.commitTransactions({
                         did: this.documentId,
@@ -269,9 +275,9 @@ export class AppStorage<Data> {
         })
     }
 
-    private async _getElement(elementName?: string): Promise<BTDocumentElementInfo> {
+    private async _getElement(elementName?: string): Promise<BTDocumentElementInfo | undefined> {
         const elements = await this._fetchDocumentElements();
-        let element: BTDocumentElementInfo;
+        let element: BTDocumentElementInfo | null = null;
         if (elementName == null) {
             return elements[0];
         }
@@ -281,10 +287,13 @@ export class AppStorage<Data> {
                 break;
             }
         }
+        if (element == null) {
+            return undefined;
+        }
         return element;
     }
 
-    private _fetchDocumentSummary(name?: string, offset: number = 0): Promise<DocumentSummary> {
+    private _fetchDocumentSummary(name?: string, offset: number = 0): Promise<DocumentSummary | undefined> {
         const limit = 50
         return new Promise((resolve, reject) => {
             const documentName = name || this._getDocumentName();
@@ -316,7 +325,7 @@ export class AppStorage<Data> {
                 includeMeshes: false,
                 includeCompositeParts: false,
             }).then((res => {
-                if (res == null) {
+                if (res == null || res?.items == null) {
                     // no files or # of files are a multiple of the limit
                     // so user info doesn't exist yet
                     return resolve(undefined);
@@ -347,9 +356,10 @@ export class AppStorage<Data> {
             this.onshape.documentApi.getDocument({
                 did: this.documentId
             }).then((res) => {
-                if (res == undefined) {
+                if (res == null || res?.id == null || res?.defaultWorkspace?.id == null) {
                     // something isn't right here
                     console.error("something went wrong");
+                    return;
                 }
                 this.documentInfo = res;
                 this.documentId = res.id;
@@ -359,9 +369,9 @@ export class AppStorage<Data> {
         })
     }
 
-    private _createDocument(name?: string, elementName?: string): Promise<BTDocumentInfo> {
+    private _createDocument(name?: string, elementName?: string): Promise<BTDocumentInfo | undefined> {
         return new Promise((resolve, reject) => {
-            let defaultElement: BTDocumentElementCreationDescriptor;
+            let defaultElement: BTDocumentElementCreationDescriptor | null = null;
             if (elementName) {
                 defaultElement = {
                     elementParams: this.__getDefaultAppElementParams(),
@@ -373,7 +383,7 @@ export class AppStorage<Data> {
                 bTDocumentParams: {
                     name: name || this._getDocumentName(),
                     // description: "",
-                    elements: [defaultElement],
+                    elements: defaultElement != null ? [defaultElement] : undefined,
                     ownerType: 0,
                     // isEmptyContent: true,
                     isPublic: false,
@@ -382,7 +392,7 @@ export class AppStorage<Data> {
                     // tags: ["onshape-node-editor"]
                 }
             }).then((res) => {
-                if (res == null) {
+                if (res == null || res?.id == null || res.defaultWorkspace?.id == null) {
                     // something went wrong
                     console.error("something went wrong");
                     resolve(undefined);
@@ -394,9 +404,10 @@ export class AppStorage<Data> {
                 const defaultElementId = res.defaultElementId;
                 if (defaultElementId == null) {
                     this._getElement().then((element) => {
-                        if (element == null) {
+                        if (element == null || element?.id == null) {
                             // something isn't right here
                             console.error("something went wrong")
+                            return;
                         }
                         this.elementId = element.id;
                         console.log("element id set from new document", element, this.elementId)
@@ -417,9 +428,10 @@ export class AppStorage<Data> {
                 wid: this.workspaceId,
                 bTAppElementParams: this.__getDefaultAppElementParams(elementName)
             }).then((res) => {
-                if (res == null) {
+                if (res == null || res?.elementId == null) {
                     // something isn't right here
                     console.error("something went wrong");
+                    return;
                 }
                 this.elementId = res.elementId;
                 resolve(res)
@@ -427,7 +439,7 @@ export class AppStorage<Data> {
         })
     }
 
-    protected _getData(): Promise<Data> {
+    protected _getData(): Promise<Data | undefined> {
         return new Promise((resolve, reject) => {
             console.log(this.elementId)
             this.onshape.appElementApi.getJson({
@@ -436,7 +448,7 @@ export class AppStorage<Data> {
                 wvmid: this.workspaceId,
                 eid: this.elementId
             }).then((res) => {
-                if (res == undefined) {
+                if (res == null || res?.tree == null) {
                     // something isn't right here
                     console.error("something went wrong");
                     resolve(undefined);
@@ -488,7 +500,7 @@ export class AppStorage<Data> {
         return "";
     }
 
-    protected _getInitialData(): Data {
-        return undefined;
+    protected _getInitialData(): Data | null {
+        return null;
     }
 }

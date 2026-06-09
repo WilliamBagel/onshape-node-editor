@@ -39,7 +39,7 @@
           :key="'output' + key + seed" :data-testid="'output-' + key">
           <TranslateLock>
             <Ref class="output-socket os-param-subgroup-row" :emit="proxyEmit"
-              :data="{ type: 'socket', side: 'output', key: key, btType: output.socket.name, nodeId: data.id, payload: output.socket }"
+              :data="{ type: 'socket', side: 'output', key: key, btType: output.type, nodeId: data.id, payload: output }"
               data-testid="output-socket" />
           </TranslateLock>
           <div class="os-param-wrapper os-param-container" style="width:100%">
@@ -53,27 +53,12 @@
         <Ref class="control" v-for="[key, control] in controls()" :key="'control' + key + seed" :emit="proxyEmit"
           :data="{ type: 'control', payload: control }" :data-testid="'control-' + key" />
         <!-- Inputs-->
-        <div class="input os-parameter-list-item os-param-fill-first-column" v-for="[key, input] in visibleInputs"
-          :key="'input' + key + seed" :data-testid="'input-' + key">
-          <TranslateLock>
-            <Ref class="input-socket os-param-subgroup-row" :emit="proxyEmit"
-              :data="{ type: 'socket', side: 'input', key: key, btType: input.socket.name, nodeId: data.id, payload: input.socket }"
-              data-testid="input-socket" />
-          </TranslateLock>
-          <div class="os-param-wrapper os-param-container"
-            :class="{ 'os-param-select': input.parameterInfo.btType === 'BTParameterSpecEnum-171' }" style="width:100%">
-            <div class="input-title os-param-label" data-testid="input-title">{{
-              input.label
-            }}
-            </div>
-            <!-- <Ref class="input-control" v-show="input.control && input.showControl" :emit="proxyEmit"
-            :data="{ type: 'control', payload: input.control }" data-testid="input-control" /> -->
-            <TranslateLock>
-              <OnshapeControl :show="input.showControl" :parameter-spec="input.parameterInfo" :control="input.control"
-                @value-change="contextValueChange"></OnshapeControl>
-            </TranslateLock>
-          </div>
-        </div>
+        <template v-for="[key, input] in visibleInputs" :key="'input' + key + seed">
+          <OnshapeInputMap v-if="isMapInput(input)" :mapKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
+            :seed="seed" @value-change="controlValueChange(input, $event)" />
+          <OnshapeInput v-else :inputKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
+            @value-change="controlValueChange(input, $event)" />
+        </template>
       </div>
       <div class="dialog-help-container"><a class="os-help-link os-center-content"
           href="./probably-a-popup-here-instead.error" target="help"><svg class="os-svg-icon os-help-btn"
@@ -92,28 +77,20 @@ import { defineComponent } from 'vue'
 import type { PropType } from 'vue'
 import { Ref } from 'rete-vue-plugin'
 import ResizeHandle from '../components/ResizeHandle.vue'
-import { CustomFeatureNode } from '../rete/nodes/customfeaturenode'
 import OnshapeControl from './OnshapeControl.vue'
-import { OnshapeInput } from '../rete/inputoutput/onshapeinput'
 import TranslateLock from '../components/TranslateLock.vue'
-import { BTMParameter1 } from 'onshape-typescript-fetch'
-
-
-function sortByIndex(entries) {
-  entries.sort((a, b) => {
-    const ai = a[1] && a[1].index || 0
-    const bi = b[1] && b[1].index || 0
-
-    return ai - bi
-  })
-  return entries
-}
+import OnshapeInput from './OnshapeInput.vue'
+import OnshapeInputMap from './OnshapeInputMap.vue'
+import { OnshapeOutput } from '../rete/inputoutput/onshapeoutput.js'
+import { OnshapeNode } from '../rete/nodes/onshapenode'
+import { OnshapeInput as OnshapeInputType } from '../rete/inputoutput/onshapeinput.js'
+import { OnshapeInput as OnshapeInputClass } from '../rete/inputoutput/onshapeinput.js';
 
 export default defineComponent({
   props: {
     data: {
       required: true,
-      type: Object as PropType<CustomFeatureNode>
+      type: Object as PropType<OnshapeNode>
     },
     emit: Function,
     seed: Number
@@ -136,32 +113,50 @@ export default defineComponent({
     visibleInputs() {
       // make updateComponent changes update this computed property
       this.updateComponent;
-      return this.inputs().filter((param) => this.hiddenParameters[param[0]] !== true);
+      return this.inputs().filter(([key, input]) => {
+        // Arguments (context, id) are always visible
+        const inputType = (input as any).type;
+        if (inputType === "argument") {
+          return true;
+        }
+        // Map inputs (definition) are always visible
+        if (inputType === "map") {
+          return true;
+        }
+        // Regular parameters check against top-level hiddenParameters
+        return this.hiddenParameters[key] !== true;
+      });
     }
   },
   methods: {
-    proxyEmit(...args) {
-      this.emit(...args);
+    proxyEmit(...args: any[]) {
+      this.emit?.(...args);
     },
-    inputs(): Array<[string, OnshapeInput]> {
+    inputs(): Array<[string, OnshapeInputType<any>]> {
       return Object.entries(this.data.inputs);
     },
     controls() {
-      return sortByIndex(Object.entries(this.data.controls))
+      return Object.entries(this.data.controls);
     },
-    outputs() {
-      return sortByIndex(Object.entries(this.data.outputs))
+    nothing() {
+      console.log(this.data);
     },
-    contextValueChange(value: BTMParameter1) {
-      this.data.updateParameter(value.parameterId, value);
+    outputs(): Array<[string, OnshapeOutput]> {
+      return Object.entries(this.data.outputs);
     },
-    updateTitle(e) {
-      this.emit('update:title', e.target.value)
+    controlValueChange(input: OnshapeInputClass<any>, value: any) {
+      if (input.type !== "map") {
+        input.control.setValue(value);
+      }
+      // this.data.updateParameter(control.type, value);
     },
+    // updateTitle(e: MouseEvent) {
+    //   this.emit('update:title', e?.target?.value)
+    // },
     focusTitleEdit() {
       this.$data.titleEditFocus = true;
       this.$nextTick(() => {
-        const titleEditRef = this.$refs.titleEditElem;
+        const titleEditRef = this.$refs.titleEditElem as HTMLInputElement;
         this.titleHover = false;
         titleEditRef.focus();
         titleEditRef.select();
@@ -182,6 +177,14 @@ export default defineComponent({
     onResizeEnd() {
       // sync with node data
       this.width = this.data.width;
+    },
+    isMapInput(input: OnshapeInputType<any>): boolean {
+      return (input as any).type === "map";
+    }
+  },
+  watch: {
+    title(newTitle) {
+      this.data.setTitle(newTitle);
     }
   },
   mounted() {
@@ -193,7 +196,9 @@ export default defineComponent({
     Ref,
     ResizeHandle,
     OnshapeControl,
-    TranslateLock
+    TranslateLock,
+    OnshapeInput,
+    OnshapeInputMap
   }
 });
 </script>
@@ -225,12 +230,6 @@ export default defineComponent({
   }
 }
 
-.input {
-  text-align: left;
-  font-size: 0px;
-  display: flex;
-}
-
 @mixin io-socket {
   height: auto;
   text-align: right;
@@ -239,15 +238,9 @@ export default defineComponent({
   justify-content: center;
 }
 
-
 .output-socket {
   @include io-socket();
   margin-right: - round($socket-overflow, 1px);
-}
-
-.input-socket {
-  @include io-socket();
-  margin-left: - round($socket-overflow, 1px);
 }
 
 .ns-dialog-title,
@@ -261,7 +254,6 @@ export default defineComponent({
   flex-wrap: nowrap;
   overflow: visible;
 
-  .input-title,
   .output-title,
   .os-param-label {
     vertical-align: middle;
@@ -274,13 +266,6 @@ export default defineComponent({
     overflow: visible;
     align-self: center;
   }
-}
-
-.input-control {
-  z-index: 1;
-  width: calc(100% - #{$socket-size + 2*$socket-margin});
-  vertical-align: middle;
-  display: inline-block;
 }
 
 .control {

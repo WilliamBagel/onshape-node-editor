@@ -1,42 +1,38 @@
 <template>
   <div class="quantity-autocomplete-holder dropdown">
     <input ref="input"
-      class="os-param-number dropdown-source ng-pristine ng-untouched ng-valid ng-not-empty os-param-form-item"
+      class="os-param-text dropdown-source ng-pristine ng-untouched ng-valid ng-not-empty os-param-form-item"
       type="text" autocomplete="off" :value="display" :key="updateDisplay" @focus="onFocus" @blur="valueEntered"
-      @keypress.enter="onEnter" :class="{ 'os-invalid-textbox': errored }">
+      @keypress.enter="onEnter">
     </input>
   </div>
 </template>
 
 <script lang="ts">
 import { PropType } from 'vue';
-import { QuantityUtil } from '../../onshape-types-utils/quantityutil';
 import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
-import { ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
+import { StringType } from '../../onshape-utils/featurescripttypes';
+
+type StringControl = OnshapeInputControl<StringType>;
 
 export default {
   emits: ['value-change'],
-  validValue: undefined,
   props: {
     control: {  
       required: true,
-      type: Object as PropType<OnshapeInputControl<ValueWithUnitsType>>
+      type: Object as PropType<StringControl>
     }
   },
   data() {
     return {
       value: this.control.getCurrentValue(),
-      errored: false,
 
       updateDisplay: 0
     }
   },
   computed: {
     display() {
-      if (this.errored) {
-        return this.value;
-      }
-      return QuantityUtil.getText(this.value as ValueWithUnits);
+      return this.value;
     }
   },
   methods: {
@@ -44,28 +40,14 @@ export default {
       (this.$refs.input as HTMLInputElement).select();
     },
     valueEntered() {
-      const input = this.$refs.input as HTMLInputElement;
-      const enteredText = input.value;
-      const value = QuantityUtil.getValue(enteredText);
-      if (value == null) {
-        // error ui and stuff
-        this.errored = true;
-        (this.value as unknown) = enteredText;
-        input.select();
-        return;
-      }
-      this.errored = false;
-      this.$options.validValue = value;
-      this.value = value;
+      const input = (this.$refs.input as HTMLInputElement);
+      this.value = input?.value;
       this.updateDisplay++
       this.$emit('value-change', this.value );
     },
     onEnter() {
       (this.$refs.input as HTMLInputElement).blur();
     }
-  },
-  created() {
-    this.$options.validValue = this.control.getCurrentValue();
   },
 }
 </script>

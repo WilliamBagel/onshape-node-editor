@@ -27,12 +27,13 @@ import { OnshapeNode } from "../nodes/onshapenode";
 import { AreaPlugin } from "rete-area-plugin";
 import { getDOMSocketPosition } from "rete-render-utils";
 import { elementsFromPoint, findSocket, sameSocket } from "./utils";
+import { NodeEditor } from "rete";
 
 export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends ConnectionPlugin<Schemes, K> {
-    public active: Connection<OnshapeNode, OnshapeNode>;
+    public active!: Connection<OnshapeNode, OnshapeNode> | null;
     public pointerSnapped: boolean = false;
     public snappedPointer: Position = { x: 0, y: 0 };
-    public snappedType: string;
+    public snappedType!: string;
     public socketPositionWatcher = getDOMSocketPosition({
         offset: (position) => {
             return position;
@@ -47,6 +48,7 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
         return socketsCache.get(element);
     }
     async pick(event: PointerEvent, type: EventType) {
+        // snap on pick
         const pointedElements = elementsFromPoint(event.clientX, event.clientY)
         const foundSocket = findSocket(this['socketsCache'], pointedElements);
 
@@ -58,7 +60,7 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
             if (this['currentFlow']) {
                 picked = this['currentFlow'].getPickedSocket();
             }
-            const connection = this['editor'].getConnections()
+            const connection = (this['editor'] as NodeEditor<Schemes>).getConnections()
                 .find(item => (item.target === socket.nodeId && item.targetInput === socket.key) || (item.source === socket.nodeId && item.sourceOutput === socket.key))
 
             if ((connection == null) || (connection != null && socket.side === 'input')) {
@@ -68,6 +70,11 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
 
                 const pos = await this.socketPositionWatcher.calculatePosition(socket.nodeId, socket.side, socket.key, socket.element);
                 const nodeView = area.nodeViews.get(socket.nodeId);
+
+                if (pos == null || nodeView == null) {
+                    return;
+                }
+
                 this.snappedPointer.x = nodeView.position.x + pos.x;
                 this.snappedPointer.y = nodeView.position.y + pos.y;
 
@@ -75,12 +82,12 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
                 const centerX = clientRect.x + clientRect.width / 2;
                 const centerY = clientRect.y + clientRect.height / 2;
                 event = new PointerEvent(event.type, {
+                    ...event,
                     view: window,
                     bubbles: true,
                     cancelable: true,
                     clientX: centerX,
                     clientY: centerY,
-                    ...event,
                 });
             }
         }
@@ -97,9 +104,9 @@ export function useConnectionSnapping(
     connection.addPipe(async (context) => {
         const type = context.type;
         if (type === 'render') {
-            const data = context.data;
-            const payload = data['payload'] as Schemes['Connection'];
-            if (payload && payload['isPseudo'] && (data['start'] || data['end'])) {
+            const data = context.data as { payload: (Schemes['Connection'] & { isPseudo?: boolean }), start?: Position; end?: Position; element?: HTMLElement };
+            const payload = data.payload;
+            if (payload && payload.isPseudo && (data['start'] || data['end'])) {
                 area.container?.classList.add('pseudo-connection-active');
                 data.element?.classList?.add('connection-selected');
                 const classAdd = 'connection-fixed-' + (payload['target'] === '' ? 'left' : 'right');
@@ -111,8 +118,10 @@ export function useConnectionSnapping(
                     let hangingPosition: Position;
                     if (data['start'] != null) {
                         hangingPosition = data['start'];
-                    } else {
+                    } else if (data['end'] != null) {
                         hangingPosition = data['end'];
+                    } else {
+                        return context;
                     }
                     hangingPosition.x = connection.snappedPointer.x;
                     hangingPosition.y = connection.snappedPointer.y;
@@ -129,6 +138,7 @@ export function useConnectionSnapping(
             }
         }
         if (type === 'pointermove') {
+            // snap on drag
             if (connection.active == null) { return context; }
             connection.pointerSnapped = false;
             const event = context.data?.event as PointerEvent;
@@ -138,11 +148,12 @@ export function useConnectionSnapping(
             let socketElement: HTMLElement
             if (target?.classList.contains('snap-target')) {
                 socketElement = target.previousSibling as HTMLElement;
-            }
-            if (target?.classList.contains('socket')) {
+            } else if (target?.classList.contains('socket')) {
                 socketElement = target;
+            } else {
+                return context;
             }
-            if (socketElement == null) { return context };
+            if (socketElement == null || socketElement?.parentElement?.parentElement == null) { return context };
             const socket = connection.findSocketFromElement(socketElement.parentElement.parentElement);
             if (socket == null) { return context };
 
@@ -154,6 +165,10 @@ export function useConnectionSnapping(
 
             const pos = await connection.socketPositionWatcher.calculatePosition(socket.nodeId, socket.side, socket.key, socket.element);
             const nodeView = area.nodeViews.get(socket.nodeId);
+            if (pos == null || nodeView == null) {
+                return context;
+            }
+
             connection.snappedPointer.x = nodeView.position.x + pos.x;
             connection.snappedPointer.y = nodeView.position.y + pos.y;
 
