@@ -39,8 +39,10 @@
 <script lang="ts">
 import { inject, PropType, shallowRef } from 'vue';
 import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
+import { reteAppInstance } from '../../rete/editorbase';
 import { QueryListType } from '../../onshape-utils/featurescripttypes';
 import { App } from '../../app';
+import { OnshapeSelection } from '../../onshape-utils/clientmessaging';
 
 type QueryListControl = OnshapeInputControl<QueryListType>;
 
@@ -52,18 +54,17 @@ export default {
       type: Object as PropType<QueryListControl>
     }
   },
-  setup() {
-    const app = inject<App | null>('app', null) 
-    return {
-      app,
-      selections: shallowRef(app?.clientMessaging?.selections)
-    };
-  },
   data() {
     return {
       queryListItems: this.control.getCurrentValue() ?? [],
+      selections: [] as OnshapeSelection[],
       isFocused: false,
     };
+  },
+  mounted() {
+    // const app = inject<App | null>('app', null);
+    // this..app = app;
+    this.selections = this.app?.clientMessaging?.selections ?? [];
   },
   computed: {
     label(): string {
@@ -77,6 +78,9 @@ export default {
     },
     isEmpty(): boolean {
       return this.queryListItems.queries.length === 0;
+    },
+    app(): App {
+      return reteAppInstance;
     }
   },
   methods: {

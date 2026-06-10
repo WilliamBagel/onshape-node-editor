@@ -34,7 +34,7 @@
  * Improvements made by William Degele, 2026
  */
 
-export interface Selection {
+export interface OnshapeSelection {
     entityType: string;
     occurencePath: string[];
     selectionID: string;
@@ -45,7 +45,7 @@ export interface Selection {
 type MessageCallback = (info: any[]) => boolean;
 
 export class ClientMessaging {
-    public selections!: Selection[];
+    public selections!: OnshapeSelection[];
 
     public readonly documentId: string;
     public readonly workspaceId: string;

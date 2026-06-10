@@ -34,6 +34,9 @@ import { ReteOnshapeNodeProcessor } from './rete-onshape-nodeprocessor';
 import { FeatureStudioGenerator, NodeFeaturescriptInfo } from '../onshape-utils/featurestudiogenerator';
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
+// Module-level app reference for access from Rete components
+export let reteAppInstance: any = null;
+
 type EditorBaseInfo = {
     editor: NodeEditor<Schemes>,
     area: AreaPlugin<Schemes, AreaExtra>,
@@ -46,6 +49,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     if (app == null) {
         console.error('app could not be found');
     }
+    reteAppInstance = app;
 
     const styleSettings = new StyleSettings();
     OnshapeSocket.setStyleSettings(styleSettings);
