@@ -37,11 +37,20 @@ import { FeatureStudioGenerator, NodeFeaturescriptInfo } from '../onshape-utils/
 // Module-level app reference for access from Rete components
 export let reteAppInstance: any = null;
 
+export type StudioEvents = {
+    build: () => Promise<string | undefined>;
+}
+
+export type EditorControls = {
+    studioEvents: StudioEvents
+    destroy: () => void;
+}
+
 type EditorBaseInfo = {
     editor: NodeEditor<Schemes>,
     area: AreaPlugin<Schemes, AreaExtra>,
     connection: ConnectionSnappingPlugin<Schemes, AreaExtra>,
-    buildStudio: () => Promise<string | undefined>;
+    studioEvents: StudioEvents
 }
 
 export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo> {
@@ -86,8 +95,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             socketPositionWatcher: connection.socketPositionWatcher
         })
     );
-
-
 
     // const drag = new Drag({
     //     down: () => {
@@ -339,7 +346,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
         }
 
-        // Second pass: build variable mappings for each node's inputs and generate feature scripts
+        // Second pass: build variable mappings for each node's inputs and generate featurescript representation
         const featureScriptInfo: NodeFeaturescriptInfo[] = [];
 
         for (const nodeId of nodeArray) {
@@ -355,12 +362,12 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             for (const key in nodeData) {
                 const variablePointer = nodeData[key]?.[0];
                 // Look up the variable name from the source node's output
-                const localVariableUsages = localVariableIdentifiers[key];
+                const localVariableUsages = localVariableIdentifiers[variablePointer.name];
                 if (localVariableUsages && localVariableUsages[variablePointer.id]) {
                     // set variable name to unique identifier
                     variableMapping[key] = localVariableUsages[variablePointer.id];
                 } else {
-                    console.warn(`Could not find ${key} and ${variablePointer.id} in variableMapping:`, variableMapping);
+                    console.warn(`Could not find ${variablePointer.name} and ${variablePointer.id} in indentifiers:`, localVariableIdentifiers);
                 }
             }
 
@@ -383,6 +390,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         editor,
         area,
         connection,
-        buildStudio
+        studioEvents: { build: buildStudio }
     }
 }

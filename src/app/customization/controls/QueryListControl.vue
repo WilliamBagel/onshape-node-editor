@@ -37,7 +37,7 @@
 </template>
 
 <script lang="ts">
-import { inject, PropType, shallowRef } from 'vue';
+import { PropType } from 'vue';
 import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
 import { reteAppInstance } from '../../rete/editorbase';
 import { QueryListType } from '../../onshape-utils/featurescripttypes';
@@ -56,14 +56,12 @@ export default {
   },
   data() {
     return {
-      queryListItems: this.control.getCurrentValue() ?? [],
+      value: this.control.getCurrentValue() ?? [],
       selections: [] as OnshapeSelection[],
       isFocused: false,
     };
   },
   mounted() {
-    // const app = inject<App | null>('app', null);
-    // this..app = app;
     this.selections = this.app?.clientMessaging?.selections ?? [];
   },
   computed: {
@@ -74,10 +72,15 @@ export default {
       return this.control.getHasError?.() ?? false;
     },
     visibleItems(): any[] {
-      return this.queryListItems.queries.filter((item) => this.canDisplayItem(item));
+      // return queries if we have any
+      if (this.value?.queries.length) {
+        return this.value.queries.filter((item) => this.canDisplayItem(item));
+      }
+
+
     },
     isEmpty(): boolean {
-      return this.queryListItems.queries.length === 0;
+      return this.value.queries.length === 0;
     },
     app(): App {
       return reteAppInstance;
@@ -88,20 +91,20 @@ export default {
       return item != null && item.getIsHidden?.() !== true;
     },
     deleteItem(queryItem: any) {
-      const items = this.queryListItems.queries;
+      const items = this.value.queries;
       const index = items.indexOf(queryItem);
       if (index !== -1) {
         items.splice(index, 1);
       }
-      this.$emit('value-change', this.queryListItems);
+      this.$emit('value-change', this.value);
     },
     onKeyDown(event: KeyboardEvent) {
       // Keyboard navigation can be extended here
     },
     onParameterFocused(event: FocusEvent) {
       this.isFocused = true;
-      this.app?.clientMessaging.requestSelectionHighlight([]);
-      this.app?.clientMessaging.requestSelection([''], (data: any[]) => {
+      this.app?.clientMessaging?.requestSelectionHighlight([]);
+      this.app?.clientMessaging?.requestSelection([''], (data: OnshapeSelection[]) => {
         this.selections = data;
         return false;
       });

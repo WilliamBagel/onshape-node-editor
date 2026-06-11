@@ -1,15 +1,15 @@
 import { ClassicPreset } from 'rete';
 
 import { CustomFeatureNode } from './nodes/customfeaturenode';
-import { editorBase } from './editorbase';
+import { editorBase, EditorControls, StudioEvents } from './editorbase';
 import { DefineFeatureNode } from './nodes/definefeaturenode';
 import { OutputFeatureNode } from './nodes/outputfeaturenode';
 
 const socket = new ClassicPreset.Socket('socket');
 
-export async function createEditor(container: HTMLElement) {
+export async function createEditor(container: HTMLElement): Promise<EditorControls> {
 
-  const { editor, area, buildStudio } = await editorBase(container);
+  const { editor, area, studioEvents } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -64,10 +64,14 @@ export async function createEditor(container: HTMLElement) {
 
   (window as unknown as any)['editor'] = editor;
 
-  setTimeout(async () => {
-    const featureStudioCode = await buildStudio();
-    console.log(featureStudioCode);
-  }, 10000)
+  // setTimeout(async () => {
+  //   const featureStudioCode = await studioEvents.build();
+  //   console.log(featureStudioCode);
+  // }, 10000)
+  return {
+    studioEvents,
+    destroy: () => area.destroy(),
+  };
 
   // const aType = 'Mirror';
   // const bType = 'Something';
@@ -98,11 +102,6 @@ export async function createEditor(container: HTMLElement) {
   // await area.translate(b.id, { x: 300, y: 0 });
 
   // await editor.addConnection(new ClassicPreset.Connection(a, 'a', b, 'a'));
-
-
-  return {
-    destroy: () => area.destroy(),
-  };
 }
 
 var ChamferFeatureSpec: any = {

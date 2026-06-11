@@ -4,6 +4,7 @@ import { OnshapeInput } from './onshapeinput';
 import { OnshapeSocket } from '../onshapesockets';
 import { BooleanType, EnumType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
 import { evaluateVisibilityCondition, getSpecFromFeatureSpec } from '../../onshape-utils/bttypetools';
+import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
 
 export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
     private featureSpec: BTFeatureSpec129;
@@ -97,7 +98,7 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
 
             const lastShowControl = paramInput.showControl;
 
-            const connected = paramInput.connections?.length > 0;
+            const connected = paramInput.isConnected();
             this.connectedParameters[param.parameterId] = connected;
             paramInput.showControl = true;
 
@@ -135,8 +136,6 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
         return evaluateVisibilityCondition(visibilityCondition, this.configuredParameters, this.connectedParameters);
     }
 
-
-
     private getSpecFeaturescript(spec: OnshapeType<any>): string {
         if (spec.type === "ValueWithUnits") {
             const value: ValueWithUnits = spec.value;
@@ -148,13 +147,13 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             return spec.value;
         } else if (spec.type === "QueryList") {
             const querySpec = spec as QueryListType;
-            return JSON.stringify(querySpec.value.queries);
+            return `qUnion([])`
         }
         return "undefined";
     }
 
 
-    public getFeaturescript(): string {
+    public getFeaturescript(variableMapping: Record<string, string>): string {
         const parameterValues: { [key: string]: string } = {};
 
         for (const paramId in this.paramInputs) {
@@ -163,27 +162,29 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             }
 
             const paramInput = this.paramInputs[paramId];
-            if (!paramInput) continue;
+            if (!paramInput) { continue; };
 
-            const connectedValue = (paramInput as any).connectedValue;
+            const connectedValue = variableMapping[paramId];
 
             if (connectedValue != null) {
                 parameterValues[paramId] = connectedValue;
             } else {
-                const control = (paramInput as any).control;
+                // this is not ideal, but need to get the spec to get correct featurescript
+                const control = (paramInput as any).control as OnshapeInputControl<any>;
                 if (control != null) {
-                    parameterValues[paramId] = control.getCurrentValue?.() || '';
+                    const value = control.getCurrentValue?.();
+                    const parameterInfo = Object.assign({}, control.getSpec()) as OnshapeType<any>;
+                    parameterInfo.value = value;
+                    parameterValues[paramId] = value != null ? this.getSpecFeaturescript(parameterInfo) : '';
                 }
             }
         }
 
         return [
             `{`,
-            Object.entries(this.configuredParameters)
+            Object.entries(parameterValues)
                 .map(([key, value]) => {
-                    const val = this.getSpecFeaturescript(value);
-
-                    return `"${key}": ${val}`;
+                    return `"${key}": ${value}`;
                 })
                 .join(',\n\t'),
             '}'

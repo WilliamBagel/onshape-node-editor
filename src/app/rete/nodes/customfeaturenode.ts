@@ -68,19 +68,6 @@ export class CustomFeatureNode extends OnshapeNode {
     }
   }
 
-  // private _selected: boolean;
-  // public get selected(): boolean{
-  //   return this._selected;
-  // }
-
-  // public set selected(value: boolean) {
-  //   console.log("selected set to ", value);
-  //   if(value === false){
-  //     console.trace();
-  //   }
-  //   this._selected = value;
-  // }
-
   private addDefaultOutputs(): void {
     const outputContext = new OnshapeOutput(new OnshapeSocket("Context"), "Context");
     this.addOutput("context", outputContext);
@@ -106,13 +93,6 @@ export class CustomFeatureNode extends OnshapeNode {
     this.definitionInput.updateVisibilities();
   }
 
-  // public data(inputs: Record<string, any>): Record<string, any> {
-  //   return {
-  //     name: this.featureSpec.featureTypeName || 'CustomFeature',
-  //     id: this.id
-  //   };
-  // }
-
   public getDependencies(): Array<{ path: string, version: string }> {
     const dependencies: Array<{ path: string, version: string }> = [];
     const namespace = this.featureSpec.namespace;
@@ -132,7 +112,7 @@ export class CustomFeatureNode extends OnshapeNode {
   public getFeaturescript(variableMapping: Record<string, string>): string {
     const context = variableMapping['context'] || 'context';
     const id = variableMapping['id'] || 'id';
-    return `${this.featureSpec.featureType}(${context}, ${id}, ${this.definitionInput.getFeaturescript()});`;
+    return `${this.featureSpec.featureType}(${context}, ${id}, ${this.definitionInput.getFeaturescript(variableMapping)});`;
   }
 
   public getFeatureScriptInfo(variableMapping: Record<string, string>): NodeFeaturescriptInfo {

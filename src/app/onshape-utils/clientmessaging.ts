@@ -153,8 +153,8 @@ export class ClientMessaging {
 
         if (messageType === 'SELECTION') {
             console.log('SELECTION event data: %o', event.data);
-            this.selections = event.data;
-            this.requestSelectionCallback?.(event.data);
+            this.selections = event.data?.selections;
+            this.requestSelectionCallback?.(event.data?.selections);
         } else if (messageType === 'STOP') {
             this.stopMessagePromise?.resolve();
         }

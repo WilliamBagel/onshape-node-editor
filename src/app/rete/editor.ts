@@ -14,69 +14,69 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, buildStudio } = await editorBase(container);
-  
-    const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
-  
-    await editor.addNode(chamferNode);
-  
-    const chamferNode2 = new CustomFeatureNode(ChamferFeatureSpec);
-    console.log(chamferNode2);
-  
-    await editor.addNode(chamferNode2);
-  
-    const featureDefinition = new DefineFeatureNode({
-      annotation: {
-        type: 'Feature Type Name',
-        value: "My New Feature"
+  const { editor, area, studioEvents } = await editorBase(container);
+
+  const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
+
+  await editor.addNode(chamferNode);
+
+  const chamferNode2 = new CustomFeatureNode(ChamferFeatureSpec);
+  console.log(chamferNode2);
+
+  await editor.addNode(chamferNode2);
+
+  const featureDefinition = new DefineFeatureNode({
+    annotation: {
+      type: 'Feature Type Name',
+      value: "My New Feature"
+    },
+    preconditions: [
+      {
+        annotation: {
+          type: 'Property Function Name',
+          value: 'my parameter'
+        },
+        btType: 'BTParameterSpecString-175'
       },
-      preconditions: [
-        {
-          annotation: {
-            type: 'Property Function Name',
-            value: 'my parameter'
-          },
-          btType: 'BTParameterSpecString-175'
+      {
+        annotation: {
+          type: 'Property Function Name',
+          value: 'do the thing'
         },
-        {
-          annotation: {
-            type: 'Property Function Name',
-            value: 'do the thing'
-          },
-          btType: 'BTParameterSpecBoolean-170'
+        btType: 'BTParameterSpecBoolean-170'
+      },
+      {
+        annotation: {
+          type: 'Property Function Name',
+          value: 'a thing'
         },
-        {
-          annotation: {
-            type: 'Property Function Name',
-            value: 'a thing'
-          },
-          btType: "BTParameterSpecQuantity-173"
-        }
-      ]
-    });
-  
-    await editor.addNode(featureDefinition);
-  
-    const featureEndNode = new OutputFeatureNode();
-  
-    await editor.addNode(featureEndNode);
-  
-    area.translate(featureDefinition.id, { x: 0, y: 50 });
-    area.translate(chamferNode.id, { x: 300, y: 50 });
-    area.translate(chamferNode2.id, { x: 600, y: 50 });
-    area.translate(featureEndNode.id, { x: 900, y: 50 });
-  
-  
-    (window as unknown as any)['editor'] = editor;
-  
-    setTimeout(async () => {
-      const featureStudioCode = await buildStudio();
-      console.log(featureStudioCode);
-    }, 10000)
+        btType: "BTParameterSpecQuantity-173"
+      }
+    ]
+  });
+
+  await editor.addNode(featureDefinition);
+
+  const featureEndNode = new OutputFeatureNode();
+
+  await editor.addNode(featureEndNode);
+
+  area.translate(featureDefinition.id, { x: 0, y: 50 });
+  area.translate(chamferNode.id, { x: 300, y: 50 });
+  area.translate(chamferNode2.id, { x: 600, y: 50 });
+  area.translate(featureEndNode.id, { x: 900, y: 50 });
+
+
+  (window as unknown as any)['editor'] = editor;
+
+  // setTimeout(async () => {
+  //   const featureStudioCode = await buildStudio();
+  //   console.log(featureStudioCode);
+  // }, 10000)
 
   // await editor.addConnection(new Connection(a, 'a', a.inputs['a'].socket.name, b, 'a', b.inputs['a'].socket.name, new StyleSettings()));
-
   return {
+    studioEvents,
     destroy: () => area.destroy(),
   };
 }

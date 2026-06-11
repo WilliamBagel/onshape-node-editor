@@ -66,7 +66,6 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
    * @returns 
    */
   public data(inputs: Record<string, any>): Promise<Record<string, any>> | Record<string, any> {
-    console.log(inputs);
     const data: Record<string, VariablePointer> = {};
     const variableSymbols = this.getVariableSymbols();
     for (const key in this.outputs) {
@@ -81,7 +80,6 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
         console.warn(`Could not find source for variable ${key}`);
       }
     }
-    console.log(data);
     return data;
   }
 

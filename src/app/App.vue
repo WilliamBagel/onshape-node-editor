@@ -6,6 +6,7 @@ import BottomBar from './components/BottomBar.vue';
 
 import { inject } from 'vue'
 import ToolTip from './components/tooltip/ToolTip.vue';
+import { editorBase, EditorControls } from './rete/editorbase.js';
 
 export default defineComponent({
   components: {
@@ -13,31 +14,40 @@ export default defineComponent({
     BottomBar: BottomBar,
     ToolTip: ToolTip
   },
-  async mounted() {
-    const dev = inject('developerMode');
-    if (dev === true) {
-      await createEditorDev(this.$refs.rete as HTMLElement);
-    } else {
-      await createEditor(this.$refs.rete as HTMLElement);
+  data() {
+    return {
+      controls: null as EditorControls | null
     }
   },
+  async mounted() {
+    let editorControls: EditorControls;
+    const dev = inject('developerMode');
+
+    if (dev === true) {
+      editorControls = await createEditorDev(this.$refs.rete as HTMLElement);
+    } else {
+      editorControls = await createEditor(this.$refs.rete as HTMLElement);
+    }
+    this.controls = editorControls;
+  },
   methods: {
-    onBuild() {
+    async runBuild() {
+      const featurescript = await this.controls?.studioEvents.build();
+      console.log(featurescript);
+    },
+    runRun() {
 
     },
-    onRun() {
+    runSave() {
 
     },
-    onSave() {
+    runOpen() {
 
     },
-    onOpen() {
+    runSettings() {
 
     },
-    onSettings() {
-
-    },
-    onSearch() {
+    runSearch() {
 
     },
   },
@@ -45,9 +55,10 @@ export default defineComponent({
 </script>
 
 <template>
-  <TopBar project-name="My Graph" @build="onBuild" @run="onRun" @save="onSave" @open="onOpen" @settings="onSettings" />
+  <TopBar project-name="My Graph" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
+    @settings="runSettings" />
   <main class="rete" ref="rete"></main>
-  <BottomBar graph-name="My Graph" @search="onSearch" />
+  <BottomBar graph-name="My Graph" @search="runSearch" />
   <ToolTip />
 </template>
 

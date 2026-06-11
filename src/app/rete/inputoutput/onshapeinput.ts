@@ -9,6 +9,7 @@ export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Inpu
     declare public control: OnshapeInputControl<any>;
     public showControl: boolean = true;
     public showLabel: boolean = true;
+    public connectedValue: string | null = null;
 
     // expanded for map types
     public expanded: boolean = true;
@@ -21,11 +22,16 @@ export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Inpu
             // const control = new OnshapeInputControl<T>(this.type, { value: "NaM" } as T);
             // this.addControl(control);
         } else {
+            console.log(type);
             const control = new OnshapeInputControl<T>(type, spec || { type: "none", value: "none" } as T, label);
             this.addControl(control);
         }
 
         this._type = type;
+    }
+
+    public isConnected(): boolean {
+        return this.connections?.length > 0;
     }
 
     public get type(): string {
