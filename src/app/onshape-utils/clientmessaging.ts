@@ -30,7 +30,7 @@
  * Source: https://github.com/Team2901/OnshapeInsertTool/blob/main/app/messaging.ts
  */
 
-import { OnshapeSelection } from "./featurescripttypes";
+import { TransientSelection } from "./featurescripttypes";
 
 /**
  * Improvements made by William Degele, 2026
@@ -39,7 +39,7 @@ import { OnshapeSelection } from "./featurescripttypes";
 type MessageCallback = (info: any[]) => boolean;
 
 export class ClientMessaging {
-    public selections!: OnshapeSelection[];
+    public selections!: TransientSelection[];
 
     public readonly documentId: string;
     public readonly workspaceId: string;

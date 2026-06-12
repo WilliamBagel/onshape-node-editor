@@ -61,7 +61,7 @@ export interface QueryListType extends OnshapeType<QueryList> {
 }
 
 // not really a type, but still necessary
-export interface OnshapeSelection {
+export interface TransientSelection {
     entityType: string;
     occurencePath: string[];
     selectionID: string;
@@ -69,9 +69,9 @@ export interface OnshapeSelection {
     workspaceMicroversionId: string;
 }
 
-export interface OnshapeSelectionType extends OnshapeType<OnshapeSelection[]> {
+export interface TransientSelectionType extends OnshapeType<TransientSelection[]> {
     type: "Selection";
-    value: OnshapeSelection[];
+    value: TransientSelection[];
 }
 
 const obj = {

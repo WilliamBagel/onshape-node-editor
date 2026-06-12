@@ -2,7 +2,7 @@ import { BTFeatureSpec129, BTMParameterQuantity147, BTParameterSpec6, BTParamete
 import { ClassicPreset } from 'rete';
 import { OnshapeInput } from './onshapeinput';
 import { OnshapeSocket } from '../onshapesockets';
-import { BooleanType, EnumType, OnshapeSelection, OnshapeSelectionType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
+import { BooleanType, EnumType, TransientSelection, TransientSelectionType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
 import { evaluateVisibilityCondition, getSpecFromFeatureSpec } from '../../onshape-utils/bttypetools';
 import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
 
@@ -144,8 +144,8 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             return `${enumSpec.enumName}.${enumSpec.value}`;
         } else if (spec.type === "Boolean") {
             return spec.value;
-        } else if (spec.type === "Selection") {
-            const querySpec = spec as OnshapeSelectionType;
+        } else if (spec.type === "QueryList") {
+            const querySpec = spec as TransientSelectionType;
             console.log(spec);
             return `qUnion([])`;
         }
@@ -162,8 +162,8 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
                 continue;
             }
             const type = control.type;
-            if (type === 'Selection') {
-                const selections = (control as OnshapeInputControl<OnshapeSelectionType>).getCurrentValue();
+            if (type === "QueryList") {
+                const selections = (control as OnshapeInputControl<TransientSelectionType>).getCurrentValue();
                 if (selections.length === 0) {
                     continue;
                 }

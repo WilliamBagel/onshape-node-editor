@@ -39,12 +39,12 @@
 import { PropType } from 'vue';
 import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
 import { reteAppInstance } from '../../rete/editorbase';
-import { OnshapeSelection, OnshapeSelectionType } from '../../onshape-utils/featurescripttypes';
+import { TransientSelection, TransientSelectionType } from '../../onshape-utils/featurescripttypes';
 import { App } from '../../app';
 
 // The control will only ever show selections because it is a control
 // The conversion from selections to a query will happen elsewhere
-type QueryListControl = OnshapeInputControl<OnshapeSelectionType>;
+type QueryListControl = OnshapeInputControl<TransientSelectionType>;
 
 export default {
   emits: ['value-change'],
@@ -60,9 +60,6 @@ export default {
       isFocused: false,
     };
   },
-  mounted() {
-    this.value = this.app?.clientMessaging?.selections ?? [];
-  },
   computed: {
     label(): string {
       return this.control.label;
@@ -70,9 +67,10 @@ export default {
     hasError(): boolean {
       return this.control.getHasError?.() ?? false;
     },
-    visibleItems(): OnshapeSelection[] {
+    visibleItems(): TransientSelection[] {
       // return queries if we have any
-      return (this.value as OnshapeSelection[]);
+      console.log(this.value);
+      return (this.value as TransientSelection[]);
     },
     isEmpty(): boolean {
       return this.value.length === 0;
@@ -99,7 +97,7 @@ export default {
     onParameterFocused(event: FocusEvent) {
       this.isFocused = true;
       this.app?.clientMessaging?.requestSelectionHighlight([]);
-      this.app?.clientMessaging?.requestSelection([''], (data: OnshapeSelection[]) => {
+      this.app?.clientMessaging?.requestSelection([''], (data: TransientSelection[]) => {
         this.value = data;
         this.$emit('value-change', this.value);
         return false;

@@ -1,7 +1,7 @@
 import { ClassicPreset } from "rete";
 import { OnshapeInputControl } from "../controls/onshapeinputcontrol";
 import { OnshapeOutput } from "./onshapeoutput";
-import { OnshapeSelectionType, OnshapeType } from "../../onshape-utils/featurescripttypes";
+import { TransientSelectionType, OnshapeType } from "../../onshape-utils/featurescripttypes";
 
 export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Input<ClassicPreset.Socket> {
     public connections: OnshapeOutput[] = [];
@@ -23,18 +23,18 @@ export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Inpu
             // this.addControl(control);
         } else if (type === 'QueryList') {
             // create a control with type selection
-            const selectionSpec = Object.assign({}, spec) as OnshapeSelectionType;
-            selectionSpec.type = "Selection";
+            const selectionSpec = Object.assign({}, spec) as TransientSelectionType;
+            // selectionSpec.type = "Selection";
             selectionSpec.value = [
-                {
-                selectionID: 'JHF',
-                entityType: "",
-                occurencePath: [],
-                selectionType: "",
-                workspaceMicroversionId: ""
-            }
-        ];
-            const control = new OnshapeInputControl<OnshapeSelectionType>(selectionSpec.type, selectionSpec, label);
+            //     {
+            //     selectionID: 'JHF',
+            //     entityType: "",
+            //     occurencePath: [],
+            //     selectionType: "",
+            //     workspaceMicroversionId: ""
+            // }
+            ];
+            const control = new OnshapeInputControl<TransientSelectionType>(selectionSpec.type, selectionSpec, label);
             this.addControl(control);
         } else {
             console.log(type);
