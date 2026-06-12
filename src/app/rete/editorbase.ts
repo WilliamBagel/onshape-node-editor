@@ -27,7 +27,7 @@ import { CustomFeatureNode } from "./nodes/customfeaturenode";
 import { snapGrid } from "./modified-rete/areasnap";
 import { StyleSettings } from "./stylesettings";
 import { CustomConnectionPlugin } from "./customconnectionplugin";
-import { OnshapeNode, VariablePointer } from "./nodes/onshapenode";
+import { OnshapeNode, TopLevelVariableDefintion, VariablePointer } from "./nodes/onshapenode";
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { ReteOnshapeNodeProcessor } from './rete-onshape-nodeprocessor';
@@ -282,7 +282,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         // const nodeOutputVariables: Record<string, Record<string, string>> = {};
 
         // Helper function to populate a unique variable name
-        const createLocalVariableIndentifier = (desired: string, nodeId: string, outputKey: string): string => {
+        const createLocalVariableIndentifier = (desired: string, nodeId: string): string => {
             let identifier = desired;
             let counter = 0;
 
@@ -314,7 +314,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             return identifier;
         };
 
+        // map of consumer node id to map of input key and pointer to producer
         const nodeDataMap: Record<string, Record<string, VariablePointer>[]> = {};
+
+        // map of consumer node id to map of input key and assigned identifier
+        const topLevelVariablesMap: Record<string, Record<string, TopLevelVariableDefintion>> = {};
 
         // First pass: fetch data for all nodes and assign variable names to their outputs
         for (const nodeId of nodeArray) {
@@ -326,22 +330,33 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
             // Fetch the node's inputs 
             // Returns a Record<string, VariablePointer> for inputs to the node
-            const nodeData = await engine.fetchInputs(nodeId);
-            nodeDataMap[nodeId] = nodeData as Record<string, VariablePointer>[];
-
-            if (!(nodeData && typeof nodeData === 'object')) {
+            const nodeInputs = await engine.fetchInputs(nodeId);
+            if (!(nodeInputs && typeof nodeInputs === 'object')) {
                 console.warn(`Node ${nodeId} did not return valid data`);
                 continue;
             }
+            nodeDataMap[nodeId] = nodeInputs as Record<string, VariablePointer>[];
+
+            // handle any top level variables the node declares and defines
+            const topLevelVariables = node.getTopLevelVariables();
+            const tLVEntries = Object.entries(topLevelVariables);
+            if (tLVEntries.length > 0) {
+                const tLVDefinitions: Record<string, TopLevelVariableDefintion> = {};
+
+                for (const [symbol, featurescript] of tLVEntries) {
+                    const identifier = createLocalVariableIndentifier(symbol, nodeId);
+                    tLVDefinitions[symbol] = { identifier, featurescript };
+                }
+                topLevelVariablesMap[nodeId] = tLVDefinitions;
+            }
+
 
             // Iterate over each output that defines a variable
-            for (const inputKey in nodeData) {
-                const variablePointer = nodeData[inputKey]?.[0];
-                if (variablePointer && variablePointer.name) {
-                    // Assign a unique variable name for this output
-                    const actualName = createLocalVariableIndentifier(variablePointer.name, variablePointer.id, inputKey);
-                    console.log(`Node ${nodeId} output '${inputKey}' assigned variable name: ${actualName}`);
-                }
+            const nodeVariables = node.getVariableSymbols();
+            for (const key of nodeVariables) {
+                // Assign a unique variable name for this output
+                const actualName = createLocalVariableIndentifier(key, nodeId);
+                console.log(`Node ${nodeId} output '${key}' assigned variable name: ${actualName}`);
             }
 
         }
@@ -358,6 +373,9 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             // Build the variable mapping for this node's inputs
             const variableMapping: Record<string, string> = {};
 
+            // node data is currently the input to the node
+            // need to check if node wants other variables like a default query
+            // so join this with that array
             const nodeData = nodeDataMap[nodeId];
             for (const key in nodeData) {
                 const variablePointer = nodeData[key]?.[0];
@@ -371,12 +389,30 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
             }
 
+            // add top level variables' identifiers to variableMapping, for the consumers 
+            const tLVDefinitions = topLevelVariablesMap[nodeId];
+            if (tLVDefinitions != null) {
+                for (const [key, value] of Object.entries(tLVDefinitions)) {
+                    variableMapping[key] = value.identifier;
+                }
+            }
             // Get the feature script info with the variable mapping
             // if (typeof node.getFeatureScriptInfo === 'function') {
             const info = node.getFeatureScriptInfo(variableMapping);
             featureScriptInfo.push(info);
-            console.log(`Generated feature script for node ${nodeId}:`, info);
+            console.log(`Generated feature script for node ${nodeId}:`, node);
             // }
+            if (node.type === 'define-feature') {
+                // add top level variables after define feature
+                for (const TopLevelVariableDefintion of Object.values(topLevelVariablesMap)) {
+                    for (const value of Object.values(TopLevelVariableDefintion)) {
+                        featureScriptInfo.push({
+                            line: `var ${value.identifier} = ${value.featurescript};`,
+                            dependencies: [{path: "onshape/std/query.fs", version: "2770.0"}]
+                        })
+                    }
+                }
+            }
         }
 
         console.log('Final featureScriptInfo array:', featureScriptInfo);

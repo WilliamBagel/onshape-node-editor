@@ -40,13 +40,13 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
         },
         btType: 'BTParameterSpecBoolean-170'
       },
-      {
-        annotation: {
-          type: 'Property Function Name',
-          value: 'a thing'
-        },
-        btType: "BTParameterSpecQuantity-173"
-      }
+      // {
+      //   annotation: {
+      //     type: 'Property Function Name',
+      //     value: 'a thing'
+      //   },
+      //   btType: "BTParameterSpecQuantity-173"
+      // }
     ]
   });
 

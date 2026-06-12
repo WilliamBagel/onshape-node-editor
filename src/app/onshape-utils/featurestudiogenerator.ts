@@ -19,11 +19,13 @@ export class FeatureStudioGenerator {
      * @returns featurestudio code for a custom feature or custom function or both? (TODO)
      */
     public generateFeatureStudioCode(info: NodeFeaturescriptInfo[]) {
-        // Collect all dependencies
-        const allDependencies = new Set<{path: string, version: string}>();
+        // Collect all dependencies, avoiding duplicates by path
+        const dependencyMap = new Map<string, {path: string, version: string}>();
         for (const item of info) {
             if (item.dependencies) {
-                item.dependencies.forEach(dep => allDependencies.add(dep));
+                item.dependencies.forEach(dep => {
+                    dependencyMap.set(dep.path, dep);
+                });
             }
         }
 
@@ -32,8 +34,9 @@ export class FeatureStudioGenerator {
         code += `FeatureScript ${this.version};\n`;
 
         // Add imports for dependencies
-        if (allDependencies.size > 0) {
-            for (const dep of Array.from(allDependencies).sort()) {
+        if (dependencyMap.size > 0) {
+            const sortedDeps = Array.from(dependencyMap.values()).sort((a, b) => a.path.localeCompare(b.path));
+            for (const dep of sortedDeps) {
                 code += `import(path : "${dep.path}", version : "${dep.version}");\n`;
             }
         } else {

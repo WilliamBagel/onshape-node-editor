@@ -1,7 +1,7 @@
 import { ClassicPreset } from "rete";
 import { OnshapeInputControl } from "../controls/onshapeinputcontrol";
 import { OnshapeOutput } from "./onshapeoutput";
-import { OnshapeType } from "../../onshape-utils/featurescripttypes";
+import { OnshapeSelectionType, OnshapeType } from "../../onshape-utils/featurescripttypes";
 
 export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Input<ClassicPreset.Socket> {
     public connections: OnshapeOutput[] = [];
@@ -21,6 +21,21 @@ export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Inpu
         if (type === 'map') {
             // const control = new OnshapeInputControl<T>(this.type, { value: "NaM" } as T);
             // this.addControl(control);
+        } else if (type === 'QueryList') {
+            // create a control with type selection
+            const selectionSpec = Object.assign({}, spec) as OnshapeSelectionType;
+            selectionSpec.type = "Selection";
+            selectionSpec.value = [
+                {
+                selectionID: 'JHF',
+                entityType: "",
+                occurencePath: [],
+                selectionType: "",
+                workspaceMicroversionId: ""
+            }
+        ];
+            const control = new OnshapeInputControl<OnshapeSelectionType>(selectionSpec.type, selectionSpec, label);
+            this.addControl(control);
         } else {
             console.log(type);
             const control = new OnshapeInputControl<T>(type, spec || { type: "none", value: "none" } as T, label);

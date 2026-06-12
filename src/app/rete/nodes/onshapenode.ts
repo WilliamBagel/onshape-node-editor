@@ -25,6 +25,11 @@ export interface VariablePointer {
   id: string;
 }
 
+export interface TopLevelVariableDefintion {
+  identifier: string,
+  featurescript: string
+}
+
 export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
   protected title: string = 'node';
 
@@ -50,6 +55,13 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     if (title != null) {
       this.title = title;
     }
+  }
+
+  /**
+   * Returns variable symbol and definition to insert on the top of the graph (after dependencies)
+   */
+  public getTopLevelVariables(): {[symbol: string]: string} {
+    return {};
   }
 
   /**

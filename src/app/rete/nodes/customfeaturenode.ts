@@ -93,6 +93,10 @@ export class CustomFeatureNode extends OnshapeNode {
     this.definitionInput.updateVisibilities();
   }
 
+  public getTopLevelVariables(): { [symbol: string]: string } {
+    return this.definitionInput.getTopLevelVariables();
+  }
+
   public getDependencies(): Array<{ path: string, version: string }> {
     const dependencies: Array<{ path: string, version: string }> = [];
     const namespace = this.featureSpec.namespace;

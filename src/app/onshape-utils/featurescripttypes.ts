@@ -60,6 +60,20 @@ export interface QueryListType extends OnshapeType<QueryList> {
     selectFilter?: string[];
 }
 
+// not really a type, but still necessary
+export interface OnshapeSelection {
+    entityType: string;
+    occurencePath: string[];
+    selectionID: string;
+    selectionType: string;
+    workspaceMicroversionId: string;
+}
+
+export interface OnshapeSelectionType extends OnshapeType<OnshapeSelection[]> {
+    type: "Selection";
+    value: OnshapeSelection[];
+}
+
 const obj = {
     "btType": "BTParameterSpecQuery-174",
     "columnName": "",

@@ -2,7 +2,7 @@ import { BTFeatureSpec129, BTMParameterQuantity147, BTParameterSpec6, BTParamete
 import { ClassicPreset } from 'rete';
 import { OnshapeInput } from './onshapeinput';
 import { OnshapeSocket } from '../onshapesockets';
-import { BooleanType, EnumType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
+import { BooleanType, EnumType, OnshapeSelection, OnshapeSelectionType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
 import { evaluateVisibilityCondition, getSpecFromFeatureSpec } from '../../onshape-utils/bttypetools';
 import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
 
@@ -33,7 +33,6 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
                 console.warn("Parameter is missing a btType or parameterName or parameterId", param);
                 continue;
             }
-
 
             const paramId = param.parameterId;
             const spec = getSpecFromFeatureSpec(param);
@@ -138,20 +137,45 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
 
     private getSpecFeaturescript(spec: OnshapeType<any>): string {
         if (spec.type === "ValueWithUnits") {
-            const value: ValueWithUnits = spec.value;
+            const value = spec.value as ValueWithUnits;
             return `${value.value} * ${value.units}`;
         } else if (spec.type === "Enum") {
-            const enumSpec: EnumType = spec as EnumType;
+            const enumSpec = spec as EnumType;
             return `${enumSpec.enumName}.${enumSpec.value}`;
         } else if (spec.type === "Boolean") {
             return spec.value;
-        } else if (spec.type === "QueryList") {
-            const querySpec = spec as QueryListType;
-            return `qUnion([])`
+        } else if (spec.type === "Selection") {
+            const querySpec = spec as OnshapeSelectionType;
+            console.log(spec);
+            return `qUnion([])`;
         }
         return "undefined";
     }
 
+    public getTopLevelVariables(): { [symbol: string]: string } {
+        const tLVs: { [symbol: string]: string } = {};
+        for (const paramId in this.paramInputs) {
+            const paramInput = this.paramInputs[paramId];
+            if (!paramInput) { continue; };
+            const control = (paramInput as any).control as OnshapeInputControl<any>;
+            if (control == null) {
+                continue;
+            }
+            const type = control.type;
+            if (type === 'Selection') {
+                const selections = (control as OnshapeInputControl<OnshapeSelectionType>).getCurrentValue();
+                if (selections.length === 0) {
+                    continue;
+                }
+                const featurescript = `qUnion([${selections.map((selection) => {
+                    return `makeRobustQuery(context, qTransient('${selection.selectionID}'))`;
+                }).join(', ')}])`;
+                tLVs[paramId] = featurescript;
+            }
+
+        }
+        return tLVs;
+    }
 
     public getFeaturescript(variableMapping: Record<string, string>): string {
         const parameterValues: { [key: string]: string } = {};
@@ -164,10 +188,10 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             const paramInput = this.paramInputs[paramId];
             if (!paramInput) { continue; };
 
-            const connectedValue = variableMapping[paramId];
+            const referencedValue = variableMapping[paramId];
 
-            if (connectedValue != null) {
-                parameterValues[paramId] = connectedValue;
+            if (referencedValue != null) {
+                parameterValues[paramId] = referencedValue;
             } else {
                 // this is not ideal, but need to get the spec to get correct featurescript
                 const control = (paramInput as any).control as OnshapeInputControl<any>;

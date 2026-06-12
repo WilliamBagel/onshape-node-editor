@@ -17,15 +17,14 @@
                 </label>
               </div>
               <ul class="os-param-list-container">
-                <li v-for="(queryItem, index) in visibleItems" :key="index" class="os-param-selection-list-entry"
-                  @mouseover="queryItem.onMouseOver($event)" @mouseleave="queryItem.onMouseLeave($event)">
+                <li v-for="(selection, index) in visibleItems" :key="index" class="os-param-selection-list-entry">
                   <span class="os-selection-item-line">
                     <span class="os-param-query-list-entry-text"
-                      :class="{ 'ns-list-item-error': queryItem.getHasError() }" @mousedown="queryItem.onClick($event)">
-                      {{ queryItem.getLabel ? queryItem.getLabel() : queryItem.label }}
+                      :class="{ 'ns-list-item-error': false }">
+                      {{selection.entityType}} {{ selection.selectionID }} {{ selection.selectionType }}
                     </span>
                   </span>
-                  <span class="os-param-selection-list-entry-delete" @click.stop="deleteItem(queryItem)">×</span>
+                  <span class="os-param-selection-list-entry-delete" @click.stop="deleteItem(selection)">×</span>
                 </li>
               </ul>
             </div>
@@ -40,11 +39,12 @@
 import { PropType } from 'vue';
 import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
 import { reteAppInstance } from '../../rete/editorbase';
-import { QueryListType } from '../../onshape-utils/featurescripttypes';
+import { OnshapeSelection, OnshapeSelectionType } from '../../onshape-utils/featurescripttypes';
 import { App } from '../../app';
-import { OnshapeSelection } from '../../onshape-utils/clientmessaging';
 
-type QueryListControl = OnshapeInputControl<QueryListType>;
+// The control will only ever show selections because it is a control
+// The conversion from selections to a query will happen elsewhere
+type QueryListControl = OnshapeInputControl<OnshapeSelectionType>;
 
 export default {
   emits: ['value-change'],
@@ -57,12 +57,11 @@ export default {
   data() {
     return {
       value: this.control.getCurrentValue() ?? [],
-      selections: [] as OnshapeSelection[],
       isFocused: false,
     };
   },
   mounted() {
-    this.selections = this.app?.clientMessaging?.selections ?? [];
+    this.value = this.app?.clientMessaging?.selections ?? [];
   },
   computed: {
     label(): string {
@@ -71,30 +70,26 @@ export default {
     hasError(): boolean {
       return this.control.getHasError?.() ?? false;
     },
-    visibleItems(): any[] {
+    visibleItems(): OnshapeSelection[] {
       // return queries if we have any
-      if (this.value?.queries.length) {
-        return this.value.queries.filter((item) => this.canDisplayItem(item));
-      }
-
-
+      return (this.value as OnshapeSelection[]);
     },
     isEmpty(): boolean {
-      return this.value.queries.length === 0;
+      return this.value.length === 0;
     },
     app(): App {
       return reteAppInstance;
     }
   },
   methods: {
-    canDisplayItem(item: any): boolean {
-      return item != null && item.getIsHidden?.() !== true;
-    },
-    deleteItem(queryItem: any) {
-      const items = this.value.queries;
-      const index = items.indexOf(queryItem);
+    // canDisplayItem(item: any): boolean {
+    //   return item != null && item.getIsHidden?.() !== true;
+    // },
+    deleteItem(selection: any) {
+      const selections = this.value;
+      const index = selections.indexOf(selection);
       if (index !== -1) {
-        items.splice(index, 1);
+        selections.splice(index, 1);
       }
       this.$emit('value-change', this.value);
     },
@@ -105,7 +100,8 @@ export default {
       this.isFocused = true;
       this.app?.clientMessaging?.requestSelectionHighlight([]);
       this.app?.clientMessaging?.requestSelection([''], (data: OnshapeSelection[]) => {
-        this.selections = data;
+        this.value = data;
+        this.$emit('value-change', this.value);
         return false;
       });
     },

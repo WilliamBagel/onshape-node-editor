@@ -30,17 +30,11 @@
  * Source: https://github.com/Team2901/OnshapeInsertTool/blob/main/app/messaging.ts
  */
 
+import { OnshapeSelection } from "./featurescripttypes";
+
 /**
  * Improvements made by William Degele, 2026
  */
-
-export interface OnshapeSelection {
-    entityType: string;
-    occurencePath: string[];
-    selectionID: string;
-    selectionType: string;
-    workspaceMicroversionId: string;
-}
 
 type MessageCallback = (info: any[]) => boolean;
 
