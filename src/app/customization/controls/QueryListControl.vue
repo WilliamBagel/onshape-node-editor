@@ -105,7 +105,6 @@ export default {
     },
     onParameterFocusLost(event: FocusEvent) {
       this.isFocused = false;
-      this.app?.clientMessaging?.stopRequest();
     },
     focusOnQlvIfAble() {
       (this.$el as HTMLElement).querySelector<HTMLElement>('[tabindex="0"]')?.focus();
