@@ -27,7 +27,7 @@ export class OnshapeInput<T extends OnshapeType<any>> extends ClassicPreset.Inpu
             // selectionSpec.type = "Selection";
             selectionSpec.value = [
             //     {
-            //     selectionID: 'JHF',
+            //     selectionId: 'JHF',
             //     entityType: "",
             //     occurencePath: [],
             //     selectionType: "",

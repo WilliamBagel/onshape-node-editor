@@ -21,7 +21,7 @@
                   <span class="os-selection-item-line">
                     <span class="os-param-query-list-entry-text"
                       :class="{ 'ns-list-item-error': false }">
-                      {{selection.entityType}} {{ selection.selectionID }} {{ selection.selectionType }}
+                      {{selection.entityType}} {{ selection.selectionId }} {{ selection.selectionType }}
                     </span>
                   </span>
                   <span class="os-param-selection-list-entry-delete" @click.stop="deleteItem(selection)">×</span>

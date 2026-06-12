@@ -64,7 +64,7 @@ export interface QueryListType extends OnshapeType<QueryList> {
 export interface TransientSelection {
     entityType: string;
     occurencePath: string[];
-    selectionID: string;
+    selectionId: string;
     selectionType: string;
     workspaceMicroversionId: string;
 }

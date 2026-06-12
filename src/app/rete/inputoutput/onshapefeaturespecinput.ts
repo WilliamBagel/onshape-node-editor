@@ -168,7 +168,7 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
                     continue;
                 }
                 const featurescript = `qUnion([${selections.map((selection) => {
-                    return `makeRobustQuery(context, qTransient('${selection.selectionID}'))`;
+                    return `makeRobustQuery(context, qTransient('${selection.selectionId}'))`;
                 }).join(', ')}])`;
                 tLVs[paramId] = featurescript;
             }
