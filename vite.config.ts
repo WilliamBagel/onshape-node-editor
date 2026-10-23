@@ -8,8 +8,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 
 import svgr from 'vite-plugin-svgr'
 import { createHtmlPlugin } from 'vite-plugin-html'
-import path from 'path'
-import fs from 'fs'
+import fs from 'node:fs'
 
 const repoRoot = path.resolve(__dirname)
 const appRoot = path.resolve(repoRoot, 'src', 'app')
