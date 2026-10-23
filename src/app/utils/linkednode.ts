@@ -56,42 +56,46 @@ export class LinkedNode {
         }
     }
 
-    public flattenNode(array: string[]) {
+    public flattenNode(array: string[]): void {
+        this.flatten(array, new Set<string>());
+    }
+
+    /**
+     * Depth-first walk from the end towards the start.
+     *
+     * `visited` is what keeps a node shared by two branches (a diamond: two
+     * paths that rejoin on a common ancestor) from being emitted twice. The
+     * previous version tried to get that effect by deleting itself from each
+     * parent's child list while walking; that missed ancestors more than one
+     * hop above the rejoin point -- so they were emitted twice -- and mutated
+     * the graph mid-traversal.
+     */
+    private flatten(array: string[], visited: Set<string>): void {
+        if (visited.has(this.id)) {
+            return;
+        }
+        visited.add(this.id);
         array.push(this.id);
-        const orderedParents = [];
 
-        if (this.parents == null) {
+        const parents = this.getParents();
+        if (parents == null || parents.length === 0) {
             return;
         }
 
-        const parentList = Object.values(this.parents);
-
-        if (parentList.length === 0) {
-            return;
-        } else if (parentList.length === 1) {
-            orderedParents.push(this.parents);
-        } else if (parentList.length > 1) {
-            let desired = parentList[0];
-            for (const parent of parentList) {
-                if (parent.type === NodeType.normal) {
-                    desired = parent;
-                    break;
-                }
-            }
-            orderedParents.push(desired);
-            for (const parent of parentList) {
-                if (parent === desired) { continue; }
-                orderedParents.push(parent);
-            }
+        // ReteOnshapeNodeProcessor documents the rule: "If multiple parents,
+        // pick non-main first, then first one". `orderedParents` used to be
+        // built and then ignored, and the single-parent case pushed the parent
+        // *dictionary* where a node belonged.
+        let orderedParents: LinkedNode[];
+        if (parents.length === 1) {
+            orderedParents = parents;
         } else {
-            return console.warn(`Node ${this.id} is corrupted. this.parents: ${JSON.stringify(this.parents)}`);
+            const preferred = parents.find((parent) => parent.type === NodeType.normal) ?? parents[0];
+            orderedParents = [preferred, ...parents.filter((parent) => parent !== preferred)];
         }
 
-        for (const parent of parentList) {
-            parent.flattenNode(array);
-            if (parent.children !== null && Object.keys(parent.children).length > 1) {
-                parent.removeChild(this.id);
-            }
+        for (const parent of orderedParents) {
+            parent.flatten(array, visited);
         }
     }
 

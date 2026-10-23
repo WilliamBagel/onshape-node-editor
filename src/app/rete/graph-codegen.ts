@@ -10,8 +10,9 @@ import { NodeEditor } from "rete";
 import { DataflowEngine } from "rete-engine";
 import { Schemes } from "./types";
 import { ReteOnshapeNodeProcessor } from "./rete-onshape-nodeprocessor";
-import { FeatureStudioGenerator, NodeFeaturescriptInfo } from "../onshape-utils/featurestudiogenerator";
+import { FeatureStudioGenerator } from "../onshape-utils/featurestudiogenerator";
 import { TopLevelVariableDefintion, VariablePointer } from "./nodes/onshapenode";
+import { assembleFeatureScriptInfo, PipelineNodeInfo } from "./pipelineinfo";
 
 /**
  * Generate the Feature Studio source for `editor`'s graph.
@@ -113,7 +114,7 @@ export async function generateFeatureStudioSource(
     }
 
     // Second pass: build variable mappings for each node's inputs and generate featurescript representation
-    const featureScriptInfo: NodeFeaturescriptInfo[] = [];
+    const pipelineNodes: PipelineNodeInfo[] = [];
 
     for (const nodeId of nodeArray) {
         const node = editor.getNode(nodeId);
@@ -149,20 +150,16 @@ export async function generateFeatureStudioSource(
         }
         // Get the feature script info with the variable mapping
         const info = node.getFeatureScriptInfo(variableMapping);
-        featureScriptInfo.push(info);
+        pipelineNodes.push({
+            id: nodeId,
+            type: node.type,
+            info,
+            topLevelVariables: topLevelVariablesMap[nodeId],
+        });
         console.log(`Generated feature script for node ${nodeId}:`, node);
-        if (node.type === 'define-feature') {
-            // add top level variables after define feature
-            for (const TopLevelVariableDefintion of Object.values(topLevelVariablesMap)) {
-                for (const value of Object.values(TopLevelVariableDefintion)) {
-                    featureScriptInfo.push({
-                        line: `var ${value.identifier} = ${value.featurescript};`,
-                        dependencies: [{path: "onshape/std/query.fs", version: "2770.0"}]
-                    })
-                }
-            }
-        }
     }
+
+    const featureScriptInfo = assembleFeatureScriptInfo(pipelineNodes);
 
     console.log('Final featureScriptInfo array:', featureScriptInfo);
 

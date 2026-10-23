@@ -215,7 +215,7 @@ export class ReteOnshapeNodeProcessor {
             linkedNode.type = NodeType.start
         }
 
-        if (node.type === 'ouput-feature' || node.type === 'output-function') {
+        if (node.type === 'output-feature' || node.type === 'output-function') {
             linkedNode.type = NodeType.end
         }
 
