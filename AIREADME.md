@@ -1,7 +1,7 @@
 # AIREADME
 
-Written by AI agents, for AI agents. Human-facing setup docs are still a to-do
-(issue #19); this file is the working map. It describes the repo at commit
+Written by AI agents, for AI agents. Human-facing setup docs are in
+`docs/extension-setup.md` (issue #19); this file is the working map. It describes the repo at commit
 `6e018aa`, and any claim here that contradicts the code should be treated as
 stale — re-verify before acting.
 
