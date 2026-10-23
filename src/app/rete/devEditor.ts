@@ -4,6 +4,7 @@ import { CustomFeatureNode } from './nodes/customfeaturenode';
 import { editorBase, EditorControls, StudioEvents } from './editorbase';
 import { DefineFeatureNode } from './nodes/definefeaturenode';
 import { OutputFeatureNode } from './nodes/outputfeaturenode';
+import { BTParameterSpecQuery174 } from 'onshape-typescript-fetch';
 
 const socket = new ClassicPreset.Socket('socket');
 
@@ -40,16 +41,15 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
         },
         btType: 'BTParameterSpecBoolean-170'
       },
-      // {
-      //   annotation: {
-      //     type: 'Property Function Name',
-      //     value: 'a thing'
-      //   },
-      //   btType: "BTParameterSpecQuantity-173"
-      // }
+      {
+        annotation: {
+          type: 'Property Function Name',
+          value: 'entities'
+        },
+        btType: "BTParameterSpecQuery-174"
+      }
     ]
   });
-
   await editor.addNode(featureDefinition);
 
   const featureEndNode = new OutputFeatureNode();

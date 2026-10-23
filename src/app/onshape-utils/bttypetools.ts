@@ -123,7 +123,7 @@ export function btTypeToFeaturescriptType(btType: string): string {
     } else if (btType === 'BTParameterSpecBoolean-170') {
         return "boolean";
     } else if (btType === 'BTParameterSpecQuery-174') {
-        return "query";
+        return "Query";
     }
     return "string";
 }

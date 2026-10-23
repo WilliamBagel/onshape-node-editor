@@ -67,6 +67,13 @@ export class ClientMessaging {
         });
     }
 
+    /**
+     * DEBUG-ONLY: see design rule DR-001 (docs/design-rules.md).
+     * Selections returned here are transient (microversion-bound), do not survive
+     * document edits, only work while embedded, and bypass parameter filters.
+     * Do not build production node behavior or saved-graph state on this path;
+     * use explicit Query inputs or a re-evaluable query instead.
+     */
     public requestSelection(entityType: string[], callback: MessageCallback, count?: number) {
         if (this.requestSelectionMessageId !== null) {
             this.stopRequest();
