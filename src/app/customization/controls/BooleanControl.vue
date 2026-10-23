@@ -8,7 +8,7 @@
 
 <script lang="ts">
 import { PropType } from 'vue';
-import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrolrol';
+import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
 import { BooleanType } from '../../onshape-utils/featurescripttypes';
 
 type BooleanControl = OnshapeInputControl<BooleanType>;

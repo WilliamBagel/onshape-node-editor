@@ -46,7 +46,6 @@ export class QuantityUtil {
             const units = UnitUtil.extend(abr);
             if (units != null && !isNaN(number)) {
                 return {
-                    type: 'ValueWithUnits',
                     units,
                     value: number
                 };
