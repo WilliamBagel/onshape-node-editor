@@ -68,7 +68,8 @@ pnpm is canonical (CI pins pnpm 11.5.2 and `pnpm-lock.yaml` exists). The stray
 ```
 CI=true pnpm install          # required: node_modules may exist as empty dirs,
                               # and pnpm refuses to purge them without a TTY
-pnpm run type-check           # vue-tsc --build (tsconfig.json -> the three projects)
+pnpm run type-check           # vue-tsc --build over all three projects (raw view)
+pnpm run type-check:gate      # the gate: fails on any error under src/** (see below)
 pnpm run build:app            # vite build -> dist/app
 pnpm run build:server         # tsc -p tsconfig.server.json + asset copy
 pnpm run dev                  # vite dev server
@@ -78,8 +79,38 @@ pnpm run dev                  # vite dev server
 build; the runtime `node-fetch` itself comes from `scripts/server-lock`
 via the copied lockfile, not from the root install.
 
+## Type checking and the gate
+
+`tsconfig.json` is a solution file: `"files": []` plus references to
+`tsconfig.app.json`, `tsconfig.node.json` and `tsconfig.server.json`. It must
+stay that way — before this was fixed, the root file was a stray standalone
+config that shadowed all three, so the app was never checked under its own
+settings, and `pnpm run type-check` emitted `.js` files into `src/`, which broke
+`pnpm run build:app`.
+
+`tsconfig.app.json` inherits `@vue/tsconfig/tsconfig.dom.json` with two
+deliberate relaxations, `"strict": false` and `"verbatimModuleSyntax": false`:
+
+- The app source has never been type-checked under this project's config and
+  reports 212 errors under the preset (122 type-only imports, 44 uninitialized
+  properties, ~46 strict-null/index). That is tracked debt, waiting on its own
+  card. Do not turn strictness on without paying it down.
+- `verbatimModuleSyntax: true` also breaks `vite build`: rollup cannot resolve
+  deep type imports such as `rete-vue-plugin/_types/presets/classic/types`, and
+  only import elision was hiding it.
+
+**The gate is `pnpm run type-check:gate`** (`scripts/typecheck-gate.mjs`): it
+fails on any error under `src/**`, and exempts the 25 errors inside the
+dependency `onshape-typescript-fetch`, which cannot be fixed from this repo (a
+source-only git tarball, `main: "index.ts"`, no `.d.ts`, so `skipLibCheck` does
+not cover its generated `.ts` models; its models import their own from-JSON
+helpers `from './'`). Every exempted line is printed, a non-zero compiler exit
+with nothing parseable is itself a failure, and the check always runs `--force`
+so cached diagnostics cannot pass a broken tree. Patch-or-upstream is tracked as
+its own card.
+
 There is **no test runner yet**. Issue #3 adds vitest and `pnpm test`; until
-then, verification means type-check plus manual exercise against Onshape.
+then, verification means the gate plus manual exercise against Onshape.
 
 Scraper scripts (see below): `pnpm run scrape:docs`, `pnpm run organize:docs`,
 `pnpm run scrape:all`.
@@ -136,11 +167,18 @@ value sockets, expression-based codegen, grouping in the real editor, tests.
 ## Traps
 
 - `node_modules/` can look installed while every package directory is empty.
-  Check `find node_modules -type f | wc -l` before blaming the code.
+  Check `find node_modules -type f | wc -l` before blaming the code. `pnpm
+  install` needs `CI=true` if the modules dir already exists as empty dirs.
+- `pnpm run type-check` still exits non-zero on 25 errors inside
+  `onshape-typescript-fetch`. That is expected; the gate command is
+  `pnpm run type-check:gate`.
+- `src/app/**` currently type-checks with `strict` and `verbatimModuleSyntax`
+  off; turning either on reports ~212 errors (see "Type checking and the gate").
 - `src/app/rete/editor.ts` and `devEditor.ts` are demo harnesses with inline
   spec literals; do not treat their hardcoded nodes as the product path.
 - `git status` is noisy from CRLF/LF churn. Use
-  `git diff --ignore-cr-at-eol` to see real edits.
+  `git diff --ignore-cr-at-eol` to see real edits. `.gitattributes` is now
+  present, so this should be historical.
 - A months-old stash (`stash@{0}`, 2026-06-08) contains the scraper and library
   JSON, but its application-code half predates later commits. Recover paths
   selectively, never `git stash apply`.
@@ -154,8 +192,9 @@ value sockets, expression-based codegen, grouping in the real editor, tests.
 ## Change protocol
 
 1. Read `docs/design-rules.md`; if a change violates one, change the rule first.
-2. Keep `pnpm run type-check` green. Once issue #3 lands, keep `pnpm test` green
-   and add a failing test before fixing a defect.
+2. Keep the gate green: `pnpm run type-check:gate`, plus `pnpm run build:app` and
+   `pnpm run build:server`. Once issue #3 lands, keep `pnpm test` green and add
+   a failing test before fixing a defect.
 3. Do not hand-edit generated FeatureScript in a Feature Studio; the generator
    owns that file (its header says so).
 4. Keep line endings LF. Do not reintroduce CRLF files.
