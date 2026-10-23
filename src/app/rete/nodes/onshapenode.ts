@@ -6,6 +6,8 @@ import { OnshapeInput } from "../inputoutput/onshapeinput";
 import { AreaPlugin } from "rete-area-plugin";
 import { AreaExtra, Schemes } from "../types";
 import { NodeFeaturescriptInfo } from "../../onshape-utils/featurestudiogenerator";
+import type { SerializedNodeBase, SerializedNodeKind } from "../serialization/graph-schema-types";
+
 
 export interface BTMParameter1_Valued extends BTMParameter1 {
   value: string | number | boolean;
@@ -39,6 +41,12 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
   public height: number = 150;
   public minWidth: number = 180;
   public maxWidth: number = 600;
+
+  /**
+   * Frame/group this node belongs to, or null. Serialized as part of the graph
+   * schema so grouping (#13) can restore it; codegen ignores it.
+   */
+  public group: string | null = null;
 
   public nodeUpdateCounter: number = 0;
 
@@ -103,6 +111,32 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
 
   public getTitle(): string {
     return this.title;
+  }
+
+  /**
+   * Serialize the fields every node kind owns. Positions live on the rete area
+   * plugin, so they are null here; `serializeGraph` fills them in. Subclasses
+   * spread this and add their own fields.
+   */
+  public toJSON(): SerializedNodeBase {
+    return {
+      id: this.id,
+      kind: this.type as SerializedNodeKind,
+      position: null,
+      size: { width: this.width, height: this.height },
+      group: this.group,
+    };
+  }
+
+  /**
+   * Restore the fields every node kind owns (id, size, group). Called by each
+   * subclass's static `fromJSON` right after construction.
+   */
+  public applySerializedBase(data: SerializedNodeBase): void {
+    this.id = data.id;
+    this.width = data.size.width;
+    this.height = data.size.height;
+    this.group = data.group;
   }
 
   setTitle(newTitle: any) {

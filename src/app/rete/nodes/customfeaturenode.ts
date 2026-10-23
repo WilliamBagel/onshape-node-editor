@@ -7,6 +7,15 @@ import { OnshapeSocket } from '../onshapesockets';
 import { ContextType } from '../../onshape-utils/featurescripttypes';
 import { NodeFeaturescriptInfo } from '../../onshape-utils/featurestudiogenerator';
 import { STD } from '../../onshape-utils/stdlib';
+import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
+import type {
+  SerializedCustomFeatureNode,
+  SerializedNodeBase,
+  SerializedParameterValue,
+  SpecResolver,
+} from '../serialization/graph-schema-types';
+import { toFeatureSpecReference } from '../serialization/graph-schema-types';
+
 
 export class CustomFeatureNode extends OnshapeNode {
   private featureSpec: BTFeatureSpec129;
@@ -75,6 +84,64 @@ export class CustomFeatureNode extends OnshapeNode {
 
   public getDefinitionInput(): OnshapeFeatureSpecInput {
     return this.definitionInput;
+  }
+
+  /**
+   * Serialize this node: base fields + a reference to the feature spec + the
+   * current value of every parameter control.
+   *
+   * Parameter values are read from `OnshapeInputControl.getCurrentValue()`, not
+   * from the node, because the control is where the value actually lives; the
+   * node's `configuredParameters` copy is a mirror kept in sync by
+   * `updateParameter`.
+   */
+  public toJSON(): SerializedCustomFeatureNode {
+    return {
+      ...(super.toJSON() as SerializedNodeBase),
+      kind: "CustomFeature",
+      spec: toFeatureSpecReference(this.featureSpec),
+      parameters: this.serializeParameters(),
+    };
+  }
+
+  private serializeParameters(): Record<string, SerializedParameterValue> {
+    const parameters: Record<string, SerializedParameterValue> = {};
+    for (const paramId in this.definitionInput.paramInputs) {
+      const paramInput = this.definitionInput.paramInputs[paramId];
+      const control = paramInput?.control;
+      if (!(control instanceof OnshapeInputControl)) {
+        continue;
+      }
+      // DR-001: a captured selection is invalidated by the next document edit,
+      // so it is never written to a saved graph. QueryList values round-trip as
+      // an empty list (which regenerates as qUnion([])).
+      const value = control.type === "QueryList" ? [] : control.getCurrentValue();
+      parameters[paramId] = { type: control.type, value };
+    }
+    return parameters;
+  }
+
+  /**
+   * Rebuild a node from its serialized form. The spec reference is resolved
+   * through `resolveSpec` so the spec body never has to live in the graph file.
+   */
+  public static fromJSON(data: SerializedCustomFeatureNode, resolveSpec: SpecResolver): CustomFeatureNode {
+    const featureSpec = resolveSpec(data.spec);
+    if (featureSpec == null) {
+      throw new Error(
+        `Could not resolve feature spec "${data.spec.featureType}" ` +
+        `(eid=${data.spec.eid ?? "unknown"}, microversion=${data.spec.microversion ?? "unknown"}) for node ${data.id}.`
+      );
+    }
+
+    const node = new CustomFeatureNode(featureSpec);
+    node.applySerializedBase(data);
+
+    for (const [paramId, parameter] of Object.entries(data.parameters ?? {})) {
+      node.updateParameter(paramId, parameter.value);
+    }
+
+    return node;
   }
 
   public updateParameter(parameterId: string, value: any): void {
