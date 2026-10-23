@@ -1,0 +1,74 @@
+name: CI
+
+# Pull-request checks: install, type-check, unit tests, both builds.
+#
+# Deliberately separate from deploy-production.yml, which stays default-branch
+# only (a PR must never be able to deploy).
+#
+# NOTE ON type-check: this job runs `pnpm run type-check:gate`, not the raw
+# `pnpm run type-check`. The raw command exits non-zero on 25 errors that live
+# inside the vendored dependency `onshape-typescript-fetch` (source-only tarball,
+# so `skipLibCheck` cannot cover its .ts models). Those are tracked as issue #24.
+# When #24 lands, replace the gate step with the raw `pnpm run type-check` - the
+# gate exists to measure this repo's own errors while that debt is open, not to
+# replace the compiler.
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 11.5.2
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: "Type-check (the gate: errors this repo owns)"
+        run: pnpm run type-check:gate
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build application
+        run: pnpm run build:app
+
+      - name: Build server
+        run: pnpm run build:server
