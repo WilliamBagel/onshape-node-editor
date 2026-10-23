@@ -68,12 +68,19 @@ pnpm is canonical (CI pins pnpm 11.5.2 and `pnpm-lock.yaml` exists). The stray
 ```
 CI=true pnpm install          # required: node_modules may exist as empty dirs,
                               # and pnpm refuses to purge them without a TTY
+pnpm test                     # vitest run: 9 files / 43 tests (issue #3 onwards)
 pnpm run type-check           # vue-tsc --build over all three projects (raw view)
 pnpm run type-check:gate      # the gate: fails on any error under src/** (see below)
 pnpm run build:app            # vite build -> dist/app
 pnpm run build:server         # tsc -p tsconfig.server.json + asset copy
 pnpm run dev                  # vite dev server
 ```
+
+`.github/workflows/ci.yml` runs install (`--frozen-lockfile`), the gate, `pnpm
+test` and both builds on every pull request against `master`. It deliberately
+runs the *gate*, not the raw `pnpm run type-check`, until issue #24 lands (the
+raw command is red on the vendored-dependency errors below). Its GitHub-side run
+is unverified until a branch is pushed.
 
 `src/server/**` needs `@types/node-fetch` (devDependency) to type-check and
 build; the runtime `node-fetch` itself comes from `scripts/server-lock`
@@ -93,8 +100,8 @@ deliberate relaxations, `"strict": false` and `"verbatimModuleSyntax": false`:
 
 - The app source has never been type-checked under this project's config and
   reports 212 errors under the preset (122 type-only imports, 44 uninitialized
-  properties, ~46 strict-null/index). That is tracked debt, waiting on its own
-  card. Do not turn strictness on without paying it down.
+  properties, ~46 strict-null/index). Tracked as issue **#25**. Do not turn
+  strictness on without paying it down.
 - `verbatimModuleSyntax: true` also breaks `vite build`: rollup cannot resolve
   deep type imports such as `rete-vue-plugin/_types/presets/classic/types`, and
   only import elision was hiding it.
@@ -107,10 +114,15 @@ not cover its generated `.ts` models; its models import their own from-JSON
 helpers `from './'`). Every exempted line is printed, a non-zero compiler exit
 with nothing parseable is itself a failure, and the check always runs `--force`
 so cached diagnostics cannot pass a broken tree. Patch-or-upstream is tracked as
-its own card.
+issue **#24**, and `ci.yml` switches to the raw `pnpm run type-check` when it
+lands.
 
-There is **no test runner yet**. Issue #3 adds vitest and `pnpm test`; until
-then, verification means the gate plus manual exercise against Onshape.
+**Tests.** `pnpm test` is vitest (`vitest.config.ts`, node environment) and
+covers the graph -> FeatureScript pipeline: the generator's indent/dedupe/header,
+the node processor's main-path selection and leaf pruning, the linked-node walk
+ordering, the DR-001 warning gate and the load-time selection guard, and a
+byte-identical graph serialize/deserialize round trip. Run one file with
+`pnpm test <path>` (or `npx vitest run <path>`).
 
 Scraper scripts (see below): `pnpm run scrape:docs`, `pnpm run organize:docs`,
 `pnpm run scrape:all`.
@@ -149,8 +161,9 @@ Save/Open handlers are empty. `rete-scopes-plugin` is installed but only used by
 the standalone demo `src/app/rete/scopes.ts`.
 
 Absent: any write to a Feature Studio, any call into a Part Studio (add feature /
-eval FeatureScript), node creation from a catalog, graph serialization, typed
-value sockets, expression-based codegen, grouping in the real editor, tests.
+eval FeatureScript), node creation from a catalog, Save/Open wired to storage
+(the schema exists — `src/app/rete/serialization/`, issue #5 — but nothing calls
+it), typed value sockets, expression-based codegen, grouping in the real editor.
 
 ## Data sources
 
@@ -188,13 +201,23 @@ value sockets, expression-based codegen, grouping in the real editor, tests.
   viewport) is a debug affordance only — see DR-001.
 - Onshape API method names differ from what intuition suggests; verify against
   the upstream generated client (`onshape-typescript-fetch`), not memory.
+- **The token refresh path is broken as wired** (issue #22): both client paths
+  send `GET /refresh?code=…` (`src/app/common/oauth.ts:66-74`,
+  `src/app/common/onshapeapi.ts:216-219`, `:232-237`) while the function is
+  registered `POST`-only (`src/server/index.ts:26-30`) and reads
+  `refresh_token` (`src/server/refresh.ts:37-40`). Do not build on it; it fails
+  when the access token expires.
+- **`src/server/.env` is copied into the deployment package** (issue #23):
+  `scripts/copyServerAssets.cjs:38-41` puts it in `dist/server/`, and
+  `scripts/deployServer.cjs:40` zips everything under that directory — so
+  `CLIENT_SECRET` ships in the zip. It is gitignored, but it is not private.
 
 ## Change protocol
 
 1. Read `docs/design-rules.md`; if a change violates one, change the rule first.
 2. Keep the gate green: `pnpm run type-check:gate`, plus `pnpm run build:app` and
-   `pnpm run build:server`. Once issue #3 lands, keep `pnpm test` green and add
-   a failing test before fixing a defect.
+   `pnpm run build:server`. Keep `pnpm test` green and add a failing test before
+   fixing a defect.
 3. Do not hand-edit generated FeatureScript in a Feature Studio; the generator
    owns that file (its header says so).
 4. Keep line endings LF. Do not reintroduce CRLF files.
