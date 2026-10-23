@@ -42,6 +42,10 @@ Enforcement (tracked in issue #18): warn visibly when `requestSelection` is used
 outside developer mode; mark debug-only nodes in the UI; flag saved graphs that
 contain live-selection dependencies on load; require justification in review.
 
+**Review checklist:** Every PR must confirm: no new `requestSelection` calls
+outside developer mode; any debug-only controls carry the DEBUG marker; graph
+load (when implemented) flags selection-dependent nodes.
+
 ## DR-002 — Generated FeatureScript is generated
 
 The Feature Studio contents produced by the app are overwritten on every

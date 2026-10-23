@@ -25,16 +25,18 @@ import AppRoot from './App.vue'
 import { UserInfo } from "./onshape-utils/userinfo";
 import { STD } from "./onshape-utils/stdlib";
 import { tooltipDirective } from "./components/tooltip/TooltipDirective";
+import { describeLiveSelectionDependencies } from "./onshape-utils/liveselectionguard";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
     public myclient = 'https://williambagel.github.io/onshape-node-editor';
     public userinfo!: UserInfo;
+    public developerMode = false;
 
     public start(): void {
         this.userinfo = new UserInfo(this.onshape);
 
-        this.startVueApp();
+        this.startVueApp(this.developerMode);
 
         this.processUserInfo();
 
@@ -60,6 +62,8 @@ export class App extends BaseApp {
     }
 
     public startVueApp(developerMode: boolean = false): void {
+        this.developerMode = developerMode;
+        this.clientMessaging?.setDeveloperMode(developerMode);
         const tryMount = () => {
             if (!document.getElementById('app')) {
                 requestAnimationFrame(tryMount);
@@ -96,5 +100,22 @@ export class App extends BaseApp {
                 })
             })
         })
+    }
+
+    /**
+     * DR-001: check a loaded graph for nodes that depend on a live selection.
+     *
+     * Called after deserializing a graph (#6 wires Save/Open). The schema-v1
+     * writer never persists a selection, so this is a guard against documents
+     * that arrive some other way — hand-edited, written by an older build, or by
+     * a future change that starts persisting one. Each finding is shown once as a
+     * message bubble, and the messages are returned for the caller/log.
+     */
+    public checkGraphForLiveSelection(graph: unknown): string[] {
+        const warnings = describeLiveSelectionDependencies(graph);
+        for (const warning of warnings) {
+            this.clientMessaging?.showMessageBubble(warning);
+        }
+        return warnings;
     }
 }

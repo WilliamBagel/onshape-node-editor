@@ -51,6 +51,12 @@ export class ClientMessaging {
     private requestSelectionMessageId: string | null = null;
     private requestSelectionCallback: MessageCallback | null = null;
 
+    /** Tracks which control IDs have already been warned for non-developer-mode selection */
+    private warnedControls = new Set<string>();
+
+    /** Whether the app is running in developer/debug mode (DR-001) */
+    public developerMode = false;
+
     constructor(documentId: string, workspaceId: string, elementId: string) {
         this.documentId = documentId;
         this.workspaceId = workspaceId;
@@ -58,6 +64,16 @@ export class ClientMessaging {
 
         this.registerMessageListener();
         this.sendInitMessage();
+    }
+
+    /** Sets developer mode (DR-001: selection is debug-only) */
+    public setDeveloperMode(enabled: boolean): void {
+        this.developerMode = enabled;
+    }
+
+    /** Clears the warning tracker (e.g., on new graph load) */
+    public clearWarningTracker(): void {
+        this.warnedControls.clear();
     }
 
     public showMessageBubble(message: string) {
@@ -73,14 +89,31 @@ export class ClientMessaging {
      * document edits, only work while embedded, and bypass parameter filters.
      * Do not build production node behavior or saved-graph state on this path;
      * use explicit Query inputs or a re-evaluable query instead.
+     * @param controlId Unique identifier for the calling control (used to deduplicate warnings)
      */
-    public requestSelection(entityType: string[], callback: MessageCallback, count?: number) {
+    public requestSelection(entityType: string[], callback: MessageCallback, count?: number, controlId?: string) {
+        // DR-001: Gate selection behind developer mode
+        if (!this.developerMode) {
+            const warningKey = controlId ?? 'unknown-control';
+            if (!this.warnedControls.has(warningKey)) {
+                this.warnedControls.add(warningKey);
+                this.showMessageBubble(
+                    'DR-001: Interactive selection (requestSelection) is debug-only. ' +
+                    'This control uses live Onshape selection which does not persist. ' +
+                    'Enable developer mode to use this feature, or replace with a Query input.'
+                );
+            }
+            // Still call the callback with empty selections to not break the control flow
+            callback([]);
+            return;
+        }
+
         if (this.requestSelectionMessageId !== null) {
             this.stopRequest();
             this.stopMessagePromise?.promise.then(() => {
                 this.requestSelectionMessageId = null;
                 this.requestSelectionCallback = null;
-                this.requestSelection(entityType, callback, count);
+                this.requestSelection(entityType, callback, count, controlId);
             });
         }
 

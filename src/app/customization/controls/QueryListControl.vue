@@ -4,7 +4,8 @@
       <div class="os-row os-grow">
         <div class="os-param-query-list os-param-selection-list os-grow os-param-query-list-resize" :class="{
           'os-param-query-list-focus': isFocused,
-          'os-param-query-list-invalid': hasError
+          'os-param-query-list-invalid': hasError,
+          'os-param-query-list-debug': isDebugMode
         }" tabindex="0" @keydown="onKeyDown" @focus="onParameterFocused" @blur="onParameterFocusLost"
           @click="focusOnQlvIfAble">
           <div class="slimScrollDiv" style="position: relative; overflow: hidden; width: auto;">
@@ -14,6 +15,9 @@
                 <label class="os-param-query-list-label os-grow"
                   v-bind:class="{ 'os-param-query-list-small-label': !isEmpty }">
                   {{ label }}
+                  <span v-if="isDebugMode" class="debug-marker" title="DR-001: This control uses debug-only live selection">
+                    ⚠ DEBUG
+                  </span>
                 </label>
               </div>
               <ul class="os-param-list-container">
@@ -41,6 +45,7 @@ import { OnshapeInputControl } from '../../rete/controls/onshapeinputcontrol';
 import { reteAppInstance } from '../../rete/editorbase';
 import { TransientSelection, TransientSelectionType } from '../../onshape-utils/featurescripttypes';
 import { App } from '../../app';
+import { inject } from 'vue';
 
 // The control will only ever show selections because it is a control
 // The conversion from selections to a query will happen elsewhere
@@ -77,12 +82,19 @@ export default {
     },
     app(): App {
       return reteAppInstance;
+    },
+    isDebugMode(): boolean {
+      // True when the control is shown WITHOUT developer mode, i.e. when the
+      // badge is the warning the user needs. In developer mode the operator
+      // knows what they are doing and the banner would just be noise.
+      return this.app?.developerMode !== true;
+    },
+    controlId(): string {
+      // Use control's label + a unique suffix for warning deduplication
+      return `querylist-${this.control.label}-${this.control.id ?? 'unknown'}`;
     }
   },
   methods: {
-    // canDisplayItem(item: any): boolean {
-    //   return item != null && item.getIsHidden?.() !== true;
-    // },
     deleteItem(selection: any) {
       const selections = this.value;
       const index = selections.indexOf(selection);
@@ -101,7 +113,10 @@ export default {
         this.value = data;
         this.$emit('value-change', this.value);
         return false;
-      });
+        // controlId goes in the 4th slot; the 3rd is `count`. Passing controlId
+        // as `count` was a type error (TS2345) and left the DR-001 warning
+        // untagged, so every control shared the "unknown-control" bucket.
+      }, undefined, this.controlId);
     },
     onParameterFocusLost(event: FocusEvent) {
       this.isFocused = false;
@@ -119,5 +134,24 @@ export default {
 
 .os-param-query-list {
   box-sizing: border-box;
+}
+
+.os-param-query-list-debug {
+  border: 2px dashed #ff9800;
+  border-radius: 4px;
+  background-color: #fff8e1;
+}
+
+.debug-marker {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 0.65rem;
+  font-weight: bold;
+  color: #e65100;
+  background-color: #ffcc80;
+  border-radius: 3px;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 </style>
