@@ -30,3 +30,12 @@ coverage
 *.tsbuildinfo
 .env
 src/server/config.json
+
+# Agent scratch (handoff docs, probes) — never commit
+/tmp/
+
+# Raw scraped library data. The organized, deduplicated file
+# (src/app/onshape/featurescript-library-organized.json) is committed as runtime
+# data; the raw scrape and its html input are regenerable: `pnpm run scrape:all`.
+/src/app/onshape/featurescript-library.json
+/scripts/std-library-scrapper/library.html
