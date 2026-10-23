@@ -1,12 +1,8 @@
 {
-  "include": [
-    "env.d.ts",
-    "src/**/**/*"
-  ],
-  "compilerOptions": {
-    "lib": [
-      "ES2025",
-      "dom"
-    ]
-  }
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.server.json" }
+  ]
 }

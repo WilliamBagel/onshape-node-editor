@@ -17,7 +17,14 @@
     },
     "allowJs": true,
     "lib": [
-      "ES2021.String"
-    ]
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "strict": false,
+    "verbatimModuleSyntax": false
   }
 }

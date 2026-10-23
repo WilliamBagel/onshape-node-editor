@@ -15,6 +15,7 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
+    "type-check:gate": "node scripts/typecheck-gate.mjs",
     "deploy:app": "npm run build:app && npx gh-pages -d dist/app",
     "deploy:app-dev": "npm run build:app-dev && npx gh-pages -d dist/app",
     "deploy:server": "npm run build:server && node ./scripts/deployServer.cjs",
