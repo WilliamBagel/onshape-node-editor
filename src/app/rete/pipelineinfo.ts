@@ -29,24 +29,29 @@ export const TOP_LEVEL_VARIABLE_DEPENDENCIES = [
  *
  * A top-level variable has to be declared inside the feature body, i.e. after
  * the `defineFeature(...)` header that opens it, so the declarations are
- * emitted right after a define-feature node.
+ * emitted right after a define-feature node -- once per generated Feature
+ * Studio, not once per define-feature node: a graph with two define nodes used
+ * to emit every top-level `var` twice.
  */
 export function assembleFeatureScriptInfo(nodes: PipelineNodeInfo[]): NodeFeaturescriptInfo[] {
     const featureScriptInfo: NodeFeaturescriptInfo[] = [];
 
+    // Flattened node order, so emission does not depend on which define node
+    // happens to come first.
+    const topLevelVariables = nodes.flatMap((node) => Object.values(node.topLevelVariables ?? {}));
+    let topLevelVariablesEmitted = false;
+
     for (const node of nodes) {
         featureScriptInfo.push(node.info);
 
-        if (node.type === 'define-feature') {
-            // add top level variables after define feature
-            for (const definitionSet of nodes.map((n) => n.topLevelVariables ?? {})) {
-                for (const value of Object.values(definitionSet)) {
-                    featureScriptInfo.push({
-                        line: `var ${value.identifier} = ${value.featurescript};`,
-                        dependencies: TOP_LEVEL_VARIABLE_DEPENDENCIES,
-                    });
-                }
+        if (node.type === 'define-feature' && !topLevelVariablesEmitted) {
+            for (const value of topLevelVariables) {
+                featureScriptInfo.push({
+                    line: `var ${value.identifier} = ${value.featurescript};`,
+                    dependencies: TOP_LEVEL_VARIABLE_DEPENDENCIES,
+                });
             }
+            topLevelVariablesEmitted = true;
         }
     }
 
