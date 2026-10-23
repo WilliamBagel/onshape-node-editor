@@ -3,6 +3,10 @@ import { OnshapeInput } from "../inputoutput/onshapeinput";
 import { OnshapeSocket } from "../onshapesockets";
 import { ContextType } from "../../onshape-utils/featurescripttypes";
 import { NodeFeaturescriptInfo } from "../../onshape-utils/featurestudiogenerator";
+import type {
+    SerializedNodeBase,
+    SerializedOutputFeatureNode,
+} from "../serialization/graph-schema-types";
 
 export class OutputFeatureNode extends OnshapeNode {
 
@@ -20,6 +24,19 @@ export class OutputFeatureNode extends OnshapeNode {
             { type: "Context", value: "Context" }
         );
         this.addInput("context", contextInput);
+    }
+
+    public toJSON(): SerializedOutputFeatureNode {
+        return {
+            ...(super.toJSON() as SerializedNodeBase),
+            kind: "output-feature",
+        };
+    }
+
+    public static fromJSON(data: SerializedOutputFeatureNode): OutputFeatureNode {
+        const node = new OutputFeatureNode();
+        node.applySerializedBase(data);
+        return node;
     }
 
     public getFeatureScriptInfo(variableMapping: Record<string, string>): NodeFeaturescriptInfo {

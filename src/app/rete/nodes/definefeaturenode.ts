@@ -6,6 +6,11 @@ import { NodeFeaturescriptInfo } from "../../onshape-utils/featurestudiogenerato
 import { btTypeToFeaturescriptType, getSpecFromFeatureSpec } from "../../onshape-utils/bttypetools";
 import { STD } from "../../onshape-utils/stdlib";
 import { camelize } from "../../utils/stringutils";
+import type {
+    SerializedDefineFeatureNode,
+    SerializedNodeBase,
+} from "../serialization/graph-schema-types";
+
 
 export interface Precondition {
     annotation: Annotation
@@ -74,6 +79,26 @@ export class DefineFeatureNode extends OnshapeNode {
 
     //     return data;
     // }
+
+    public toJSON(): SerializedDefineFeatureNode {
+        return {
+            ...(super.toJSON() as SerializedNodeBase),
+            kind: "define-feature",
+            title: this.getTitle(),
+            annotation: this.annotation,
+            preconditions: this.preconditions,
+        };
+    }
+
+    public static fromJSON(data: SerializedDefineFeatureNode): DefineFeatureNode {
+        const node = new DefineFeatureNode({
+            annotation: data.annotation,
+            preconditions: data.preconditions,
+        });
+        node.applySerializedBase(data);
+        node.setTitle(data.title);
+        return node;
+    }
 
     public getVariableSymbols(): string[] {
         const variables = ['context', 'id'];
