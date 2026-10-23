@@ -14,6 +14,7 @@
     "build": "run-p type-check \"build:app\" \"build:server\"",
     "preview": "vite preview",
     "build-only": "vite build",
+    "test": "vitest run",
     "type-check": "vue-tsc --build",
     "type-check:gate": "node scripts/typecheck-gate.mjs",
     "deploy:app": "npm run build:app && npx gh-pages -d dist/app",
@@ -62,6 +63,7 @@
     "vite": "^7.3.5",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-vue-devtools": "^8.1.2",
+    "vitest": "^5.0.5",
     "vue-tsc": "^3.3.3"
   }
 }

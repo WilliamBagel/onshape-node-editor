@@ -32,6 +32,7 @@ import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { ReteOnshapeNodeProcessor } from './rete-onshape-nodeprocessor';
 import { FeatureStudioGenerator, NodeFeaturescriptInfo } from '../onshape-utils/featurestudiogenerator';
+import { assembleFeatureScriptInfo, PipelineNodeInfo } from './pipelineinfo';
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
 // Module-level app reference for access from Rete components
@@ -362,7 +363,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         }
 
         // Second pass: build variable mappings for each node's inputs and generate featurescript representation
-        const featureScriptInfo: NodeFeaturescriptInfo[] = [];
+        const pipelineNodes: PipelineNodeInfo[] = [];
 
         for (const nodeId of nodeArray) {
             const node = editor.getNode(nodeId);
@@ -399,21 +400,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             // Get the feature script info with the variable mapping
             // if (typeof node.getFeatureScriptInfo === 'function') {
             const info = node.getFeatureScriptInfo(variableMapping);
-            featureScriptInfo.push(info);
+            pipelineNodes.push({
+                id: nodeId,
+                type: node.type,
+                info,
+                topLevelVariables: topLevelVariablesMap[nodeId],
+            });
             console.log(`Generated feature script for node ${nodeId}:`, node);
             // }
-            if (node.type === 'define-feature') {
-                // add top level variables after define feature
-                for (const TopLevelVariableDefintion of Object.values(topLevelVariablesMap)) {
-                    for (const value of Object.values(TopLevelVariableDefintion)) {
-                        featureScriptInfo.push({
-                            line: `var ${value.identifier} = ${value.featurescript};`,
-                            dependencies: [{path: "onshape/std/query.fs", version: "2770.0"}]
-                        })
-                    }
-                }
-            }
         }
+
+        const featureScriptInfo = assembleFeatureScriptInfo(pipelineNodes);
 
         console.log('Final featureScriptInfo array:', featureScriptInfo);
 
