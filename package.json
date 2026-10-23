@@ -17,7 +17,6 @@
     "test": "vitest run",
     "type-check": "vue-tsc --build",
     "type-check:gate": "node scripts/typecheck-gate.mjs",
-    "test": "vitest run",
     "deploy:app": "npm run build:app && npx gh-pages -d dist/app",
     "deploy:app-dev": "npm run build:app-dev && npx gh-pages -d dist/app",
     "deploy:server": "npm run build:server && node ./scripts/deployServer.cjs",
