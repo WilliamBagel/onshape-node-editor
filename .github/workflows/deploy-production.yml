@@ -1,19 +1,43 @@
 name: Deploy to GitHub Pages (Production)
 
+# Publishes the client app to https://williambagel.github.io/onshape-node-editor/
+#
+# That URL is what Onshape loads as the extension's app element, so this job
+# runs the same checks as CI before it uploads: a published build is reachable
+# by users, and a type error or a failing test must not get there.
+#
+# The Pages site is published from the ARTIFACT uploaded below (the repository's
+# Pages settings use build_type=workflow). Nothing is committed to a branch -
+# pushing build output to `gh-pages` changes nothing on the live site.
+#
+# Trigger: push to master, or `pnpm run deploy:app` / `gh workflow run` against a
+# ref that is already on GitHub.
+
 on:
   push:
     branches:
       - master
   workflow_dispatch:
 
+# No repository write access is needed: the deploy consumes an artifact and
+# talks to the Pages service, it does not push a branch.
 permissions:
-  contents: write 
+  contents: read
   pages: write
   id-token: write
+
+# Never let two publishes overlap; the newer commit wins.
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout code
@@ -25,7 +49,7 @@ jobs:
           node-version: '22'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
           version: 11.5.2
 
@@ -36,7 +60,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -45,6 +69,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Type-check gate
+        run: pnpm run type-check:gate
 
       - name: Build application
         run: pnpm run build:app

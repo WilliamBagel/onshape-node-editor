@@ -83,8 +83,8 @@ it expects, not the registration.
 Both are hardcoded class fields in `src/app/app.ts`:
 
 ```
-src/app/app.ts:30  public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
-src/app/app.ts:31  public myclient = 'https://williambagel.github.io/onshape-node-editor';
+src/app/app.ts:50  public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
+src/app/app.ts:51  public myclient = 'https://williambagel.github.io/onshape-node-editor';
 ```
 
 `myserver` is the **Azure Functions host** (`§8`). It is the base for every
@@ -122,8 +122,8 @@ above. For a second environment (staging, a fork, a local tunnel):
 
 | | production (as committed) | any other environment |
 |---|---|---|
-| `myserver` (`src/app/app.ts:30`) | `https://onshape-node-editor-function.azurewebsites.net` | that environment's Functions host |
-| `myclient` (`src/app/app.ts:31`) | `https://williambagel.github.io/onshape-node-editor` | that environment's static site root |
+| `myserver` (`src/app/app.ts:50`) | `https://onshape-node-editor-function.azurewebsites.net` | that environment's Functions host |
+| `myclient` (`src/app/app.ts:51`) | `https://williambagel.github.io/onshape-node-editor` | that environment's static site root |
 | `vite.config.ts:56` `base` | `/onshape-node-editor/` | must match the site's path component of `myclient` |
 | `public/redirect.html:17` | hardcodes `https://williambagel.github.io/onshape-node-editor/` | must be edited to the same `myclient` |
 | portal registration | `CLIENT_ID`/`CLIENT_SECRET` of the production app | a separate OAuth app, or the same app with the second redirect URI added |
@@ -395,7 +395,7 @@ means:
   `src/app/onshape-utils/clientmessaging.ts:69-75`).
 
 To exercise the real OAuth path locally you need (a) a publicly reachable HTTPS
-URL for the built app, (b) `myclient` (`src/app/app.ts:31`) and the hardcoded URL
+URL for the built app, (b) `myclient` (`src/app/app.ts:51`) and the hardcoded URL
 in `public/redirect.html:17` changed to it, (c) `vite.config.ts:56` `base`
 matching its path, and (d) that URL registered as the redirect URI in the portal.
 A localhost URL will not satisfy the registration. The practical route is to
@@ -448,18 +448,31 @@ $ curl -o /dev/null -w '%{http_code}' -L https://williambagel.github.io/onshape-
 **The deployed site URL must equal `myclient`.** Vite's `base` is
 `/onshape-node-editor/` (`vite.config.ts:56`), so the site is served at
 `https://<user>.github.io/onshape-node-editor/`; `myclient`
-(`src/app/app.ts:31`) is exactly that, and the redirect URI the client rebuilds
+(`src/app/app.ts:51`) is exactly that, and the redirect URI the client rebuilds
 from it (`src/app/common/onshapeapi.ts:272`) is the one the portal must accept
 (§2). Change any one of the three — base path, `myclient`, registration — and the
 token exchange fails with a redirect-URI mismatch that shows up only as a failed
 `/oauth` call in DevTools.
 
-Manual alternative, not used by the workflow: `pnpm run deploy:app`
-(`package.json:21`, `gh-pages -d dist/app`). Both paths publish the same
-`dist/app`.
+`pnpm run deploy:app` is the manual alternative, and it now does what the
+workflow does: it dispatches `deploy-production.yml` for the current branch
+(`scripts/deployApp.cjs`), refusing unless the working tree is clean and HEAD is
+already on `origin/<branch>` — the workflow is dispatched against a ref on
+GitHub, so publishing from an unpushed branch would either fail or publish an
+older commit than the one you tested.
+
+**Correction (2026-10-24), verified empirically.** This file previously said
+`deploy:app` ran `gh-pages -d dist/app` and that "both paths publish the same
+`dist/app`". That was wrong. This repository's Pages site is published from an
+Actions **artifact** (`build_type: workflow`), so a `gh-pages` branch is never
+served: the file it contains (`assets/index-Cuiwaz1v.js`) returns **404** on the
+live site, which serves `assets/index-DhIBBCrA.js` from the last workflow run
+(`40009082077`, a `workflow_dispatch` on `wt/w4-deploy-trigger`, sha `e8a324e`).
+Pushing build output to that branch is a silent no-op — it looks like a deploy
+and publishes nothing, which is exactly what happened before this correction.
 
 No secrets are involved in the Pages build: the app bundle contains only the two
-public URLs from `src/app/app.ts:30-31`.
+public URLs from `src/app/app.ts:50-51`.
 
 ---
 
@@ -705,7 +718,7 @@ closes them. Each entry says what would count as evidence.
    (`40009082077`) is a `workflow_dispatch` on `wt/w4-deploy-trigger` (§7).
    *Evidence:* a `push`-event run on `master`.
 9. **Any second environment.** Only the production pair is in the code
-   (`src/app/app.ts:30-31`) and `public/redirect.html:17` hardcodes the
+   (`src/app/app.ts:50-51`) and `public/redirect.html:17` hardcodes the
    production origin. A staging setup would need the edits listed in §2.3 plus a
    second portal registration; none of that exists to verify.
 
