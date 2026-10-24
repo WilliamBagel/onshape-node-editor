@@ -68,6 +68,24 @@ The deployed URL is part of the Onshape extension registration, so it must stay
 in step with `myclient` (`src/app/app.ts:51`), `public/redirect.html:17` and the
 portal — see `docs/extension-setup.md` §7.
 
+Publishing from a branch other than `master`, without pushing `master`:
+
+```
+git checkout -b deploy/pages-$(git rev-parse --short HEAD)
+git push -u origin deploy/pages-<sha>
+pnpm run deploy:app
+```
+
+The `github-pages` environment carries a deployment branch policy that allows
+`master`, `gh-pages` and `deploy/*`. `deploy-production.yml` declares that
+environment, so a job on any other ref is rejected before the first step with
+*"Branch ... is not allowed to deploy to github-pages due to environment
+protection rules"*. Add a policy for a new pattern before dispatching from it:
+
+```
+gh api -X POST repos/<owner>/<repo>/environments/github-pages/deployment-branch-policies -f name='deploy/*'
+```
+
 ### Build and deploy the server (Azure Functions)
 
 Builds the server TypeScript into `dist/server`, producing a function app layout. Then publish using the Azure Functions Core Tools.

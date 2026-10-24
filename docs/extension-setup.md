@@ -476,6 +476,36 @@ public URLs from `src/app/app.ts:50-51`.
 
 ---
 
+### 7.5 Publishing without pushing `master`
+
+The usual path is a push to `master` (the workflow triggers on it). To publish a
+commit that is not on `master`:
+
+```
+git checkout -b deploy/pages-$(git rev-parse --short HEAD)
+git push -u origin deploy/pages-<sha>
+pnpm run deploy:app          # dispatches the workflow on that ref
+```
+
+This is not optional plumbing: the `github-pages` environment has a deployment
+branch policy, currently allowing `master`, `gh-pages` and `deploy/*`. Because
+`deploy-production.yml` now declares `environment: github-pages`, a run on a ref
+outside that policy is rejected before its first step — observed, not theorised:
+run `40059450988` on `deploy/pages-7a9c0cf` failed in 1 s with *"Branch
+deploy/pages-7a9c0cf is not allowed to deploy to github-pages due to environment
+protection rules"*; after adding the `deploy/*` policy, the same dispatch
+(`40059476965`) went green in 1 m 2 s.
+
+Verified consequence of that run: the live site now serves
+`assets/index-Cuiwaz1v.js` (HTTP 200) — the same file the local build of
+`7a9c0cf` produces — the previous `assets/index-DhIBBCrA.js` returns 404, and the
+published bundle contains `nodeOrder`, `LogPanel` and `reportMessage`, i.e. the
+issues #27, #4 and #2 work is public. `redirect.html` (the portal junction URL)
+still returns 200. The Pages deployment is recorded against the environment:
+`github-pages`, ref `deploy/pages-7a9c0cf`, sha `7a9c0cf`.
+
+---
+
 ## 8. Azure Functions deployment
 
 ### 8.1 What `pnpm run build:server` produces
