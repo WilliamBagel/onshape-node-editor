@@ -3,11 +3,13 @@ import { defineComponent } from 'vue';
 import TopBar from './components/TopBar.vue'
 import { createEditor, createEditorDev } from './rete';
 import BottomBar from './components/BottomBar.vue';
+import LogPanel from './components/LogPanel.vue';
 
 import { inject } from 'vue'
 import ToolTip from './components/tooltip/ToolTip.vue';
 import { editorBase, EditorControls } from './rete/editorbase.js';
 import { formatTarget, type FeatureStudioTarget } from './onshape-utils/featurestudiotarget';
+import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 
 /**
  * The slice of `App` the toolbar needs for the Feature Studio upload (#1).
@@ -15,17 +17,28 @@ import { formatTarget, type FeatureStudioTarget } from './onshape-utils/features
  * import one-way.
  */
 interface FeatureStudioHost {
+  /** #4: the build/upload/run log rendered by LogPanel.vue. */
+  log: BuildLogStore;
   getFeatureStudioTarget(): FeatureStudioTarget | undefined;
   setFeatureStudioTarget(target: string): unknown;
   suggestFeatureStudioTarget(): string;
-  reportMessage(message: string): void;
+  reportMessage(message: string, severity?: LogSeverity, source?: string): void;
+  reportBuildResult(source: string | undefined, failure?: string): void;
+  reportRunUnavailable(): void;
   uploadFeatureStudio(source: string | undefined): Promise<unknown>;
 }
+
+/**
+ * #4: rendered only when the injected `App` is missing (a bare component
+ * mount); module-level so Vue does not have to proxy a class instance in data.
+ */
+const fallbackLogStore = new BuildLogStore();
 
 export default defineComponent({
   components: {
     TopBar: TopBar,
     BottomBar: BottomBar,
+    LogPanel: LogPanel,
     ToolTip: ToolTip
   },
   // Options-API injection: `provide('app', this)` in `App.startVueApp()`.
@@ -37,6 +50,12 @@ export default defineComponent({
   data() {
     return {
       controls: null as EditorControls | null
+    }
+  },
+  computed: {
+    /** #4: the App-owned log, or a local one when there is no injected App. */
+    logStore(): BuildLogStore {
+      return this.featureStudioHost()?.log ?? fallbackLogStore;
     }
   },
   async mounted() {
@@ -55,9 +74,15 @@ export default defineComponent({
     featureStudioHost(): FeatureStudioHost | null {
       return ((this as unknown as { app?: FeatureStudioHost | null }).app) ?? null;
     },
+    /** #4: Build -> a typed log entry (with the generated source when it works). */
     async runBuild() {
-      const featurescript = await this.controls?.studioEvents.build();
-      console.log(featurescript);
+      const host = this.featureStudioHost();
+      try {
+        const featurescript = await this.controls?.studioEvents.build();
+        host?.reportBuildResult(featurescript);
+      } catch (error) {
+        host?.reportBuildResult(undefined, error instanceof Error ? error.message : String(error));
+      }
     },
     /**
      * Ask for the upload target (`did`, `wvm`, `wvmid`, `eid`) and persist it.
@@ -87,13 +112,30 @@ export default defineComponent({
       if (host == null) return;
       if (host.getFeatureStudioTarget() == null) {
         await this.runSelectTarget();
-        if (host.getFeatureStudioTarget() == null) return;
+        if (host.getFeatureStudioTarget() == null) {
+          // #4: a refused/dismissed target prompt is a pipeline outcome too.
+          host.reportMessage(
+            'Upload needs a Feature Studio target (did, wvm, wvmid, eid). Set one with the Upload Target button.',
+            'error',
+            'upload',
+          );
+          return;
+        }
       }
-      const featurescript = await this.controls?.studioEvents.build();
-      await host.uploadFeatureStudio(featurescript);
+      try {
+        const featurescript = await this.controls?.studioEvents.build();
+        await host.uploadFeatureStudio(featurescript);
+      } catch (error) {
+        host.reportMessage(
+          `Upload failed: ${error instanceof Error ? error.message : String(error)}`,
+          'error',
+          'upload',
+        );
+      }
     },
+    /** #4: Run is still a stub; it now says so in the panel instead of silently doing nothing. */
     runRun() {
-
+      this.featureStudioHost()?.reportRunUnavailable();
     },
     runSave() {
 
@@ -116,6 +158,7 @@ export default defineComponent({
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" />
   <main class="rete" ref="rete"></main>
   <BottomBar graph-name="My Graph" @search="runSearch" />
+  <LogPanel :store="logStore" />
   <ToolTip />
 </template>
 
