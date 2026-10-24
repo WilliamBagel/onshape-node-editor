@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  onshape-typescript-fetch@1.19.0: df61ea9e9455ba0f51e97aa81cb94ed74850fdb4cd1e0dc7d367004db784071f
+
 importers:
 
   .:
@@ -25,7 +28,7 @@ importers:
         version: 17.4.2
       onshape-typescript-fetch:
         specifier: github:toebes/onshape-typescript-fetch
-        version: https://codeload.github.com/toebes/onshape-typescript-fetch/tar.gz/34f58a0a689cfa6bf769fb13c9e38465b40a5f64(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
+        version: https://codeload.github.com/toebes/onshape-typescript-fetch/tar.gz/34f58a0a689cfa6bf769fb13c9e38465b40a5f64(patch_hash=df61ea9e9455ba0f51e97aa81cb94ed74850fdb4cd1e0dc7d367004db784071f)(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
       pnpm:
         specifier: ^11.5.2
         version: 11.5.2
@@ -4026,7 +4029,7 @@ snapshots:
 
   ohash@2.0.11: {}
 
-  onshape-typescript-fetch@https://codeload.github.com/toebes/onshape-typescript-fetch/tar.gz/34f58a0a689cfa6bf769fb13c9e38465b40a5f64(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1):
+  onshape-typescript-fetch@https://codeload.github.com/toebes/onshape-typescript-fetch/tar.gz/34f58a0a689cfa6bf769fb13c9e38465b40a5f64(patch_hash=df61ea9e9455ba0f51e97aa81cb94ed74850fdb4cd1e0dc7d367004db784071f)(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       '@openapitools/openapi-generator-cli': 2.34.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
     transitivePeerDependencies:

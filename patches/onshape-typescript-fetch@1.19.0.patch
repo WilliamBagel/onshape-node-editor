@@ -1,0 +1,141 @@
+diff --git a/models/BTCompanyUserSummaryInfo.ts b/models/BTCompanyUserSummaryInfo.ts
+index 7aa3c9d577815fa3a3ab571609f4c4a4cf28722d..afc99194a05ecb093c1f10ab2d4b8534d02c388b 100644
+--- a/models/BTCompanyUserSummaryInfo.ts
++++ b/models/BTCompanyUserSummaryInfo.ts
+@@ -34,8 +34,6 @@ import {
+ } from './GlobalPermissionInfo';
+ 
+ import {
+-     BTCompanyUserSummaryInfoFromJSONTyped,
+-    BTCompanyUserSummaryInfoToJSON,
+      BTCompanyUserSummaryAdminInfoFromJSONTyped,
+     BTCompanyUserSummaryAdminInfoToJSON
+ } from './';
+diff --git a/models/BTDiffInfo.ts b/models/BTDiffInfo.ts
+index b1523e673bf48f17ed82a097e0f87349954e44b9..65ae3b65fe7f013af52e4b08a6312b1838eea90d 100644
+--- a/models/BTDiffInfo.ts
++++ b/models/BTDiffInfo.ts
+@@ -13,12 +13,6 @@
+  */
+ 
+ import { exists, mapValues } from '../runtime';
+-import type { BTDiffInfo } from './BTDiffInfo';
+-import {
+-    BTDiffInfoFromJSON,
+-    BTDiffInfoFromJSONTyped,
+-    BTDiffInfoToJSON,
+-} from './BTDiffInfo';
+ import type { BTDiffInfoCollectionType } from './BTDiffInfoCollectionType';
+ import {
+     BTDiffInfoCollectionTypeFromJSON,
+diff --git a/models/BTDocumentInfo.ts b/models/BTDocumentInfo.ts
+index d71f94b8c47b975a58697c9572208d065662e6af..afe2b35ec390f8d0b28ee5cf3bb97912b71ba31e 100644
+--- a/models/BTDocumentInfo.ts
++++ b/models/BTDocumentInfo.ts
+@@ -70,8 +70,6 @@ import {
+ } from './BTWorkspaceInfo';
+ 
+ import {
+-     BTDocumentInfoFromJSONTyped,
+-    BTDocumentInfoToJSON,
+      BTDocumentProcessingInfoFromJSONTyped,
+     BTDocumentProcessingInfoToJSON
+ } from './';
+diff --git a/models/BTDocumentSummaryInfo.ts b/models/BTDocumentSummaryInfo.ts
+index 4d974aada38454cf61978c0ce31affa33327b16b..8af80ef4e30de1e87a0e1010b885ea4f5dc01eb3 100644
+--- a/models/BTDocumentSummaryInfo.ts
++++ b/models/BTDocumentSummaryInfo.ts
+@@ -72,8 +72,6 @@ import {
+ import {
+      BTDocumentInfoFromJSONTyped,
+     BTDocumentInfoToJSON,
+-     BTDocumentSummaryInfoFromJSONTyped,
+-    BTDocumentSummaryInfoToJSON,
+      BTDocumentSummarySearchInfoFromJSONTyped,
+     BTDocumentSummarySearchInfoToJSON
+ } from './';
+diff --git a/models/BTMAssemblyFeature887.ts b/models/BTMAssemblyFeature887.ts
+index 7e9159ab06570e4670beb354d6e73b5b6778291f..ac27c6e42da633a998020b6ffdfcd86e8a8ee192 100644
+--- a/models/BTMAssemblyFeature887.ts
++++ b/models/BTMAssemblyFeature887.ts
+@@ -31,7 +31,6 @@ import {
+     BTMMateConnector66FromJSON,
+     BTMMateConnector66FromJSONTyped,
+     BTMMateConnector66ToJSON,
+-    BTMMateConnector66ToJSON,
+ } from './BTMMateConnector66';
+ import type { BTMParameter1 } from './BTMParameter1';
+ import {
+@@ -69,7 +68,6 @@ import {
+     BTMLoad3538ToJSON,
+      BTMMate64FromJSONTyped,
+     BTMMate64ToJSON,
+-     BTMMateConnector66FromJSONTyped,
+      BTMMateGroup65FromJSONTyped,
+     BTMMateGroup65ToJSON,
+      BTMMateRelation1412FromJSONTyped,
+diff --git a/models/BTParameterVisibilityInRange2980.ts b/models/BTParameterVisibilityInRange2980.ts
+index 2cfb1f5f85c1b201e683c87ccc8743c0058fe82b..6f24df2ee8fc8d9e0b8ca57bbee895192787cda9 100644
+--- a/models/BTParameterVisibilityInRange2980.ts
++++ b/models/BTParameterVisibilityInRange2980.ts
+@@ -38,7 +38,7 @@ export interface BTParameterVisibilityInRange2980 extends BTParameterVisibilityC
+      * @type {string}
+      * @memberof BTParameterVisibilityInRange2980
+      */
+-    btType?: string;
++    btType: string;
+     /**
+      * 
+      * @type {BTEnumOptionRange3741}
+diff --git a/models/BTUserBasicSummaryInfo.ts b/models/BTUserBasicSummaryInfo.ts
+index ee7f17e2ef5265810820150c1b5ea34e4af559bb..b2281fd0b235781d9475bd4100ef6769fec6b254 100644
+--- a/models/BTUserBasicSummaryInfo.ts
++++ b/models/BTUserBasicSummaryInfo.ts
+@@ -16,8 +16,6 @@ import { exists, mapValues } from '../runtime';
+ import {
+      BTUserDetailSummaryInfoFromJSONTyped,
+     BTUserDetailSummaryInfoToJSON,
+-     BTUserBasicSummaryInfoFromJSONTyped,
+-    BTUserBasicSummaryInfoToJSON
+ } from './';
+ 
+ /**
+diff --git a/models/BTUserDetailSummaryInfo.ts b/models/BTUserDetailSummaryInfo.ts
+index 2671a11a2a6c6b265dd41b5e862988704b4fe8de..438718348fd4185eb53d8113ecc262dc1de9c42c 100644
+--- a/models/BTUserDetailSummaryInfo.ts
++++ b/models/BTUserDetailSummaryInfo.ts
+@@ -22,8 +22,6 @@ import {
+ } from './BTUserBasicSummaryInfo';
+ 
+ import {
+-     BTUserDetailSummaryInfoFromJSONTyped,
+-    BTUserDetailSummaryInfoToJSON,
+      BTUserSummaryInfoFromJSONTyped,
+     BTUserSummaryInfoToJSON
+ } from './';
+diff --git a/models/BTUserInfo.ts b/models/BTUserInfo.ts
+index 27a5e54a1b1e3440c18c5cd886b2ffd6fd4449cc..f24a5073970767b67858808c12b23a6ae8640a89 100644
+--- a/models/BTUserInfo.ts
++++ b/models/BTUserInfo.ts
+@@ -78,8 +78,6 @@ import {
+ import {
+      BTUserAdminInfoFromJSONTyped,
+     BTUserAdminInfoToJSON,
+-     BTUserInfoFromJSONTyped,
+-    BTUserInfoToJSON
+ } from './';
+ 
+ /**
+diff --git a/models/BTUserSummaryInfo.ts b/models/BTUserSummaryInfo.ts
+index 1b75509fc875ddabf56413fd9555bba42049f1c1..c48629ccfa9ba85ca1b321bb692d0c83a1174b1c 100644
+--- a/models/BTUserSummaryInfo.ts
++++ b/models/BTUserSummaryInfo.ts
+@@ -40,8 +40,6 @@ import {
+     BTUserOAuth2SummaryInfoToJSON,
+      BTCompanyUserSummaryInfoFromJSONTyped,
+     BTCompanyUserSummaryInfoToJSON,
+-     BTUserSummaryInfoFromJSONTyped,
+-    BTUserSummaryInfoToJSON,
+      BTUserInfoFromJSONTyped,
+     BTUserInfoToJSON
+ } from './';
