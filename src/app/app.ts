@@ -26,12 +26,37 @@ import { UserInfo } from "./onshape-utils/userinfo";
 import { STD } from "./onshape-utils/stdlib";
 import { tooltipDirective } from "./components/tooltip/TooltipDirective";
 import { describeLiveSelectionDependencies } from "./onshape-utils/liveselectionguard";
+import {
+    browserStorage,
+    FeatureStudioTarget,
+    FeatureStudioTargetSettings,
+    formatTarget,
+    MemoryStorage,
+} from "./onshape-utils/featurestudiotarget";
+import { FeatureStudioUploader, UploadOutcome } from "./onshape-utils/featurestudioupload";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
     public myclient = 'https://williambagel.github.io/onshape-node-editor';
     public userinfo!: UserInfo;
     public developerMode = false;
+    /**
+     * #1: persisted Feature Studio target. `UserSettings.featureStudioTarget` is
+     * the same type and is where #6 will migrate it once Save/Open exists; the
+     * target lives in browser storage today because `UserInfo.init()` only
+     * resolves inside an embedded Onshape session.
+     */
+    public featureStudioTargets = new FeatureStudioTargetSettings(browserStorage() ?? new MemoryStorage());
+    /**
+     * Confirmation for overwriting a non-empty Feature Studio. Replaceable so a
+     * real dialog (once the UI has one) or a test can stand in for `confirm()`.
+     */
+    public confirmUpload: (diffText: string) => boolean = (diffText) => {
+        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+            return false;
+        }
+        return window.confirm(diffText);
+    };
 
     public start(): void {
         this.userinfo = new UserInfo(this.onshape);
@@ -41,6 +66,51 @@ export class App extends BaseApp {
         this.processUserInfo();
 
         this.getStandardLibrary();
+    }
+
+    /* --- #1: Feature Studio upload target ------------------------------- */
+
+    /** The persisted upload target, or `undefined` when none is set. */
+    public getFeatureStudioTarget(): FeatureStudioTarget | undefined {
+        return this.featureStudioTargets.get();
+    }
+
+    /** Persist a target from a typed object or its `did=...&wvm=...` string form. Throws when invalid. */
+    public setFeatureStudioTarget(target: FeatureStudioTarget | string): FeatureStudioTarget {
+        const stored = this.featureStudioTargets.set(target);
+        this.reportMessage(`Feature Studio target set to ${formatTarget(stored)}`);
+        return stored;
+    }
+
+    /**
+     * A starting point for the target prompt: this document, its default
+     * workspace, and no element id (the Feature Studio has to be picked).
+     */
+    public suggestFeatureStudioTarget(): string {
+        return `did=${this.documentId ?? ''},wvm=w,wvmid=${this.workspaceId ?? ''},eid=`;
+    }
+
+    /** Show a message through the existing client-messaging path (#4 owns the real log panel). */
+    public reportMessage(message: string): void {
+        if (message == null || message === '') return;
+        this.clientMessaging?.showMessageBubble(message);
+    }
+
+    /**
+     * Upload the generated FeatureScript to the configured Feature Studio.
+     *
+     * `source` is the string `generateFeatureStudioSource()` returned; it is
+     * handed to Onshape byte-for-byte. Returns the outcome so the caller (and
+     * tests) can tell "wrote", "already up to date" and "refused" apart.
+     */
+    public uploadFeatureStudio(source: string | undefined): Promise<UploadOutcome> {
+        const uploader = new FeatureStudioUploader({
+            api: this.onshape?.featureStudioApi,
+            getTarget: () => this.getFeatureStudioTarget(),
+            notify: (message) => this.reportMessage(message),
+            confirm: (diffText) => this.confirmUpload(diffText),
+        });
+        return uploader.upload(source);
     }
 
     public processUserInfo(): void {

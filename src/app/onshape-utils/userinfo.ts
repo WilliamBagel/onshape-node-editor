@@ -22,6 +22,7 @@
 import { OnshapeAPI } from "../common/onshapeapi";
 import { AppStorage } from "./appstorage";
 import { NodeStore } from "./nodestore";
+import type { FeatureStudioTarget } from "./featurestudiotarget";
 
 const USERINFO_SYMBOL = 'ⓘ';
 const USERINFO_NAME = "Onshape-Node-Editor_UserInfo"
@@ -30,6 +31,14 @@ const USERINFO_ELEMENTNAME = "User Info"
 export type UserSettings = {
     createdDate: string,
     nodestores: NodeStore[];
+    /**
+     * #1: where the generated FeatureScript is uploaded. Persisted here as a
+     * typed field so it travels with the rest of the user settings once #6
+     * wires Save/Open; until then `FeatureStudioTargetSettings`
+     * (./featurestudiotarget.ts) is the live store, because `UserInfo.init()`
+     * only resolves inside an embedded Onshape session.
+     */
+    featureStudioTarget?: FeatureStudioTarget;
 }
 
 export class UserInfo extends AppStorage<UserSettings> {

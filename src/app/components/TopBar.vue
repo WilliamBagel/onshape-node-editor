@@ -12,6 +12,8 @@
   Emits:
     build    - User clicked the Build button
     run      - User clicked the Run button
+    upload   - User clicked the Upload button (build + write to a Feature Studio)
+    target   - User clicked the Upload Target button
     save     - User clicked the Save File button
     open     - User clicked the Open File button
     settings - User clicked the Settings button
@@ -31,6 +33,8 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'build'): void
   (e: 'run'): void
+  (e: 'upload'): void
+  (e: 'target'): void
   (e: 'save'): void
   (e: 'open'): void
   (e: 'settings'): void
@@ -38,7 +42,7 @@ const emit = defineEmits<{
 
 /* ── Tooltip hover state ────────────────────────────────────────── */
 // Claude Sonnet 4.6: Track which button is hovered so only one tooltip shows
-type ButtonKey = 'build' | 'run' | 'save' | 'open' | 'settings' | null
+type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'settings' | null
 </script>
 
 <template>
@@ -66,6 +70,25 @@ type ButtonKey = 'build' | 'run' | 'save' | 'open' | 'settings' | null
           @click="emit('build')">
           <SvgIcon href="#svg-icon-update-now" :size="16" aria-label="Build" />
           <span class="btn-label">Build</span>
+        </button>
+      </div>
+
+      <!-- Upload button: build, then write the FeatureScript to a Feature Studio (#1) -->
+      <div class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Upload"
+          v-tooltip="{ label: 'Upload', description: 'Build the graph and write the result to the configured Feature Studio.' }"
+          @click="emit('upload')">
+          <SvgIcon href="#svg-icon-document-upload-cloud" :size="16" aria-label="Upload" />
+          <span class="btn-label">Upload</span>
+        </button>
+      </div>
+
+      <!-- Upload target: did / wvm / wvmid / eid of the Feature Studio to write -->
+      <div class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Upload target"
+          v-tooltip="{ label: 'Upload Target', description: 'Set the document, workspace and Feature Studio element the Build result is uploaded to.' }"
+          @click="emit('target')">
+          <SvgIcon href="#svg-icon-feature-studio-element" :size="16" aria-label="Upload target" />
         </button>
       </div>
 
