@@ -153,17 +153,25 @@ scripts/std-library-scrapper/      FsDoc scraper + organizer (see "Data sources"
 
 Live: extension bootstrap and OAuth, Rete canvas, node/connection rendering,
 feature-spec-driven parameter controls, build pipeline producing FeatureScript
-text.
+text, and the Feature Studio upload (#1: `onshape-utils/featurestudioupload.ts`
+— read, line diff, confirm, `updateFeatureStudioContents`, or
+`createFeatureStudio` when the element is missing; the toolbar Upload /
+Upload Target buttons drive it). The upload target is persisted in browser
+storage (`onshape-utils/featurestudiotarget.ts`) because `UserInfo.init()` only
+resolves inside an embedded session; `UserSettings.featureStudioTarget` carries
+the same type for #6.
 
 Dead (written, never instantiated): `NodeStore` and `UserInfo` in
 `src/app/onshape-utils/` — the whole app-element persistence path. The toolbar
 Save/Open handlers are empty. `rete-scopes-plugin` is installed but only used by
 the standalone demo `src/app/rete/scopes.ts`.
 
-Absent: any write to a Feature Studio, any call into a Part Studio (add feature /
-eval FeatureScript), node creation from a catalog, Save/Open wired to storage
-(the schema exists — `src/app/rete/serialization/`, issue #5 — but nothing calls
-it), typed value sockets, expression-based codegen, grouping in the real editor.
+Absent: any call into a Part Studio (add feature / eval FeatureScript), node
+creation from a catalog, graph serialization through the toolbar (the schema
+exists — `src/app/rete/serialization/`, issue #5 — but nothing calls it), typed
+value sockets, expression-based codegen, grouping in the real editor, a log panel
+for messages (#4), and a real settings/diff dialog (the upload uses `prompt` /
+`confirm`).
 
 ## Data sources
 
