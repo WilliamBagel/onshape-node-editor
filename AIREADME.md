@@ -68,19 +68,19 @@ pnpm is canonical (CI pins pnpm 11.5.2 and `pnpm-lock.yaml` exists). The stray
 ```
 CI=true pnpm install          # required: node_modules may exist as empty dirs,
                               # and pnpm refuses to purge them without a TTY
-pnpm test                     # vitest run: 9 files / 43 tests (issue #3 onwards)
-pnpm run type-check           # vue-tsc --build over all three projects (raw view)
-pnpm run type-check:gate      # the gate: fails on any error under src/** (see below)
+pnpm test                     # vitest run: 11 files / 89 tests
+pnpm run type-check           # vue-tsc --build over all three projects: 0 errors
+pnpm run type-check:gate      # same run, parsed into counts; fails on any error
 pnpm run build:app            # vite build -> dist/app
 pnpm run build:server         # tsc -p tsconfig.server.json + asset copy
 pnpm run dev                  # vite dev server
 ```
 
-`.github/workflows/ci.yml` runs install (`--frozen-lockfile`), the gate, `pnpm
-test` and both builds on every pull request against `master`. It deliberately
-runs the *gate*, not the raw `pnpm run type-check`, until issue #24 lands (the
-raw command is red on the vendored-dependency errors below). Its GitHub-side run
-is unverified until a branch is pushed.
+`.github/workflows/ci.yml` runs install (`--frozen-lockfile`), `pnpm run
+type-check`, `pnpm test` and both builds on every pull request against `master`,
+and carries no exemptions — the compiler is clean repo-wide since #24 patched the
+one dependency that used to report errors. Its GitHub-side run is unverified until
+a branch is pushed.
 
 `src/server/**` needs `@types/node-fetch` (devDependency) to type-check and
 build; the runtime `node-fetch` itself comes from `scripts/server-lock`
@@ -106,23 +106,26 @@ deliberate relaxations, `"strict": false` and `"verbatimModuleSyntax": false`:
   deep type imports such as `rete-vue-plugin/_types/presets/classic/types`, and
   only import elision was hiding it.
 
-**The gate is `pnpm run type-check:gate`** (`scripts/typecheck-gate.mjs`): it
-fails on any error under `src/**`, and exempts the 25 errors inside the
-dependency `onshape-typescript-fetch`, which cannot be fixed from this repo (a
-source-only git tarball, `main: "index.ts"`, no `.d.ts`, so `skipLibCheck` does
-not cover its generated `.ts` models; its models import their own from-JSON
-helpers `from './'`). Every exempted line is printed, a non-zero compiler exit
-with nothing parseable is itself a failure, and the check always runs `--force`
-so cached diagnostics cannot pass a broken tree. Patch-or-upstream is tracked as
-issue **#24**, and `ci.yml` switches to the raw `pnpm run type-check` when it
-lands.
+**The gate is `pnpm run type-check:gate`** (`scripts/typecheck-gate.mjs`): it runs
+the same build with `--force` and parses the diagnostics into counts, so CI can
+fail on a number instead of a human reading a log. **Every error counts now,
+wherever it lives** — the node_modules counter is still printed, but it no longer
+buys an exemption. That is possible because issue **#24** removed the 25 errors
+that used to live inside `onshape-typescript-fetch` (a source-only git tarball,
+`main: "index.ts"`, no `.d.ts`, so `skipLibCheck` could not cover its generated
+`.ts` models) with a `pnpm patch` recorded in `patches/` and wired through
+`patchedDependencies` in `pnpm-workspace.yaml`. Removing that entry brings all 25
+back and makes the gate print `GATE FAILED`, so the patch is load-bearing, not a
+filter. A non-zero compiler exit with nothing parseable is itself a failure.
 
 **Tests.** `pnpm test` is vitest (`vitest.config.ts`, node environment) and
 covers the graph -> FeatureScript pipeline: the generator's indent/dedupe/header,
 the node processor's main-path selection and leaf pruning, the linked-node walk
-ordering, the DR-001 warning gate and the load-time selection guard, and a
-byte-identical graph serialize/deserialize round trip. Run one file with
-`pnpm test <path>` (or `npx vitest run <path>`).
+ordering, the DR-001 warning gate and the load-time selection guard, a
+byte-identical graph serialize/deserialize round trip, and the Feature Studio
+upload flow (payload byte-exactness, the read/diff/confirm/write ordering, the
+error text surfaced verbatim). Run one file with `pnpm test <path>` (or
+`npx vitest run <path>`).
 
 Scraper scripts (see below): `pnpm run scrape:docs`, `pnpm run organize:docs`,
 `pnpm run scrape:all`.
@@ -161,10 +164,14 @@ storage (`onshape-utils/featurestudiotarget.ts`) because `UserInfo.init()` only
 resolves inside an embedded session; `UserSettings.featureStudioTarget` carries
 the same type for #6.
 
-Dead (written, never instantiated): `NodeStore` and `UserInfo` in
-`src/app/onshape-utils/` — the whole app-element persistence path. The toolbar
-Save/Open handlers are empty. `rete-scopes-plugin` is installed but only used by
-the standalone demo `src/app/rete/scopes.ts`.
+Partly dead: `UserInfo` and `NodeStore` in `src/app/onshape-utils/` — the
+app-element persistence path. `UserInfo` **is** constructed in `App.start()`
+(`src/app/app.ts`) and `processUserInfo()` calls `init()`/`getUserSettings()`,
+but its settings are only read at startup and nothing writes them; `NodeStore`
+is never touched, the toolbar Save/Open handlers are empty, and `init()` only
+resolves inside an embedded Onshape session. (An earlier version of this file
+said "never instantiated" — that was wrong.) `rete-scopes-plugin` is installed
+but only used by the standalone demo `src/app/rete/scopes.ts`.
 
 Absent: any call into a Part Studio (add feature / eval FeatureScript), node
 creation from a catalog, graph serialization through the toolbar (the schema
@@ -190,9 +197,11 @@ for messages (#4), and a real settings/diff dialog (the upload uses `prompt` /
 - `node_modules/` can look installed while every package directory is empty.
   Check `find node_modules -type f | wc -l` before blaming the code. `pnpm
   install` needs `CI=true` if the modules dir already exists as empty dirs.
-- `pnpm run type-check` still exits non-zero on 25 errors inside
-  `onshape-typescript-fetch`. That is expected; the gate command is
-  `pnpm run type-check:gate`.
+- `pnpm run type-check` is clean repo-wide (0 errors) since #24 patched the
+  vendored client, and the gate counts *every* error now. If 25 errors about
+  `onshape-typescript-fetch` models ever come back, the `patchedDependencies`
+  entry in `pnpm-workspace.yaml` is missing or the lockfile no longer matches it
+  — pnpm will refuse a frozen install in that state.
 - `src/app/**` currently type-checks with `strict` and `verbatimModuleSyntax`
   off; turning either on reports ~212 errors (see "Type checking and the gate").
 - `src/app/rete/editor.ts` and `devEditor.ts` are demo harnesses with inline

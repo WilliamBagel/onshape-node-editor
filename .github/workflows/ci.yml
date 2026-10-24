@@ -5,13 +5,11 @@ name: CI
 # Deliberately separate from deploy-production.yml, which stays default-branch
 # only (a PR must never be able to deploy).
 #
-# NOTE ON type-check: this job runs `pnpm run type-check:gate`, not the raw
-# `pnpm run type-check`. The raw command exits non-zero on 25 errors that live
-# inside the vendored dependency `onshape-typescript-fetch` (source-only tarball,
-# so `skipLibCheck` cannot cover its .ts models). Those are tracked as issue #24.
-# When #24 lands, replace the gate step with the raw `pnpm run type-check` - the
-# gate exists to measure this repo's own errors while that debt is open, not to
-# replace the compiler.
+# type-check is the raw `pnpm run type-check` (vue-tsc over all three projects),
+# with no exemptions: issue #24 patched the one dependency that used to report 25
+# errors, so the compiler is now clean repo-wide and every error should fail the
+# job. If a dependency ever regresses, the fix is a patch under patches/ (see
+# pnpm-workspace.yaml), not a filter here.
 
 on:
   pull_request:
@@ -61,8 +59,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: "Type-check (the gate: errors this repo owns)"
-        run: pnpm run type-check:gate
+      - name: "Type-check"
+        run: pnpm run type-check
 
       - name: Unit tests
         run: pnpm test
