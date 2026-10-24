@@ -19,7 +19,10 @@ Onshape REST API (`src/server/`).
 ## State of truth
 
 - `docs/design-rules.md` — conventions that are not optional (read DR-001
-  before touching anything selection-related).
+  before touching anything selection-related, DR-007 before touching node
+  stacking).
+- `docs/graph-schema.md` — saved-graph document contract: schema **v2**, and
+  `nodeOrder` (bottom-most first) is the persisted node paint order (DR-007).
 - GitHub issues — the backlog. `priority/p0` are the only ones that matter
   until the first end-to-end loop exists. `gh issue list --label priority/p0`.
 - `tmp/HANDOFF.md` — the operational handoff for whoever picks this up next,

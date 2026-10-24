@@ -81,3 +81,22 @@ in git, and unable to outlive a renderer change.
 
 Corollary: the LaTeX/MathML emitted for display is a view concern, not a codegen
 concern. FeatureScript generation reads the AST, never the rendered output.
+
+## DR-007 — Node paint order is canvas state, persisted, never CSS
+
+`rete-area-plugin` stacks nodes by DOM order, not by `z-index`: nodes are
+absolutely positioned siblings inside the area content holder, and the plugin
+reorders those elements itself. A `z-index` rule therefore cannot be trusted —
+it and the DOM order disagree, and the plugin wins on the next interaction.
+
+So: the paint order is one explicit list of node ids, bottom-most first, owned by
+the canvas (`NodeOrderKeeper`, `src/app/rete/modified-rete/nodeorder.ts`) and
+applied with `area.area.content.reorder(element, next)` — the installed 2.1.5 API
+(DR-003: a `BaseAreaPlugin` has no `reorder` of its own). It is not a boolean, not
+a per-node ordinal, and not a style. Selecting raises a node and it stays raised;
+deselecting changes nothing.
+
+That list is saved with the document as `nodeOrder` and restored on load, so a
+graph reopens looking the way it was left. `AreaExtensions.simpleNodesOrder` must
+not be installed: it reorders the DOM on `nodepicked`, which makes it a second
+owner of the same truth.

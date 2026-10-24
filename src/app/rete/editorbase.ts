@@ -1,6 +1,6 @@
 import { inject } from 'vue';
 import { NodeEditor } from "rete";
-import { AreaExtensions, AreaPlugin, Drag } from "rete-area-plugin";
+import { Area2D, AreaExtensions, AreaPlugin, Drag } from "rete-area-plugin";
 import { VuePlugin, Presets as VuePresets } from "rete-vue-plugin";
 import { addCustomBackground } from "../customization/custom-background";
 import { ResizeController } from "../utils/resizecontroller";
@@ -30,6 +30,7 @@ import { CustomConnectionPlugin } from "./customconnectionplugin";
 import { OnshapeNode } from "./nodes/onshapenode";
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
+import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
 
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
@@ -49,14 +50,18 @@ export type StudioEvents = {
 
 export type EditorControls = {
     studioEvents: StudioEvents
-    destroy: () => void;
+    /** The canvas's node paint order, bottom-most first (#27 / DR-007). */
+    getNodeOrder: () => string[]
+    destroy: () => void
 }
 
 type EditorBaseInfo = {
     editor: NodeEditor<Schemes>,
     area: AreaPlugin<Schemes, AreaExtra>,
     connection: ConnectionSnappingPlugin<Schemes, AreaExtra>,
-    studioEvents: StudioEvents
+    studioEvents: StudioEvents,
+    /** Owner of the node paint order (#27); the save path reads `getOrder()`. */
+    nodeOrder: NodeOrderKeeper<Schemes, Area2D<Schemes> | AreaExtra>
 }
 
 export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo> {
@@ -264,6 +269,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         }
     });
 
+    // The node paint order (#27, DR-007) is owned here, by the canvas: one
+    // explicit list of node ids, applied with `area.area.content.reorder`.
+    // Do NOT also install `AreaExtensions.simpleNodesOrder` — it listens to
+    // `nodepicked` and reorders the DOM itself, which would make it a second
+    // owner of the order this app persists as `nodeOrder`.
+    const nodeOrder = installNodeOrder(area, {
+        getSelectedIds: () => Array.from(selector.entities.values())
+            .filter((entity) => entity.label === 'node')
+            .map((entity) => entity.id)
+    });
+
 
     // DataflowEngine listens for `nodecreated`, so it must be installed before
     // the editor gets any nodes (createEditor adds them after editorBase returns).
@@ -277,6 +293,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         editor,
         area,
         connection,
+        nodeOrder,
         studioEvents: { build: buildStudio, describe: describeStudio }
     }
 }

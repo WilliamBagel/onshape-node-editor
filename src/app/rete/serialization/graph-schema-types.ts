@@ -1,13 +1,20 @@
 /**
- * Serialized graph schema, version 1.
+ * Serialized graph schema, version 2.
  *
  * A saved graph is one JSON document:
  *
  *   {
- *     "schemaVersion": 1,
+ *     "schemaVersion": 2,
  *     "nodes": [ { "id", "kind", "position", "size", "group", ... } ],
- *     "connections": [ { "source", "sourceOutput", "target", "targetInput" } ]
+ *     "connections": [ { "source", "sourceOutput", "target", "targetInput" } ],
+ *     "nodeOrder": [ "<node id>", ... ]
  *   }
+ *
+ * `nodeOrder` is the canvas paint order, bottom-most first (the last id paints
+ * on top). It is one list for the whole graph, not a per-node ordinal, so it
+ * cannot disagree with itself. The canvas owns it (`NodeOrderKeeper` in
+ * `../modified-rete/nodeorder.ts`, DR-007); the serializer records what the
+ * canvas reports on save and hands it back on load.
  *
  * Node ids are stable across a save/load cycle: they are written to disk and
  * restored on load, because connection endpoints and the generator's variable
@@ -37,8 +44,15 @@ import type { BTFeatureSpec129 } from "onshape-typescript-fetch";
 import type { Annotation } from "../../onshape-utils/featurescripttypes";
 import type { Precondition } from "../nodes/definefeaturenode";
 
-/** Version written by this build, and the only version it will load. */
-export const GRAPH_SCHEMA_VERSION = 1;
+/** Version written by this build. Version 1 is still accepted on load. */
+export const GRAPH_SCHEMA_VERSION = 2;
+
+/**
+ * Versions `deserializeGraph` accepts. A version-1 document has no `nodeOrder`;
+ * its paint order is derived from the `nodes` array (creation order) and the
+ * load reports that it did so.
+ */
+export const LOADABLE_SCHEMA_VERSIONS: readonly number[] = [1, GRAPH_SCHEMA_VERSION];
 
 /** `OnshapeNode.type` values that can appear in a saved graph. */
 export type SerializedNodeKind = "CustomFeature" | "define-feature" | "output-feature";
@@ -133,8 +147,14 @@ export interface SerializedConnection {
 
 export interface SerializedGraph {
     schemaVersion: number;
+    /** Every node, in creation order (not paint order — see `nodeOrder`). */
     nodes: SerializedNode[];
     connections: SerializedConnection[];
+    /**
+     * Node ids, bottom-most first: the last id paints on top. Always written by
+     * this build; absent in version-1 documents.
+     */
+    nodeOrder: string[];
 }
 
 /**

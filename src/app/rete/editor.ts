@@ -14,7 +14,7 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, studioEvents } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -77,6 +77,7 @@ export async function createEditor(container: HTMLElement) {
   // await editor.addConnection(new Connection(a, 'a', a.inputs['a'].socket.name, b, 'a', b.inputs['a'].socket.name, new StyleSettings()));
   return {
     studioEvents,
+    getNodeOrder: () => nodeOrder.getOrder(),
     destroy: () => area.destroy(),
   };
 }

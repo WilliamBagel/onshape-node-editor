@@ -207,15 +207,14 @@ export default defineComponent({
 @use "sass:math";
 @use "./vars" as *;
 
+// Paint order is DOM order, owned by the canvas (#27, DR-007): nodes are
+// reordered by `NodeOrderKeeper`, so there is no z-index here to fight it.
+// `z-index: -1` used to paint every node behind the canvas background.
 .node {
-  z-index: -1;
-
   &.selected {
     .ns-dialog-frame {
       box-shadow: 0 5px 10px #393939;
     }
-
-    z-index: 0;
   }
 }
 
