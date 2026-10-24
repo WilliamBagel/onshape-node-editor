@@ -35,6 +35,7 @@ const emit = defineEmits<{
   (e: 'run'): void
   (e: 'upload'): void
   (e: 'target'): void
+  (e: 'runTarget'): void
   (e: 'save'): void
   (e: 'open'): void
   (e: 'settings'): void
@@ -89,6 +90,15 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
           v-tooltip="{ label: 'Upload Target', description: 'Set the document, workspace and Feature Studio element the Build result is uploaded to.' }"
           @click="emit('target')">
           <SvgIcon href="#svg-icon-feature-studio-element" :size="16" aria-label="Upload target" />
+        </button>
+      </div>
+
+      <!-- Run target: the Part Studio the generated feature is inserted into (#2) -->
+      <div class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Run target"
+          v-tooltip="{ label: 'Run Target', description: 'Set the Part Studio that Run inserts the generated feature into.' }"
+          @click="emit('runTarget')">
+          <SvgIcon href="#svg-icon-partstudio" :size="16" aria-label="Run target" />
         </button>
       </div>
 
