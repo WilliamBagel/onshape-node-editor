@@ -33,7 +33,11 @@ import {
     formatTarget,
     MemoryStorage,
 } from "./onshape-utils/featurestudiotarget";
-import { FeatureStudioUploader, UploadOutcome } from "./onshape-utils/featurestudioupload";
+import {
+    FeatureStudioUploader,
+    UploadOutcome,
+} from "./onshape-utils/featurestudioupload";
+import { BuildLogStore, type LogSeverity } from "./logging/buildlog";
 import {
     FeatureInsertion,
     InsertOutcome,
@@ -61,6 +65,12 @@ export class App extends BaseApp {
      * and mixing them up is the defect the issue warns about.
      */
     public partStudioTargets = new PartStudioTargetSettings(browserStorage() ?? new MemoryStorage());
+    /**
+     * #4: the build/upload/run log. Everything the pipeline reports lands here
+     * and is rendered by `LogPanel.vue`; the panel is the only place those
+     * outcomes are visible (the console is no longer the log).
+     */
+    public log = new BuildLogStore();
     /**
      * Confirmation for overwriting a non-empty Feature Studio. Replaceable so a
      * real dialog (once the UI has one) or a test can stand in for `confirm()`.
@@ -104,10 +114,135 @@ export class App extends BaseApp {
         return `did=${this.documentId ?? ''},wvm=w,wvmid=${this.workspaceId ?? ''},eid=`;
     }
 
-    /** Show a message through the existing client-messaging path (#4 owns the real log panel). */
-    public reportMessage(message: string): void {
+    /**
+     * #4: record a user-facing message in the log and show it as a bubble.
+     *
+     * Severity is the caller's decision (never sniffed from the text); the
+     * default keeps existing one-line callers informational. `source` names the
+     * pipeline stage: `build`, `upload`, `run`, or `editor` for everything else.
+     */
+    public reportMessage(
+        message: string,
+        severity: LogSeverity = 'info',
+        source: string = 'editor',
+    ): void {
         if (message == null || message === '') return;
+        this.log.add({ severity, source, message });
         this.clientMessaging?.showMessageBubble(message);
+    }
+
+    /**
+     * #4: the Build button's outcome.
+     *
+     * `source` is what `studioEvents.build()` resolved to (`undefined` when the
+     * generator found nothing to generate from). The generated FeatureScript is
+     * attached as `detail` so the panel can show it instead of the console.
+     */
+    public reportBuildResult(source: string | undefined, failure?: string): void {
+        if (failure !== undefined) {
+            this.log.add({ severity: 'error', source: 'build', message: `Build failed: ${failure}` });
+            return;
+        }
+        if (typeof source !== 'string' || source === '') {
+            this.log.add({
+                severity: 'error',
+                source: 'build',
+                message: 'Build produced no FeatureScript. Connect an Output node and try again.',
+            });
+            return;
+        }
+        this.log.add({
+            severity: 'info',
+            source: 'build',
+            message: `Built FeatureScript (${source.length} bytes).`,
+            detail: source,
+            detailLabel: 'Generated FeatureScript',
+        });
+    }
+
+    /**
+     * #4: one typed entry per Run, with the failure text as the panel's detail
+     * block. Severity comes from the typed `InsertOutcome`, never from the text -
+     * the same rule `reportUploadOutcome` follows.
+     *
+     * (The merge that landed #2 next to #4 replaced #4's "Run is not implemented"
+     * placeholder: Run is implemented now, so that entry had no way to be reached.)
+     */
+    private reportInsertOutcome(outcome: InsertOutcome): void {
+        switch (outcome.status) {
+            case 'inserted':
+                this.log.add({
+                    severity: 'info',
+                    source: 'run',
+                    message: `Inserted ${outcome.featureType} into the Part Studio${outcome.featureId !== undefined ? ` (feature ${outcome.featureId})` : ''}.`,
+                    detail: JSON.stringify({ namespace: outcome.namespace, parameters: outcome.parameters }, null, 2),
+                    detailLabel: 'Inserted feature request',
+                });
+                return;
+            case 'rejected':
+                this.log.add({
+                    severity: 'error',
+                    source: 'run',
+                    message: `Run rejected the feature${outcome.removed ? ' (the half-created feature was removed)' : ''}: ${outcome.message}`,
+                    detail: outcome.message,
+                    detailLabel: 'FeatureScript problems',
+                });
+                return;
+            case 'skew':
+                this.log.add({
+                    severity: 'error',
+                    source: 'run',
+                    message: `Run refused on microversion skew: ${outcome.message}`,
+                    detail: JSON.stringify(outcome.skew, null, 2),
+                    detailLabel: 'Microversion skew',
+                });
+                return;
+            case 'failed':
+                this.log.add({
+                    severity: 'error',
+                    source: 'run',
+                    message: `Run failed (${outcome.stage}): ${outcome.message}`,
+                });
+                return;
+        }
+    }
+
+    /** #4: the upload flow's typed result. Text bodies stay verbatim. */
+    private reportUploadOutcome(outcome: UploadOutcome): void {
+        switch (outcome.status) {
+            case 'uploaded':
+                this.log.add({
+                    severity: 'info',
+                    source: 'upload',
+                    message: `${outcome.created ? 'Created and wrote' : 'Wrote'} ${outcome.contents.length} bytes to Feature Studio ${outcome.target.eid}.`,
+                    detail: outcome.contents,
+                    detailLabel: 'Uploaded FeatureScript',
+                });
+                return;
+            case 'unchanged':
+                this.log.add({
+                    severity: 'info',
+                    source: 'upload',
+                    message: `Feature Studio ${outcome.target.eid} is already up to date; nothing was written.`,
+                    detail: outcome.contents,
+                    detailLabel: 'FeatureScript already in the Feature Studio',
+                });
+                return;
+            case 'cancelled':
+                this.log.add({
+                    severity: 'warning',
+                    source: 'upload',
+                    message: 'Upload cancelled; the Feature Studio was not modified.',
+                });
+                return;
+            case 'failed':
+                this.log.add({
+                    severity: 'error',
+                    source: 'upload',
+                    message: `Upload failed (${outcome.stage}): ${outcome.message}`,
+                });
+                return;
+        }
     }
 
     /**
@@ -121,10 +256,16 @@ export class App extends BaseApp {
         const uploader = new FeatureStudioUploader({
             api: this.onshape?.featureStudioApi,
             getTarget: () => this.getFeatureStudioTarget(),
-            notify: (message) => this.reportMessage(message),
+            // The uploader's per-step messages stay on the parent-frame bubble
+            // path; the typed panel entry is written once, below, from the
+            // returned outcome so its severity and detail are known exactly.
+            notify: (message) => this.clientMessaging?.showMessageBubble(message),
             confirm: (diffText) => this.confirmUpload(diffText),
         });
-        return uploader.upload(source);
+        return uploader.upload(source).then((outcome) => {
+            this.reportUploadOutcome(outcome);
+            return outcome;
+        });
     }
 
     /* --- #2: Part Studio insertion target ------------------------------- */
@@ -154,15 +295,21 @@ export class App extends BaseApp {
      * namespace is resolved from the Feature Studio target, never from the Part
      * Studio target, and every failure is reported through `reportMessage()`.
      */
-    public insertPartStudioFeature(feature: FeatureInsertion): Promise<InsertOutcome> {
+    public async insertPartStudioFeature(feature: FeatureInsertion): Promise<InsertOutcome> {
         const inserter = new PartStudioFeatureInserter({
             partStudioApi: this.onshape?.partStudioApi,
             featureStudioApi: this.onshape?.featureStudioApi,
             getDefiningTarget: () => this.getFeatureStudioTarget(),
             getConsumerTarget: () => this.getPartStudioTarget(),
-            notify: (message) => this.reportMessage(message),
+            // The inserter's per-step messages stay parent-frame bubbles (#1's
+            // path); the *outcome* is recorded once, below, as a typed run entry
+            // so #4's panel gets the source tag and the detail block without
+            // duplicate lines for the same event.
+            notify: (message) => this.clientMessaging?.showMessageBubble(message),
         });
-        return inserter.insert(feature);
+        const outcome = await inserter.insert(feature);
+        this.reportInsertOutcome(outcome);
+        return outcome;
     }
 
     public processUserInfo(): void {
@@ -236,7 +383,9 @@ export class App extends BaseApp {
     public checkGraphForLiveSelection(graph: unknown): string[] {
         const warnings = describeLiveSelectionDependencies(graph);
         for (const warning of warnings) {
-            this.clientMessaging?.showMessageBubble(warning);
+            // Also in the panel; the deduplication lives in the guard, so this
+            // loop can only ever see each finding once.
+            this.reportMessage(warning, 'warning', 'editor');
         }
         return warnings;
     }
