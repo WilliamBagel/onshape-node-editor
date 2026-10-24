@@ -108,6 +108,18 @@ export class DefineFeatureNode extends OnshapeNode {
         return variables;
     }
 
+    /**
+     * The parameters the generated feature declares, in author order.
+     *
+     * Each `precondition` entry becomes `definition.<id> is <type>` in the
+     * generated Feature Studio, which is what makes it a parameter of the feature
+     * that #2 inserts into a Part Studio. `Run` reads them through
+     * `describeGeneratedFeature`.
+     */
+    public getPreconditions(): readonly Precondition[] {
+        return this.preconditions;
+    }
+
     public getFeaturescript(variableMapping: Record<string, string>): string {
         let preconditionString: string = "precondition\n{\n";
 

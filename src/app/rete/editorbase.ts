@@ -30,7 +30,7 @@ import { CustomConnectionPlugin } from "./customconnectionplugin";
 import { OnshapeNode } from "./nodes/onshapenode";
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
-import { generateFeatureStudioSource } from "./graph-codegen";
+import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
 
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
@@ -39,6 +39,12 @@ export let reteAppInstance: any = null;
 
 export type StudioEvents = {
     build: () => Promise<string | undefined>;
+    /**
+     * The custom feature the graph defines, for `Run` (#2): `featureType`, a
+     * display name and a value for each declared parameter. Pure graph
+     * inspection — no Onshape call, no generated source.
+     */
+    describe: () => GeneratedFeatureDescription;
 }
 
 export type EditorControls = {
@@ -265,11 +271,12 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     editor.use(engine);
 
     const buildStudio: () => Promise<string | undefined> = async () => generateFeatureStudioSource(editor, engine);
+    const describeStudio = (): GeneratedFeatureDescription => describeGeneratedFeature(editor.getNodes());
 
     return {
         editor,
         area,
         connection,
-        studioEvents: { build: buildStudio }
+        studioEvents: { build: buildStudio, describe: describeStudio }
     }
 }

@@ -8,18 +8,24 @@ import { inject } from 'vue'
 import ToolTip from './components/tooltip/ToolTip.vue';
 import { editorBase, EditorControls } from './rete/editorbase.js';
 import { formatTarget, type FeatureStudioTarget } from './onshape-utils/featurestudiotarget';
+import type { FeatureInsertion } from './onshape-utils/partstudiofeature';
+import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 
 /**
- * The slice of `App` the toolbar needs for the Feature Studio upload (#1).
- * Declared here rather than imported from `./app` to keep the App <-> App.vue
- * import one-way.
+ * The slice of `App` the toolbar needs for the Feature Studio upload (#1) and
+ * the Part Studio insert (#2). Declared here rather than imported from `./app`
+ * to keep the App <-> App.vue import one-way.
  */
 interface FeatureStudioHost {
   getFeatureStudioTarget(): FeatureStudioTarget | undefined;
   setFeatureStudioTarget(target: string): unknown;
   suggestFeatureStudioTarget(): string;
+  getPartStudioTarget(): FeatureStudioTarget | undefined;
+  setPartStudioTarget(target: string): unknown;
+  suggestPartStudioTarget(): string;
   reportMessage(message: string): void;
   uploadFeatureStudio(source: string | undefined): Promise<unknown>;
+  insertPartStudioFeature(feature: FeatureInsertion): Promise<unknown>;
 }
 
 export default defineComponent({
@@ -92,8 +98,63 @@ export default defineComponent({
       const featurescript = await this.controls?.studioEvents.build();
       await host.uploadFeatureStudio(featurescript);
     },
-    runRun() {
+    /**
+     * Ask for the Part Studio target (`did`, `wvm`, `wvmid`, `eid`) and persist
+     * it. Mirrors `runSelectTarget`; same parser and validation, different
+     * storage key, because a Part Studio and a Feature Studio are never the same
+     * element.
+     */
+    async runSelectPartStudioTarget() {
+      const host = this.featureStudioHost();
+      if (host == null) return;
+      const current = host.getPartStudioTarget();
+      const initial = current != null ? formatTarget(current) : host.suggestPartStudioTarget();
+      const entered = window.prompt(
+        'Part Studio to insert the generated feature into\n' +
+        'did (document id), wvm (w=workspace, v=version, m=microversion), wvmid (workspace id) and eid (Part Studio element id):',
+        initial
+      );
+      if (entered == null) return;
+      try {
+        host.setPartStudioTarget(entered);
+      } catch (error) {
+        host.reportMessage(error instanceof Error ? error.message : String(error));
+      }
+    },
+    /**
+     * Run: insert the feature the graph defines into the configured Part Studio
+     * (#2). The Feature Studio target is the *defining* element (namespace), the
+     * Part Studio target is the *consumer*; both are required, and every message
+     * goes through `App.reportMessage()` so #4's log panel picks it up.
+     */
+    async runRun() {
+      const host = this.featureStudioHost();
+      if (host == null) return;
 
+      if (host.getFeatureStudioTarget() == null) {
+        host.reportMessage('Run needs the Feature Studio that defines the feature: set the Upload Target first.');
+        return;
+      }
+      if (host.getPartStudioTarget() == null) {
+        await this.runSelectPartStudioTarget();
+        if (host.getPartStudioTarget() == null) return;
+      }
+
+      const description: GeneratedFeatureDescription | undefined = this.controls?.studioEvents.describe();
+      if (description == null) {
+        host.reportMessage('Nothing to run: the editor is not ready yet.');
+        return;
+      }
+      if (description.ok !== true) {
+        host.reportMessage(description.message);
+        return;
+      }
+
+      await host.insertPartStudioFeature({
+        featureType: description.featureType,
+        featureName: description.featureName,
+        parameters: description.parameters,
+      });
     },
     runSave() {
 
@@ -113,7 +174,8 @@ export default defineComponent({
 
 <template>
   <TopBar project-name="My Graph" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
-    @settings="runSettings" @upload="runUpload" @target="runSelectTarget" />
+    @settings="runSettings" @upload="runUpload" @target="runSelectTarget"
+    @run-target="runSelectPartStudioTarget" />
   <main class="rete" ref="rete"></main>
   <BottomBar graph-name="My Graph" @search="runSearch" />
   <ToolTip />

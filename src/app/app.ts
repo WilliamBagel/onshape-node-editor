@@ -34,6 +34,13 @@ import {
     MemoryStorage,
 } from "./onshape-utils/featurestudiotarget";
 import { FeatureStudioUploader, UploadOutcome } from "./onshape-utils/featurestudioupload";
+import {
+    FeatureInsertion,
+    InsertOutcome,
+    PartStudioFeatureInserter,
+    PartStudioTarget,
+    PartStudioTargetSettings,
+} from "./onshape-utils/partstudiofeature";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
@@ -47,6 +54,13 @@ export class App extends BaseApp {
      * resolves inside an embedded Onshape session.
      */
     public featureStudioTargets = new FeatureStudioTargetSettings(browserStorage() ?? new MemoryStorage());
+    /**
+     * #2: the Part Studio the generated feature is inserted into. A separate
+     * field (and a separate storage key) from the Feature Studio target: the
+     * defining element and the consumer element are different documents tabs,
+     * and mixing them up is the defect the issue warns about.
+     */
+    public partStudioTargets = new PartStudioTargetSettings(browserStorage() ?? new MemoryStorage());
     /**
      * Confirmation for overwriting a non-empty Feature Studio. Replaceable so a
      * real dialog (once the UI has one) or a test can stand in for `confirm()`.
@@ -111,6 +125,44 @@ export class App extends BaseApp {
             confirm: (diffText) => this.confirmUpload(diffText),
         });
         return uploader.upload(source);
+    }
+
+    /* --- #2: Part Studio insertion target ------------------------------- */
+
+    /** The persisted Part Studio target, or `undefined` when none is set. */
+    public getPartStudioTarget(): PartStudioTarget | undefined {
+        return this.partStudioTargets.get();
+    }
+
+    /** Persist a Part Studio target from a typed object or its `did=...&wvm=...` string form. */
+    public setPartStudioTarget(target: PartStudioTarget | string): PartStudioTarget {
+        const stored = this.partStudioTargets.set(target);
+        this.reportMessage(`Part Studio target set to ${formatTarget(stored)}`);
+        return stored;
+    }
+
+    /** A starting point for the target prompt: this document and workspace, no element id. */
+    public suggestPartStudioTarget(): string {
+        return `did=${this.documentId ?? ''},wvm=w,wvmid=${this.workspaceId ?? ''},eid=`;
+    }
+
+    /**
+     * Insert the generated feature into the configured Part Studio (#2).
+     *
+     * `feature` is what `describeGeneratedFeature()` produced from the graph:
+     * the feature type, a display name and a value per declared parameter. The
+     * namespace is resolved from the Feature Studio target, never from the Part
+     * Studio target, and every failure is reported through `reportMessage()`.
+     */
+    public insertPartStudioFeature(feature: FeatureInsertion): Promise<InsertOutcome> {
+        const inserter = new PartStudioFeatureInserter({
+            partStudioApi: this.onshape?.partStudioApi,
+            featureStudioApi: this.onshape?.featureStudioApi,
+            getDefiningTarget: () => this.getFeatureStudioTarget(),
+            getConsumerTarget: () => this.getPartStudioTarget(),
+            notify: (message) => this.reportMessage(message),
+        });
+        return inserter.insert(feature);
     }
 
     public processUserInfo(): void {

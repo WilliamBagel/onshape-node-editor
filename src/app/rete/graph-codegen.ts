@@ -13,6 +13,14 @@ import { ReteOnshapeNodeProcessor } from "./rete-onshape-nodeprocessor";
 import { FeatureStudioGenerator } from "../onshape-utils/featurestudiogenerator";
 import { TopLevelVariableDefintion, VariablePointer } from "./nodes/onshapenode";
 import { assembleFeatureScriptInfo, PipelineNodeInfo } from "./pipelineinfo";
+import { DefineFeatureNode } from "./nodes/definefeaturenode";
+import { camelize } from "../utils/stringutils";
+import {
+    ParameterValues,
+    defaultParameterValue,
+    parameterTypeForSpec,
+} from "../onshape-utils/partstudiofeature";
+import type { OnshapeNode } from "./nodes/onshapenode";
 
 /**
  * Generate the Feature Studio source for `editor`'s graph.
@@ -167,3 +175,85 @@ export async function generateFeatureStudioSource(
 
     return featureStudioGenerator.generateFeatureStudioCode(featureScriptInfo);
 }
+
+/**
+ * What "Run" has to know about the generated feature in order to insert it into
+ * a Part Studio: the FeatureScript identifier (`featureType`), a display name,
+ * and a value for every parameter the `defineFeature` declares.
+ */
+export type GeneratedFeatureDescription =
+    | { ok: true; featureType: string; featureName: string; parameters: ParameterValues }
+    | { ok: false; message: string };
+
+/**
+ * Describe the custom feature the graph defines (#2), without touching Onshape.
+ *
+ * The generated Feature Studio declares exactly one feature — the
+ * `define-feature` node's — and its parameters are that node's `precondition`
+ * entries (`definition.<id> is <type>`). There is no per-parameter editor in the
+ * graph yet, so each value is the type's neutral default (see
+ * `defaultParameterValue`): the instance is inserted and then edited in Onshape.
+ * A parameter whose spec has no mapping or no default is *not* guessed at; the
+ * whole insert is refused naming that parameter, which is the same rule the
+ * request builder applies.
+ */
+export function describeGeneratedFeature(nodes: readonly OnshapeNode[]): GeneratedFeatureDescription {
+    const defineNodes = nodes.filter((node): node is DefineFeatureNode => node instanceof DefineFeatureNode);
+
+    if (defineNodes.length === 0) {
+        return { ok: false, message: 'Nothing to run: the graph has no Define Feature node.' };
+    }
+    if (defineNodes.length > 1) {
+        return {
+            ok: false,
+            message:
+                `The graph has ${defineNodes.length} Define Feature nodes, so it does not describe a single ` +
+                'feature that can be inserted into a Part Studio.',
+        };
+    }
+
+    const node = defineNodes[0];
+    const featureName = node.getTitle();
+    const featureType = camelize(featureName);
+    if (featureType === '') {
+        return { ok: false, message: 'Nothing to run: the Define Feature node has no feature type name.' };
+    }
+
+    const parameters: ParameterValues = {};
+    for (const precondition of node.getPreconditions()) {
+        const parameterId = precondition.annotation.value.replace(/\s+/g, '');
+        if (parameterId === '') {
+            return { ok: false, message: 'The Define Feature node declares a parameter with an empty name.' };
+        }
+        if (parameters[parameterId] !== undefined) {
+            return {
+                ok: false,
+                message: `The Define Feature node declares the parameter "${parameterId}" twice.`,
+            };
+        }
+
+        const parameterType = parameterTypeForSpec(precondition.btType);
+        if (parameterType === undefined) {
+            return {
+                ok: false,
+                message:
+                    `Parameter "${parameterId}" declares ${precondition.btType ?? 'no btType'}, which has no ` +
+                    'FeatureScript type mapping; Run cannot build its value.',
+            };
+        }
+
+        const value = defaultParameterValue(parameterType);
+        if (value === undefined) {
+            return {
+                ok: false,
+                message:
+                    `Parameter "${parameterId}" has type "${parameterType}", for which the graph has no value and ` +
+                    'no default can be assumed; set it in Onshape after inserting, but Run needs a value to insert.',
+            };
+        }
+        parameters[parameterId] = value;
+    }
+
+    return { ok: true, featureType, featureName, parameters };
+}
+
