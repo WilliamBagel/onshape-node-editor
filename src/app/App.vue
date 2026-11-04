@@ -17,6 +17,9 @@ import type { SpecResolver } from './rete/serialization/graph-schema-types';
 import type { FeatureInsertion } from './onshape-utils/partstudiofeature';
 import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 import { BuildLogStore, type LogSeverity } from './logging/buildlog';
+import NodePalette from './components/NodePalette.vue';
+import { defaultCatalog } from './onshape/catalog/spec-catalog';
+import type { CatalogEntry } from './onshape/catalog/types';
 
 /**
  * The slice of `App` the toolbar needs for the Feature Studio upload (#1) and
@@ -79,7 +82,10 @@ export default defineComponent({
     return {
       controls: null as EditorControls | null,
       /** #31: name of the graph the deploy target is resolved for. */
-      graphName: 'My Graph'
+      graphName: 'My Graph',
+      /** #8: catalog palette visibility. */
+      paletteOpen: false,
+      catalogEntries: defaultCatalog.entries
     }
   },
   computed: {
@@ -309,6 +315,7 @@ export default defineComponent({
         case 'build': await this.runBuild(); break;
         case 'run': await this.runRun(); break;
         case 'upload': await this.runUpload(); break;
+        case 'addNode': this.paletteOpen = true; break;
         case 'settings': await this.runSettings(); break;
         case 'fitView': await this.controls?.fitView(); break;
         case 'deleteSelected': {
@@ -327,9 +334,9 @@ export default defineComponent({
         }
       }
     },
-    runSearch() {
-
-    },
+    /** #8: toolbar search opens the catalog palette. */
+    runSearch() { this.paletteOpen = true; },
+    async onPaletteSelect(entry: CatalogEntry) { this.paletteOpen = false; await this.controls?.addNodeFromCatalog(entry); },
     /**
      * #30: "Locate" on a design check row. Select the node; a no-op when the
      * canvas is not ready or the node is gone. (Scrolling the viewport to the
@@ -351,7 +358,8 @@ export default defineComponent({
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
   <ToolTip />
-  <AppDialog />
+  <NodePalette :open="paletteOpen" :entries="catalogEntries" @select="onPaletteSelect" @close="paletteOpen = false" />
+    <AppDialog />
 </template>
 
 <style scoped>

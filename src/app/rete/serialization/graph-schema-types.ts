@@ -55,7 +55,7 @@ export const GRAPH_SCHEMA_VERSION = 2;
 export const LOADABLE_SCHEMA_VERSIONS: readonly number[] = [1, GRAPH_SCHEMA_VERSION];
 
 /** `OnshapeNode.type` values that can appear in a saved graph. */
-export type SerializedNodeKind = "CustomFeature" | "define-feature" | "output-feature";
+export type SerializedNodeKind = "CustomFeature" | "define-feature" | "output-feature" | "function";
 
 export interface Vec2 {
     x: number;
@@ -133,10 +133,18 @@ export interface SerializedOutputFeatureNode extends SerializedNodeBase {
     kind: "output-feature";
 }
 
+/** #8: a catalog value-function node. Ports are stored by name so the node can be rebuilt without the catalog. */
+export interface SerializedFunctionNode extends SerializedNodeBase {
+    kind: "function";
+    functionName: string;
+    inputs: import("../../onshape/catalog/types").CatalogPort[];
+}
+
 export type SerializedNode =
     | SerializedCustomFeatureNode
     | SerializedDefineFeatureNode
-    | SerializedOutputFeatureNode;
+    | SerializedOutputFeatureNode
+    | SerializedFunctionNode;
 
 /**
  * A grouping frame (#13). Frames are presentation only: they are not nodes in
