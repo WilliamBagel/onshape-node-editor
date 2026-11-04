@@ -31,20 +31,25 @@
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
 import { CLIENT_URL, CLIENT_ID, CLIENT_SECRET } from "./config";
+import { fetchWithTimeout } from "./security";
 
 export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
+  // #49: the refresh token is accepted only from the POST body (form or
+  // JSON). A credential in the query string would land in access logs,
+  // proxies and referrers, so reject it outright.
   const qs = request.query as URLSearchParams | undefined;
-  const refresh_token = qs ? (qs.get('refresh_token') || qs.get('refreshToken')) : undefined;
-  if (!refresh_token) {
+  if (qs && (qs.has('refresh_token') || qs.has('refreshToken'))) {
+    return { status: 400, body: 'refresh token must be sent in the request body' };
+  }
+
+  const body = (request.body && typeof request.body === 'object') ? request.body : {};
+  const refresh_token = body.refresh_token || body.refreshToken;
+  if (typeof refresh_token !== 'string' || refresh_token === '') {
     return { status: 400, body: 'missing refresh token' };
   }
 
   if (!CLIENT_URL) {
     return { status: 500, body: 'server configuration error' };
-  }
-
-  if (typeof refresh_token !== 'string') {
-    return { status: 400, body: 'invalid refresh token' };
   }
 
   try {
@@ -54,16 +59,24 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     params.append('client_id', CLIENT_ID);
     params.append('client_secret', CLIENT_SECRET);
 
-    const response = await fetch(CLIENT_URL, {
+    const response = await fetchWithTimeout(fetch, CLIENT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
     });
     const json = await response.json();
-    return { status: response.status, body: JSON.stringify(json), headers: Object.fromEntries(response.headers.entries()) };
+    // #51: never forward upstream headers verbatim (set-cookie, etc.).
+    // Only the headers this endpoint needs are echoed back.
+    const safeHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      // #49: token responses must never be stored.
+      'Cache-Control': 'no-store, max-age=0, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': 'Thu, 1 Jan 1970 00:00:00 GMT'
+    };
+    return { status: response.status, body: JSON.stringify(json), headers: safeHeaders };
   } catch (err: any) {
-    return { status: 502, body: String(err.message || err) };
+    console.error('refresh failed', err?.message || err);
+    return { status: 502, body: 'upstream error' };
   }
 }
-
-module.exports = exports.default;

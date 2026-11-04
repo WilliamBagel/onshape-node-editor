@@ -69,9 +69,9 @@ export function RefreshToken(
 ): Promise<IExchangeToken> {
     return new Promise((resolve, reject) => {
         let xhr = new XMLHttpRequest();
-        let url = server + '?code=' + encodeURIComponent(code);
-
-        xhr.open('GET', url, true);
+        // #49: the refresh token is sent in the POST body, never the query
+        // string (the server rejects query credentials).
+        xhr.open('POST', server, true);
         xhr.setRequestHeader('Content-Type', 'application/json');
 
         xhr.onreadystatechange = function () {
@@ -83,6 +83,6 @@ export function RefreshToken(
                 }
             }
         };
-        xhr.send();
+        xhr.send(JSON.stringify({ refresh_token: code }));
     });
 }

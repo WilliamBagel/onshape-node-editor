@@ -30,6 +30,7 @@
 
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
+import { fetchWithTimeout } from "./security";
 require('dotenv').config()
 
 const CLIENT_URL = process.env.CLIENT_URL;
@@ -68,7 +69,7 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     }
 
     // Make the request to exchange authorization code for access token
-    const response = await fetch(CLIENT_URL, {
+    const response = await fetchWithTimeout(fetch, CLIENT_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -81,8 +82,8 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     // Set response headers matching .htaccess configuration
     const responseHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'max-age=0, no-cache, no-store, must-revalidate',
+      // #49: token responses must never be stored.
+      'Cache-Control': 'no-store, max-age=0, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': 'Thu, 1 Jan 1970 00:00:00 GMT'
     };
@@ -94,18 +95,15 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     };
 
   } catch (err: any) {
+    // #51: log detail server-side, return a generic error code.
+    console.error('oauth token exchange failed', err?.message || err);
     return {
       status: 502,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
+        'Cache-Control': 'no-store'
       },
-      body: JSON.stringify({
-        error: 'request_failed',
-        message: String(err.message || err)
-      })
+      body: JSON.stringify({ error: 'request_failed' })
     };
   }
 }
-
-module.exports = exports.default;
