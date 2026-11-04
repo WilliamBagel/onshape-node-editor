@@ -31,6 +31,9 @@
           </div>
         </div>
       </div>
+      <!-- Per STYLE_GUIDE.md, a per-node problem is a small corner badge, never
+           a warning drawn over the canvas. The detail is in the log / #30 tab. -->
+      <span v-if="hasError" class="query-list-badge" role="img" aria-label="Selection problem"></span>
     </div>
   </div>
 </template>
@@ -143,10 +146,71 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@use "sass:math";
-// @use "./vars" as *;
-
+/* Selection list per STYLE_GUIDE.md: hairline box, 11px type, monospace for
+   the literal selection ids, focus/error as a border colour. Tokens live in
+   src/app/common.css; the vendored woolsthorpe.css fills are overridden here. */
 .os-param-query-list {
   box-sizing: border-box;
+}
+
+.os-param-query-list-container {
+  position: relative;
+}
+
+.os-param-selection-list {
+  position: relative;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-field);
+  line-height: 1.45;
+}
+
+.os-param-selection-list.os-param-query-list-focus {
+  border-color: var(--accent);
+}
+
+/* Error state: a hairline, not a saturated fill or a dashed warning box. */
+.os-param-selection-list.os-param-query-list-invalid {
+  border-color: var(--danger);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.os-param-query-list-label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-field);
+}
+
+.os-param-selection-list-entry {
+  font-size: var(--font-size-field);
+}
+
+.os-param-query-list-entry-text {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field);
+}
+
+.os-param-selection-list-entry-delete {
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.os-param-selection-list-entry-delete:hover {
+  color: var(--danger);
+}
+
+/* Small corner badge: the only problem marker that may sit on the canvas. */
+.query-list-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  pointer-events: none;
 }
 </style>

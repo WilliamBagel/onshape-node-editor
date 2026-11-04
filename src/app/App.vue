@@ -266,7 +266,8 @@ header {
 
 .rete {
   margin: 0;
-  background: white;
+  /* Canvas is near-white; the graph is the hero (STYLE_GUIDE.md). */
+  background: var(--canvas-bg);
   border-radius: 0em;
   text-align: left;
   border: none;

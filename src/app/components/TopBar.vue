@@ -60,9 +60,9 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
     <!-- ── Left group: Build & Run ──────────────────────────────── -->
     <!-- Claude Sonnet 4.6: Left action group -->
     <div class="toolbar-group toolbar-group--left">
-      <!-- Run button -->
+      <!-- Run button: the single filled primary action -->
       <div class="toolbar-btn-wrap">
-        <button class="toolbar-btn" aria-label="Run"
+        <button class="toolbar-btn toolbar-btn--primary" aria-label="Run"
           v-tooltip="{ label: 'Run', description: 'Build and run the current node graph.' }"
           @click="emit('run')">
           <SvgIcon href="#svg-icon-play-dialog" :size="16" aria-label="Run" />
@@ -169,30 +169,24 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
 </template>
 
 <style scoped>
-/* ── Design tokens (Obsidian-inspired) ──────────────────────────── */
-:root {
-  --toolbar-height: 36px;
-  --toolbar-bg: #ffffff;
-  --toolbar-border: #e0e0e0;
-  --btn-color: #3a3a3a;
-  --btn-hover-bg: #ebebeb;
-  --btn-active-bg: #d6d6d6;
-  --btn-accent-color: #3a8a4e;
-  /* green tint for Run */
-  --btn-radius: 5px;
-  --divider-color: #d8d8d8;
-  --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
-}
-
-/* ── Shell ──────────────────────────────────────────────────────── */
+/* ── Toolbar ────────────────────────────────────────────────────────
+   The palette lives once, in src/app/common.css (STYLE_GUIDE.md). This
+   bar is icon-first: every button carries a 16px monochrome icon, ghost
+   by default, and only the single primary action (Run) is filled.
+   No command in the app has a keyboard shortcut yet, so no keycap chips
+   are drawn here — inventing keybindings would be a behaviour change. */
 .toolbar {
+  --toolbar-height: 36px;
   display: flex;
   flex-direction: row;
   align-items: center;
   height: var(--toolbar-height);
   padding: 0 8px;
   user-select: none;
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-hairline);
   box-sizing: border-box;
   position: relative;
   /* needed for absolute tooltip children */
@@ -222,17 +216,16 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
 }
 
 .project-name {
-  font-size: 12px;
+  font-size: var(--font-size-title);
   font-weight: 500;
-  color: #888;
-  letter-spacing: 0.03em;
+  color: var(--text-secondary);
 }
 
 /* ── Divider ────────────────────────────────────────────────────── */
 .toolbar-divider {
   width: 1px;
-  height: 18px;
-  background: var(--divider-color);
+  height: 16px;
+  background: var(--border-hairline);
   margin: 0 4px;
   flex-shrink: 0;
 }
@@ -244,44 +237,56 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
   align-items: center;
 }
 
-/* ── Button base ────────────────────────────────────────────────── */
+/* ── Button base: ghost/flat ────────────────────────────────────── */
 .toolbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   height: 26px;
   padding: 0 7px;
-  border: none;
-  border-radius: var(--btn-radius);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   background: transparent;
-  color: var(--btn-color);
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
-  font-family: var(--font-ui);
+  font-size: var(--font-size-field);
+  font-family: var(--font-sans);
   font-weight: 500;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
   outline-offset: 2px;
 }
 
 .toolbar-btn:hover {
-  background: var(--btn-hover-bg);
+  background: var(--hover-tint);
+  border-color: var(--border-hairline);
+  color: var(--text-primary);
 }
 
 .toolbar-btn:active {
-  background: var(--btn-active-bg);
+  background: var(--active-tint);
 }
 
-/* Claude Sonnet 4.6: Accent style for the Run button */
-.toolbar-btn--accent {
-  color: var(--btn-accent-color);
+.toolbar-btn:focus-visible {
+  border-color: var(--accent);
+  outline: none;
 }
 
-.toolbar-btn--accent:hover {
-  background: #eaf5ec;
+/* ── The one filled action ─────────────────────────────────────── */
+.toolbar-btn--primary,
+.toolbar-btn--primary:hover,
+.toolbar-btn--primary:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 
-/* ── Label text (shown on Build / Run only) ─────────────────────── */
+.toolbar-btn--primary:hover {
+  opacity: 0.92;
+}
+
+/* ── Label text (shown on Run / Build / Upload only) ────────────── */
 .btn-label {
-  letter-spacing: 0.01em;
+  font-size: var(--font-size-field);
+  font-weight: 500;
 }
 </style>
