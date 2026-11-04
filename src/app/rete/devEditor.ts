@@ -10,7 +10,7 @@ const socket = new ClassicPreset.Socket('socket');
 
 export async function createEditor(container: HTMLElement): Promise<EditorControls> {
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, applyPreferences, addNodeFromCatalog, serializeGraph, loadGraph, debugSources } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, debugSources } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -84,6 +84,9 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
     createGroupFromSelection,
     applyPreferences,
     addNodeFromCatalog,
+    addArrayNode,
+    addMathExpressionNode,
+    addUtilityNode,
     debugSources,
     destroy: () => area.destroy(),
     selectNode: async (nodeId: string) => {

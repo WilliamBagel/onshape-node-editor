@@ -13,7 +13,7 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, applyPreferences, addNodeFromCatalog, serializeGraph, loadGraph, debugSources } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, debugSources } = await editorBase(container);
 
   // #8: default graph nodes come from the catalog (#7) via the factory —
   // no inline spec literals. A value function and a statement feature.
@@ -88,6 +88,9 @@ export async function createEditor(container: HTMLElement) {
     createGroupFromSelection,
     applyPreferences,
     addNodeFromCatalog,
+    addArrayNode,
+    addMathExpressionNode,
+    addUtilityNode,
     debugSources,
     destroy: () => area.destroy(),
     selectNode: async (nodeId: string) => {

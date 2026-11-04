@@ -55,6 +55,7 @@ const hoveredButton = ref<'search' | null>(null)
           @click="emit('search')">
           <SvgIcon href="#svg-icon-search" :size="14" aria-label="Search" />
           <span class="btn-label">Search</span>
+          <kbd class="btn-keycap">F3</kbd>
         </button>
       </div>
 
@@ -170,5 +171,15 @@ const hoveredButton = ref<'search' | null>(null)
 
 .btn-label {
   letter-spacing: 0.01em;
+}
+
+.btn-keycap {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-keycap);
+  padding: 1px 4px;
+  color: var(--ink);
+  opacity: var(--opacity-secondary);
 }
 </style>
