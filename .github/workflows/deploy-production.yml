@@ -73,6 +73,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Audit gate
+        run: pnpm run audit:gate
+
       - name: Type-check gate
         run: pnpm run type-check:gate
 
