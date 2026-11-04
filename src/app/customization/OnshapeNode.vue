@@ -12,8 +12,8 @@
             <button type="button" class="node-header-button node-collapse-toggle" @click="toggleCollapsed"
               @pointerdown.stop :aria-label="collapsed ? 'Expand node' : 'Collapse node'"
               :aria-expanded="!collapsed">
-              <svg class="node-collapse-icon" :class="{ expanded: !collapsed }" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
-                <path d="M2.5 4.25 6 7.75l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+              <svg class="node-collapse-icon" :class="{ expanded: !collapsed }" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true">
+                <path d="M2 4.5 6 9l4-4.5z" fill="currentColor" />
               </svg>
             </button>
             <div class="ns-dialog-title node-title" data-bs-placement="right" style="user-select: none;"
@@ -536,8 +536,8 @@ export default defineComponent({
 }
 
 .node-collapse-icon {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   color: var(--text-secondary);
   flex: none;
   transition: transform 0.15s ease;

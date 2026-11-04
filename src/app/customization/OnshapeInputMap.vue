@@ -5,10 +5,7 @@
                 @pointerdown.stop
                 @click="toggleExpanded">
                 <div class="map-header-content os-center-content">
-                    <svg class=" map-dropdown-icon os-svg-icon osc-svg-vertical-align"
-                        :class="{ 'expanded': isExpanded }">
-                        <use href="#svg-icon-collapsed"></use>
-                    </svg>
+                    <span class="map-dropdown-icon" :class="{ expanded: isExpanded }" aria-hidden="true"></span>
                     <span class="map-header-title  os-param-label">{{ input.label }}</span>
                 </div>
             </button>
@@ -133,14 +130,21 @@ export default OnshapeInputMap
 }
 
 .map-dropdown-icon {
-    // width: 16px;
-    // height: 16px;
     display: inline-block;
-    transition: transform 0.2s ease;
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--text-primary);
+    transition: transform 0.15s ease;
     flex-shrink: 0;
 
     &.expanded {
-        transform: rotate(90deg);
+        transform: rotate(0deg);
+    }
+
+    &:not(.expanded) {
+        transform: rotate(-90deg);
     }
 }
 

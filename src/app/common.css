@@ -123,6 +123,9 @@ body {
  * preset's scoped styles.
  */
 .menu[rete-context-menu][rete-context-menu] {
+    /* woolsthorpe.css ships a generic .menu demo with literal "[" / "]"
+       pseudo-elements. They are not part of the editor menu. */
+    z-index: 1000;
     padding: 4px;
     width: 260px;
     max-width: min(380px, 80vw);
@@ -137,7 +140,14 @@ body {
     font-family: var(--font-sans);
 }
 
+.menu[rete-context-menu][rete-context-menu]::before,
+.menu[rete-context-menu][rete-context-menu]::after {
+    content: none;
+    display: none;
+}
+
 .menu[rete-context-menu][rete-context-menu] .block {
+    position: relative;
     color: var(--text-primary);
     background-color: var(--surface);
     border-bottom: 1px solid var(--hairline);
@@ -181,8 +191,27 @@ body {
 /* Submenus are positioned by the preset; give them the same surface/width
  * instead of the preset's 120px default, and replace the "►" glyph (the
  * "weird bracket" in the old menu) with a quiet CSS chevron. */
+.menu[rete-context-menu][rete-context-menu] .subitems.subitems-inline {
+    position: static;
+    left: auto;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 0 0 0 14px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
 .menu[rete-context-menu][rete-context-menu] .subitems {
+    position: absolute;
+    top: 0;
+    left: 100%;
     width: 260px;
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    z-index: 1001;
     max-width: min(380px, 80vw);
     background: var(--surface);
     border: 1px solid var(--hairline);

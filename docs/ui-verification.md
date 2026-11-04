@@ -25,11 +25,13 @@ Chrome is found at `google-chrome-stable`/`chromium`; override with
 - the feature's `Definition` map starts expanded, collapses on a real click,
   shrinks the node, and re-opens on the next click;
 - the canvas context menu is the themed 260px surface (not the preset's 120px
-  box), has wrapping for long option names, and no `►` bracket glyph;
+  box), has wrapping for long option names, no `[`/`]` or `►` glyphs, clamps
+  itself inside the viewport, and its search finds leaves inside categories
+  (`fillet` -> `qFilletFaces`);
 - F3 opens the action palette and a query returns an insertable **node** row,
   not only commands;
 - the rendered keycap foreground/background contrast is at least 4.5:1;
-- the node-header collapse control is a 12px stroked chevron.
+- the node-header collapse control is a 14px filled disclosure triangle.
 
 ## Reviewing the pictures
 

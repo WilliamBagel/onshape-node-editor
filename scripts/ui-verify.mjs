@@ -214,7 +214,7 @@ async function main() {
     await evaluate(cdp, `(() => {
       const bg = document.querySelector('.background');
       const r = bg.getBoundingClientRect();
-      bg.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + 240, clientY: r.top + 260 }));
+      bg.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + 240, clientY: window.innerHeight - 70 }));
       return true;
     })()`);
     await waitFor(cdp, `document.querySelector('.menu[rete-context-menu]') != null`, 5000, 'context menu');
@@ -224,10 +224,18 @@ async function main() {
       const cs = getComputedStyle(el);
       const arrow = getComputedStyle(el.querySelector('.hasSubitems') ?? el, '::after').content;
       const block = el.querySelector('.block');
-      return { width: cs.width, padding: cs.padding, bg: cs.backgroundColor, color: cs.color, arrow, blockOverflow: block ? getComputedStyle(block).overflowWrap : null };
+      const rect = el.getBoundingClientRect();
+      return { width: cs.width, padding: cs.padding, bg: cs.backgroundColor, color: cs.color, arrow, blockOverflow: block ? getComputedStyle(block).overflowWrap : null,
+        before: getComputedStyle(el, '::before').content, after: getComputedStyle(el, '::after').content,
+        top: rect.top, bottom: rect.bottom, viewport: window.innerHeight };
     })()`);
     check('context menu uses the 260px themed surface', parseFloat(menu.width) >= 240 && menu.padding === '4px' && menu.bg === 'rgb(255, 255, 255)', JSON.stringify(menu));
-    check('context menu has no "►" bracket glyph', menu.arrow !== '"►"', `::after content ${menu.arrow}`);
+    check('context menu has no bracket or arrow glyphs', menu.arrow !== '"►"' && menu.before === 'none' && menu.after === 'none', JSON.stringify(menu));
+    check('context menu is clamped inside the viewport', menu.top >= 0 && menu.bottom <= menu.viewport - 4, JSON.stringify(menu));
+    const contextInput = await evaluate(cdp, `(() => { const el = document.querySelector('.menu .search'); if (!el) return null; el.focus(); el.value = 'fillet'; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+    await sleep(250);
+    const contextResults = await evaluate(cdp, `(() => [...document.querySelectorAll('.menu .block')].map((e) => e.textContent.trim()).filter(Boolean))()`);
+    check('context menu searches inside categories', contextInput && contextResults.some((t) => /qFilletFaces/.test(t)), JSON.stringify(contextResults));
     await screenshot(cdp, '04-context-menu.png');
     // Click empty canvas to dismiss the menu, then let the app settle.
     await evaluate(cdp, `(() => { const bg = document.querySelector('.background'); const r = bg.getBoundingClientRect(); bg.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: r.left + 240, clientY: r.top + 260 })); bg.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: r.left + 240, clientY: r.top + 260 })); return true; })()`);
@@ -262,9 +270,9 @@ async function main() {
     const chevron = await evaluate(cdp, `(() => {
       const el = document.querySelector('.node-collapse-icon');
       if (!el) return null;
-      return { tag: el.tagName, width: el.getBoundingClientRect().width, path: el.querySelector('path')?.getAttribute('d') ?? null, stroke: el.querySelector('path')?.getAttribute('stroke') };
+      return { tag: el.tagName, width: el.getBoundingClientRect().width, path: el.querySelector('path')?.getAttribute('d') ?? null, fill: el.querySelector('path')?.getAttribute('fill'), stroke: el.querySelector('path')?.getAttribute('stroke') };
     })()`);
-    check('collapse icon is a 12px stroked chevron', chevron && Math.round(chevron.width) === 12 && chevron.path && chevron.stroke === 'currentColor', JSON.stringify(chevron));
+    check('collapse icon is a 14px disclosure caret', chevron && Math.round(chevron.width) === 14 && chevron.path && chevron.fill === 'currentColor', JSON.stringify(chevron));
 
     const report = {
       url,

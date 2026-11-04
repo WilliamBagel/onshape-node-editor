@@ -41,6 +41,7 @@ import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./
 import type { SpecResolver } from "./serialization/graph-schema-types";
 import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "../ui/editorSettings";
 import { ContextMenuPlugin, Presets as ContextMenuPresets } from "rete-context-menu-plugin";
+import { editorContextMenuPreset } from "./editor-context-menu";
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
@@ -311,7 +312,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     // `group`): drag a node onto a frame to group it, drag a frame to move
     // its contents with it, and it auto-fits the frame to its children. The
     // classic preset is its long-press-capture interaction.
-    vueRender.addPreset(VuePresets.contextMenu.setup());
+    vueRender.addPreset(editorContextMenuPreset());
 
     // #8: canvas context menu ("Add node") listing the same catalog as the
     // palette, grouped by category. The plugin's factory adds the node at
