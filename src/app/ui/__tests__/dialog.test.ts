@@ -190,3 +190,37 @@ describe('DialogService queueing', () => {
         service.cancel();
     });
 });
+
+describe('DialogService.chooseOption', () => {
+    it('resolves the picked option value on submit', async () => {
+        const service = new DialogService();
+        fakeHost(service);
+        const pending = service.chooseOption({
+            title: 'Open graph',
+            options: [
+                { value: 'element-1', label: 'Bracket' },
+                { value: 'element-2', label: 'Chamfer' },
+            ],
+        });
+
+        expect(service.current?.kind).toBe('select');
+        expect(service.current?.options).toHaveLength(2);
+        expect(service.submitSelect('element-2')).toBe(true);
+        await expect(pending).resolves.toBe('element-2');
+        expect(service.current).toBeNull();
+    });
+
+    it('resolves null on cancel and rejects unknown values', async () => {
+        const service = new DialogService();
+        fakeHost(service);
+        const pending = service.chooseOption({
+            title: 'Open graph',
+            options: [{ value: 'element-1', label: 'Bracket' }],
+        });
+
+        expect(service.submitSelect('element-unknown')).toBe(false);
+        expect(service.current?.kind).toBe('select');
+        expect(service.cancel()).toBe(true);
+        await expect(pending).resolves.toBeNull();
+    });
+});

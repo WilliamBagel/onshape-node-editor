@@ -18,7 +18,14 @@
  * preserves the old `name == null || name.trim() === ''` rejection exactly.
  */
 
-export type DialogKind = 'prompt' | 'confirm' | 'settings';
+export type DialogKind = 'prompt' | 'confirm' | 'settings' | 'select';
+
+export interface DialogOption {
+  /** Stable value returned to the caller (e.g. an element id). */
+  value: string;
+  /** Text shown for this option. */
+  label: string;
+}
 
 export interface PromptTextOptions {
   /** Dialog heading, 14px/600. */
@@ -53,6 +60,17 @@ export interface ConfirmOptions {
   danger?: boolean;
 }
 
+export interface ChooseOptionOptions {
+  /** Dialog heading, 14px/600. */
+  title: string;
+  /** Longer explanation rendered above the list, 13px. */
+  body?: string;
+  /** The choices; picking one resolves with its `value`. */
+  options: DialogOption[];
+  /** Secondary (cancel) button text. Defaults to 'Cancel'. */
+  cancelLabel?: string;
+}
+
 export interface DialogRequest {
   id: number;
   kind: DialogKind;
@@ -66,6 +84,8 @@ export interface DialogRequest {
   allowEmpty: boolean;
   mono: boolean;
   placeholder?: string;
+  /** Choices for a `select` request; empty for the other kinds. */
+  options: DialogOption[];
   /** Internal: resolves the promise returned to the caller. */
   settle: (result: string | boolean | null) => void;
 }
@@ -135,6 +155,7 @@ export class DialogService {
         allowEmpty: options.allowEmpty ?? false,
         mono: options.mono ?? false,
         placeholder: options.placeholder,
+        options: [],
         settle: (result) => resolve(typeof result === 'string' ? result : null),
       });
     });
@@ -154,6 +175,7 @@ export class DialogService {
         danger: options.danger ?? false,
         allowEmpty: true,
         mono: false,
+        options: [],
         settle: (result) => resolve(result === true),
       });
     });
@@ -172,7 +194,29 @@ export class DialogService {
         danger: false,
         allowEmpty: true,
         mono: false,
+        options: [],
         settle: () => resolve(),
+      });
+    });
+  }
+
+  /** Let the user pick one option from a list. Resolves with the chosen option's `value`, or `null` on cancel. */
+  chooseOption(options: ChooseOptionOptions): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+      this.enqueue({
+        id: this.nextId++,
+        kind: 'select',
+        title: options.title,
+        body: options.body,
+        label: '',
+        initialValue: '',
+        submitLabel: 'Open',
+        cancelLabel: options.cancelLabel ?? 'Cancel',
+        danger: false,
+        allowEmpty: true,
+        mono: false,
+        options: [...options.options],
+        settle: (result) => resolve(typeof result === 'string' ? result : null),
       });
     });
   }
@@ -205,6 +249,15 @@ export class DialogService {
     const request = this.current;
     if (request == null || request.kind !== 'confirm') return false;
     this.dismiss(accepted);
+    return true;
+  }
+
+  /** Submit the current select dialog with the picked option's value. No-op for other kinds or unknown values. */
+  submitSelect(value: string): boolean {
+    const request = this.current;
+    if (request == null || request.kind !== 'select') return false;
+    if (!request.options.some((option) => option.value === value)) return false;
+    this.dismiss(value);
     return true;
   }
 
@@ -249,4 +302,9 @@ export function promptText(options: PromptTextOptions): Promise<string | null> {
 /** Module-level convenience: `const ok = await confirm({ title, body, danger })`. */
 export function confirm(options: ConfirmOptions): Promise<boolean> {
   return dialogService.confirm(options);
+}
+
+/** Module-level convenience: `const id = await chooseOption({ title, options })`. */
+export function chooseOption(options: ChooseOptionOptions): Promise<string | null> {
+  return dialogService.chooseOption(options);
 }

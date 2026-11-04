@@ -55,6 +55,20 @@
         <!-- #36: settings content lives in its own component; the modal
              chrome (backdrop, focus trap, Esc, actions) is shared here. -->
         <SettingsDialog v-if="current.kind === 'settings'" />
+        <!-- #6: picking an option submits immediately; cancel stays in
+             the actions row below. -->
+        <div v-if="current.kind === 'select'" class="app-dialog-options" role="listbox" :aria-label="current.title">
+          <button
+            v-for="option in current.options"
+            :key="option.value"
+            type="button"
+            role="option"
+            class="app-dialog-option"
+            @click="onChoose(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
       </div>
 
       <div class="app-dialog-actions">
@@ -66,6 +80,7 @@
           {{ current.cancelLabel }}
         </button>
         <button
+          v-if="current.kind !== 'select'"
           ref="submitButton"
           type="button"
           class="app-dialog-btn"
@@ -159,6 +174,11 @@ export default defineComponent({
 
     onCancel() {
       dialogService.cancel();
+    },
+
+    /** #6: a select option was picked; submit it to the service. */
+    onChoose(value: string) {
+      dialogService.submitSelect(value);
     },
 
     onSubmit() {
@@ -408,5 +428,46 @@ export default defineComponent({
 .app-dialog-btn--danger:hover {
   border-color: var(--error);
   filter: brightness(1.08);
+}
+
+/* ── Select options (#6) ──────────────────────────────────────────
+   Flat listbox rows on the surface; hairline separators, 13px values,
+   steel blue reserved for hover/focus. No fills beyond the guide. */
+.app-dialog-options {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+}
+
+.app-dialog-option {
+  padding: 8px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-value);
+  font-weight: 400;
+  line-height: var(--line-height-body);
+  color: var(--ink);
+  text-align: left;
+  background: var(--surface);
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.app-dialog-option:last-child {
+  border-bottom: none;
+}
+
+.app-dialog-option:hover {
+  background: var(--surface-panel);
+}
+
+.app-dialog-option:focus-visible {
+  outline: 2px solid var(--accent-steel);
+  outline-offset: -2px;
 }
 </style>

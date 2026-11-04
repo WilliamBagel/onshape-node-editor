@@ -32,6 +32,8 @@ import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
+import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./serialization/graph-serializer";
+import type { SpecResolver } from "./serialization/graph-schema-types";
 import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "../ui/editorSettings";
 
 /** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
@@ -62,6 +64,15 @@ export type StudioEvents = {
 
 export type EditorControls = {
     studioEvents: StudioEvents
+    /** #6: the open graph as a serialized JSON document (schema v2). */
+    serializeGraph: () => string
+    /**
+     * #6: replace the editor's contents with the graph in `reteJSON`.
+     * Returns the loaded node count and any non-fatal load warnings.
+     * Throws (leaving the current graph untouched) when the document
+     * cannot be loaded.
+     */
+    loadGraph: (reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>
     /** The canvas's node paint order, bottom-most first (#27 / DR-007). */
     getNodeOrder: () => string[]
     /**
@@ -95,6 +106,10 @@ type EditorBaseInfo = {
     deleteSelectedNodes: () => Promise<number>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
+    /** #6: the open graph as a serialized JSON document (schema v2). */
+    serializeGraph: () => string
+    /** #6: replace the editor's contents with a stored graph. */
+    loadGraph: (reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>
     /** #30: select a node by id; used by the design-check surface's Locate. */
     selectNode: (nodeId: string) => Promise<void>
 }
@@ -362,6 +377,55 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     };
     applyPreferences(editorSettings.getPreferences());
 
+    /**
+     * #6: the open graph as one JSON document. Positions come from the
+     * area plugin's node views (the canvas owns them); the paint order is
+     * the canvas's, bottom-most first.
+     */
+    const serializeGraph = (): string => {
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        for (const node of editor.getNodes()) {
+            const view = area.nodeViews.get(node.id);
+            positions[node.id] = view != null ? { ...view.position } : null;
+        }
+        return JSON.stringify(serializeEditorGraph(editor, positions, nodeOrder.getOrder()));
+    };
+
+    /**
+     * #6: replace the editor's contents with a stored graph. The document
+     * is fully validated before anything is removed, so a bad document
+     * leaves the current graph untouched. Connections are added through
+     * `editor.addConnection` so the `connectioncreate` pipe above teaches
+     * the endpoints about each other — the serializer's `applyGraph`
+     * helper does that explicitly because it is meant for headless
+     * editors without the pipe, and doing both would register every
+     * connection twice.
+     */
+    const loadGraph = async (reteJSON: string, resolveSpec: SpecResolver): Promise<{ nodes: number; warnings: string[] }> => {
+        const result = deserializeGraphText(reteJSON, { resolveSpec });
+        if (result.ok === false) {
+            throw new Error(result.error);
+        }
+        const graph = result.graph;
+        for (const node of [...editor.getNodes()]) {
+            await editor.removeNode(node.id);
+        }
+        for (const node of graph.nodes) {
+            await editor.addNode(node);
+        }
+        for (const connection of graph.connections) {
+            await editor.addConnection(connection);
+        }
+        for (const node of graph.nodes) {
+            const position = graph.positions[node.id];
+            if (position != null) {
+                await area.translate(node.id, position);
+            }
+        }
+        await nodeOrder.setOrder(graph.nodeOrder);
+        return { nodes: graph.nodes.length, warnings: graph.warnings };
+    };
+
     return {
         editor,
         area,
@@ -372,6 +436,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         fitView,
         deleteSelectedNodes,
         applyPreferences,
+        serializeGraph,
+        loadGraph,
         studioEvents: { build: buildStudio, describe: describeStudio },
         selectNode
     }

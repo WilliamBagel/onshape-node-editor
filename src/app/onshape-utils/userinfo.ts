@@ -59,7 +59,7 @@ export class UserInfo extends AppStorage<UserSettings> {
         return new Promise((resolve, reject) => {
             this._getData().then((res) => {
                 resolve(res);
-            })
+            }).catch(reject)
         })
     }
 
@@ -67,7 +67,7 @@ export class UserInfo extends AppStorage<UserSettings> {
         return new Promise((resolve, reject) => {
             this._setData(settings).then((res) => {
                 resolve();
-            })
+            }).catch(reject)
         })
     }
 
