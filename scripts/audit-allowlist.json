@@ -1,35 +1,185 @@
 {
   "description": "Allowlisted pnpm audit advisories (#46). The gate (scripts/audit-gate.mjs) fails only on advisories NOT in this file, so a new advisory always breaks CI. Removing an entry is safe; adding one requires a reason. Verified 2026-11-04 against pnpm audit --prod --json after the #46 overrides.",
   "advisories": [
-    { "id": "1120680", "severity": "low", "package": "esbuild", "reason": "Vite dev-server only (Windows file read). Vite is a devDependency; nothing from this chain ships in the app bundle or the Azure server." },
-    { "id": "1123911", "severity": "high", "package": "js-yaml", "reason": "Build-time only via vite-plugin-svgr > @svgr/core > cosmiconfig. YAML-DoS; not executed in the browser or on the server." },
-    { "id": "1130709", "severity": "moderate", "package": "postcss", "reason": "Build-time CSS processing via vite 7.3.5 / vite-plugin-vue-devtools. Fix requires the Vite 7 line to advance; major bump to Vite 8 rejected as too risky." },
-    { "id": "1130722", "severity": "high", "package": "ip-address", "reason": "Codegen-time only via onshape-typescript-fetch > openapi-generator-cli > proxy-agent > socks. Never runs in browser or server." },
-    { "id": "1130723", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, same proxy-agent chain as above." },
-    { "id": "1130724", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, same proxy-agent chain as above." },
-    { "id": "1138115", "severity": "high", "package": "js-yaml", "reason": "Build-time only via vite-plugin-svgr > @svgr/core > cosmiconfig. YAML-DoS." },
-    { "id": "1138811", "severity": "high", "package": "nanoid", "reason": "Build-time only via postcss (vite chain). DoS in ID generation at build time; not shipped." },
-    { "id": "1139427", "severity": "high", "package": "nanoid", "reason": "Build-time only via postcss (vite chain)." },
-    { "id": "1139510", "severity": "high", "package": "postcss", "reason": "Build-time CSS processing, vite chain. Source-map path disclosure at build time; not shipped." },
-    { "id": "1153171", "severity": "high", "package": "browserslist", "reason": "Build-time only (babel/vite chain). Unbounded memory via query cache; not shipped." },
-    { "id": "1153172", "severity": "high", "package": "browserslist", "reason": "Build-time only (babel/vite chain)." },
-    { "id": "1164790", "severity": "high", "package": "immutable", "reason": "Build-time only via sass (CSS build). DoS in Immutable.Map/Set at build time; not shipped." },
-    { "id": "1193686", "severity": "moderate", "package": "baseline-browser-mapping", "reason": "Build-time only via browserslist. DoS on invalid input at build time; not shipped." },
-    { "id": "1193727", "severity": "high", "package": "js-yaml", "reason": "Build-time only via vite-plugin-svgr chain. YAML-DoS." },
-    { "id": "1224659", "severity": "high", "package": "immutable", "reason": "Build-time only via sass (CSS build)." },
-    { "id": "1239948", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, proxy-agent chain." },
-    { "id": "1239949", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, proxy-agent chain." },
-    { "id": "1240097", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, proxy-agent chain." },
-    { "id": "1240098", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, proxy-agent chain." },
-    { "id": "1240853", "severity": "high", "package": "basic-ftp", "reason": "Codegen-time only via openapi-generator-cli > proxy-agent > get-uri. DoS in FTP directory parsing; not shipped." },
-    { "id": "1241209", "severity": "high", "package": "source-map-js", "reason": "Build-time only via @vue/compiler (vite chain). Event-loop DoS during build; not shipped." },
-    { "id": "1242623", "severity": "moderate", "package": "launch-editor", "reason": "Dev-server/editor launcher via vite 7.3.5. Windows command-escaping; dev only. Fix needs Vite 8+ (major rejected)." },
-    { "id": "1242652", "severity": "moderate", "package": "launch-editor", "reason": "Dev-server/editor launcher via vite 7.3.5. Dev only." },
-    { "id": "1242659", "severity": "high", "package": "launch-editor", "reason": "Dev-server/editor launcher via vite 7.3.5. Windows existsSync bypass; dev only." },
-    { "id": "1242725", "severity": "low", "package": "vite", "reason": "Vite 7.3.5 dev-server middleware origin check. Dev only; fix needs Vite 8+ (major rejected). Shipped bundle unaffected." },
-    { "id": "1242731", "severity": "moderate", "package": "vite", "reason": "Vite 7.3.5 server.fs.allow. Dev server only; fix needs Vite 8+ (major rejected)." },
-    { "id": "1242883", "severity": "moderate", "package": "ip-address", "reason": "Codegen-time only, proxy-agent chain." },
-    { "id": "1244012", "severity": "moderate", "package": "minimatch", "reason": "Build-time only via vite-plugin-html > ejs > jake (devDependency). Glob DoS at build time; not shipped." },
-    { "id": "1244013", "severity": "moderate", "package": "glob", "reason": "Codegen-time only via openapi-generator-cli. AbortSignal traversal at codegen; not shipped." }
+    {
+      "id": "1120680",
+      "severity": "low",
+      "package": "esbuild",
+      "reason": "Vite dev-server only (Windows file read). Vite is a devDependency; nothing from this chain ships in the app bundle or the Azure server."
+    },
+    {
+      "id": "1123911",
+      "severity": "high",
+      "package": "js-yaml",
+      "reason": "Build-time only via vite-plugin-svgr > @svgr/core > cosmiconfig. YAML-DoS; not executed in the browser or on the server."
+    },
+    {
+      "id": "1130709",
+      "severity": "moderate",
+      "package": "postcss",
+      "reason": "Build-time CSS processing via vite 7.3.5 / vite-plugin-vue-devtools. Fix requires the Vite 7 line to advance; major bump to Vite 8 rejected as too risky."
+    },
+    {
+      "id": "1130722",
+      "severity": "high",
+      "package": "ip-address",
+      "reason": "Codegen-time only via onshape-typescript-fetch > openapi-generator-cli > proxy-agent > socks. Never runs in browser or server."
+    },
+    {
+      "id": "1130723",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, same proxy-agent chain as above."
+    },
+    {
+      "id": "1130724",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, same proxy-agent chain as above."
+    },
+    {
+      "id": "1138115",
+      "severity": "high",
+      "package": "js-yaml",
+      "reason": "Build-time only via vite-plugin-svgr > @svgr/core > cosmiconfig. YAML-DoS."
+    },
+    {
+      "id": "1138811",
+      "severity": "high",
+      "package": "nanoid",
+      "reason": "Build-time only via postcss (vite chain). DoS in ID generation at build time; not shipped."
+    },
+    {
+      "id": "1139427",
+      "severity": "high",
+      "package": "nanoid",
+      "reason": "Build-time only via postcss (vite chain)."
+    },
+    {
+      "id": "1139510",
+      "severity": "high",
+      "package": "postcss",
+      "reason": "Build-time CSS processing, vite chain. Source-map path disclosure at build time; not shipped."
+    },
+    {
+      "id": "1153171",
+      "severity": "high",
+      "package": "browserslist",
+      "reason": "Build-time only (babel/vite chain). Unbounded memory via query cache; not shipped."
+    },
+    {
+      "id": "1153172",
+      "severity": "high",
+      "package": "browserslist",
+      "reason": "Build-time only (babel/vite chain)."
+    },
+    {
+      "id": "1164790",
+      "severity": "high",
+      "package": "immutable",
+      "reason": "Build-time only via sass (CSS build). DoS in Immutable.Map/Set at build time; not shipped."
+    },
+    {
+      "id": "1193686",
+      "severity": "moderate",
+      "package": "baseline-browser-mapping",
+      "reason": "Build-time only via browserslist. DoS on invalid input at build time; not shipped."
+    },
+    {
+      "id": "1193727",
+      "severity": "high",
+      "package": "js-yaml",
+      "reason": "Build-time only via vite-plugin-svgr chain. YAML-DoS."
+    },
+    {
+      "id": "1224659",
+      "severity": "high",
+      "package": "immutable",
+      "reason": "Build-time only via sass (CSS build)."
+    },
+    {
+      "id": "1239948",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, proxy-agent chain."
+    },
+    {
+      "id": "1239949",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, proxy-agent chain."
+    },
+    {
+      "id": "1240097",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, proxy-agent chain."
+    },
+    {
+      "id": "1240098",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, proxy-agent chain."
+    },
+    {
+      "id": "1240853",
+      "severity": "high",
+      "package": "basic-ftp",
+      "reason": "Codegen-time only via openapi-generator-cli > proxy-agent > get-uri. DoS in FTP directory parsing; not shipped."
+    },
+    {
+      "id": "1241209",
+      "severity": "high",
+      "package": "source-map-js",
+      "reason": "Build-time only via @vue/compiler (vite chain). Event-loop DoS during build; not shipped."
+    },
+    {
+      "id": "1242623",
+      "severity": "moderate",
+      "package": "launch-editor",
+      "reason": "Dev-server/editor launcher via vite 7.3.5. Windows command-escaping; dev only. Fix needs Vite 8+ (major rejected)."
+    },
+    {
+      "id": "1242652",
+      "severity": "moderate",
+      "package": "launch-editor",
+      "reason": "Dev-server/editor launcher via vite 7.3.5. Dev only."
+    },
+    {
+      "id": "1242659",
+      "severity": "high",
+      "package": "launch-editor",
+      "reason": "Dev-server/editor launcher via vite 7.3.5. Windows existsSync bypass; dev only."
+    },
+    {
+      "id": "1242725",
+      "severity": "low",
+      "package": "vite",
+      "reason": "Vite 7.3.5 dev-server middleware origin check. Dev only; fix needs Vite 8+ (major rejected). Shipped bundle unaffected."
+    },
+    {
+      "id": "1242731",
+      "severity": "moderate",
+      "package": "vite",
+      "reason": "Vite 7.3.5 server.fs.allow. Dev server only; fix needs Vite 8+ (major rejected)."
+    },
+    {
+      "id": "1242883",
+      "severity": "moderate",
+      "package": "ip-address",
+      "reason": "Codegen-time only, proxy-agent chain."
+    },
+    {
+      "id": "1244013",
+      "severity": "moderate",
+      "package": "glob",
+      "reason": "Codegen-time only via openapi-generator-cli. AbortSignal traversal at codegen; not shipped."
+    },
+    {
+      "id": "1244623",
+      "severity": "moderate",
+      "package": "minimatch",
+      "reason": "Dev/build-only transitive (glob, js-beautify, filelist); glob patterns are repository-controlled, not user input. Upgrade to minimatch >=11.0.1 is a major bump for Vue/test tooling, tracked separately."
+    }
   ]
 }
