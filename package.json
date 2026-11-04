@@ -10,7 +10,8 @@
     "dev": "vite",
     "build:app": "vite build",
     "build:app-dev": "vite build --mode development",
-    "build:server": "tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs",
+    "build:server": "node ./scripts/cleanServerBuild.cjs && tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs",
+    "check:server-orphans": "node ./scripts/checkServerOrphans.cjs",
     "build": "run-p type-check \"build:app\" \"build:server\"",
     "preview": "vite preview",
     "build-only": "vite build",
@@ -33,7 +34,6 @@
     "dotenv": "^17.4.2",
     "katex": "^0.19.1",
     "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch",
-    "pnpm": "^11.5.2",
     "rete": "^2.0.6",
     "rete-area-plugin": "^2.1.5",
     "rete-connection-plugin": "^2.0.5",
@@ -48,7 +48,8 @@
     "three": "^0.156.1",
     "vite-plugin-svgr": "^4.5.0",
     "vue": "^3.5.35",
-    "vue3-select": "^0.1.2"
+    "vue3-select": "^0.1.2",
+    "pnpm": "^11.5.2"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.5",

@@ -26,16 +26,37 @@ if (fs.existsSync(outDir)) {
 }
 ensureDir(outDir);
 
-// copy every compiled handler/module flat into dist/server
+// copy the compiled handlers listed in the allowlist (one per src/server/*.ts)
+// flat into dist/server. The allowlist is derived from the sources, so a file
+// whose source was deleted can never be copied: tsc is run on a clean
+// dist/server-src (see cleanServerBuild.cjs), but if a stale file does appear
+// in the build dir it is an orphan and the build fails here.
 if (!fs.existsSync(buildDir)) {
   console.error('build dir not found, run `pnpm run build:server` (tsc step) first');
   process.exit(1);
 }
-for (const item of fs.readdirSync(buildDir)) {
-  if (item.endsWith('.js')) {
-    fs.copyFileSync(path.join(buildDir, item), path.join(outDir, item));
-  }
+const srcDir = path.join(root, 'src', 'server');
+const allowlist = new Set(
+  fs.readdirSync(srcDir)
+    .filter((f) => f.endsWith('.ts'))
+    .map((f) => f.slice(0, -'.ts'.length) + '.js')
+);
+const built = fs.readdirSync(buildDir).filter((f) => f.endsWith('.js'));
+const orphans = built.filter((f) => !allowlist.has(f));
+if (orphans.length > 0) {
+  console.error('ORPHAN compiled files with no src/server counterpart:', orphans.join(', '));
+  console.error('Clean the build (pnpm run build:server does this) or remove the stale source.');
+  process.exit(1);
 }
+for (const item of allowlist) {
+  const src = path.join(buildDir, item);
+  if (!fs.existsSync(src)) {
+    console.error('compiled file missing from build dir (tsc incomplete?):', item);
+    process.exit(1);
+  }
+  fs.copyFileSync(src, path.join(outDir, item));
+}
+console.log('copied', allowlist.size, 'compiled modules (allowlist from src/server):', [...allowlist].join(', '));
 
 // write minimal package.json for the Web App (node-fetch + dotenv only)
 const pkg = {
