@@ -6,3 +6,13 @@ allowBuilds:
   rete: true
 patchedDependencies:
   onshape-typescript-fetch@1.19.0: patches/onshape-typescript-fetch@1.19.0.patch
+# Security overrides (#46): the runtime client onshape-typescript-fetch drags in
+# openapi-generator-cli 2.34.0 at codegen time, whose transitive tree ships the
+# vulnerable versions below. These overrides stay inside each package's current
+# major line (no Vue/Vite/TS major bumps) and only force the fixed releases.
+overrides:
+  shell-quote: 1.12.0
+  form-data: 4.0.6
+  axios: 1.21.0
+  brace-expansion: 5.0.12
+  follow-redirects: 1.16.2
