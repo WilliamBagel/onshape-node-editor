@@ -4,8 +4,7 @@
       <div class="os-row os-grow">
         <div class="os-param-query-list os-param-selection-list os-grow os-param-query-list-resize" :class="{
           'os-param-query-list-focus': isFocused,
-          'os-param-query-list-invalid': hasError,
-          'os-param-query-list-debug': isDebugMode
+          'os-param-query-list-invalid': hasError
         }" tabindex="0" @keydown="onKeyDown" @focus="onParameterFocused" @blur="onParameterFocusLost"
           @click="focusOnQlvIfAble">
           <div class="slimScrollDiv" style="position: relative; overflow: hidden; width: auto;">
@@ -15,9 +14,6 @@
                 <label class="os-param-query-list-label os-grow"
                   v-bind:class="{ 'os-param-query-list-small-label': !isEmpty }">
                   {{ label }}
-                  <span v-if="isDebugMode" class="debug-marker" title="DR-001: This control uses debug-only live selection">
-                    ⚠ DEBUG
-                  </span>
                 </label>
               </div>
               <ul class="os-param-list-container">
@@ -83,12 +79,6 @@ export default {
     app(): App {
       return reteAppInstance;
     },
-    isDebugMode(): boolean {
-      // True when the control is shown WITHOUT developer mode, i.e. when the
-      // badge is the warning the user needs. In developer mode the operator
-      // knows what they are doing and the banner would just be noise.
-      return this.app?.developerMode !== true;
-    },
     controlId(): string {
       // Use control's label + a unique suffix for warning deduplication
       return `querylist-${this.control.label}-${this.control.id ?? 'unknown'}`;
@@ -106,17 +96,41 @@ export default {
     onKeyDown(event: KeyboardEvent) {
       // Keyboard navigation can be extended here
     },
+    reportSelectionProblem(message: string) {
+      // #4: failures go through the log store, not the console. `reportMessage`
+      // records an entry in `App.log` (BuildLogStore) and shows a bubble.
+      // Per STYLE_GUIDE.md, no floating warning is added to the canvas here.
+      const app: any = this.app;
+      if (typeof app?.reportMessage === 'function') {
+        app.reportMessage(message, 'warning', 'editor');
+      } else if (app?.log) {
+        app.log.add({ severity: 'warning', source: 'editor', message });
+      }
+    },
     onParameterFocused(event: FocusEvent) {
       this.isFocused = true;
       this.app?.clientMessaging?.requestSelectionHighlight([]);
       this.app?.clientMessaging?.requestSelection([''], (data: TransientSelection[]) => {
+        // Issue #29: focusing must never clear an existing value. An empty
+        // or missing SELECTION is not a user clear action (deleting an item
+        // with × is), so keep the current value and report the discard
+        // through the log store instead of silently overwriting it.
+        if (!Array.isArray(data) || data.length === 0) {
+          if (Array.isArray(this.value) && this.value.length > 0) {
+            this.reportSelectionProblem(
+              `Selection for "${this.label}" returned no geometry; keeping the existing value.`
+            );
+          }
+          return false;
+        }
         this.value = data;
         this.$emit('value-change', this.value);
         return false;
-        // controlId goes in the 4th slot; the 3rd is `count`. Passing controlId
-        // as `count` was a type error (TS2345) and left the DR-001 warning
-        // untagged, so every control shared the "unknown-control" bucket.
-      }, undefined, this.controlId);
+      }, undefined, this.controlId, (reason: string) => {
+        // Failed/aborted request: keep the existing value (the success
+        // callback is not invoked) and report through the log store.
+        this.reportSelectionProblem(`Selection for "${this.label}" failed: ${reason}`);
+      });
     },
     onParameterFocusLost(event: FocusEvent) {
       this.isFocused = false;
@@ -134,24 +148,5 @@ export default {
 
 .os-param-query-list {
   box-sizing: border-box;
-}
-
-.os-param-query-list-debug {
-  border: 2px dashed #ff9800;
-  border-radius: 4px;
-  background-color: #fff8e1;
-}
-
-.debug-marker {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 6px;
-  font-size: 0.65rem;
-  font-weight: bold;
-  color: #e65100;
-  background-color: #ffcc80;
-  border-radius: 3px;
-  vertical-align: middle;
-  white-space: nowrap;
 }
 </style>

@@ -218,7 +218,8 @@ for messages (#4), and a real settings/diff dialog (the upload uses `prompt` /
 - The `/api` proxy returns upstream error bodies as plain text and sets
   `Proxy-Url`; error handling must read text, not assume JSON.
 - `ClientMessaging.requestSelection` (interactive selection in the Onshape
-  viewport) is a debug affordance only — see DR-001.
+  viewport) is an authoring gesture only — see amended DR-001: consume it to a
+  reconstructible query, never persist a live selection.
 - Onshape API method names differ from what intuition suggests; verify against
   the upstream generated client (`onshape-typescript-fetch`), not memory.
 - **The token refresh path is broken as wired** (issue #22): both client paths
