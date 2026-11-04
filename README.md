@@ -86,15 +86,17 @@ protection rules"*. Add a policy for a new pattern before dispatching from it:
 gh api -X POST repos/<owner>/<repo>/environments/github-pages/deployment-branch-policies -f name='deploy/*'
 ```
 
-### Build and deploy the server (Azure Functions)
+### Build and deploy the server (Azure App Service Web App)
 
-Builds the server TypeScript into `dist/server`, producing a function app layout. Then publish using the Azure Functions Core Tools.
+Builds the server TypeScript into `dist/server` (a plain Node HTTP server started with `node index.js` on `process.env.PORT`). Then zip-deploy it to an Azure App Service Web App via Kudu zipdeploy.
 
 ```
-npm run build:server
-set AZURE_FUNCTIONAPP_NAME=your-functionapp-name
-npm run deploy:server
+pnpm run build:server
+export AZURE_WEBAPP_NAME=your-webapp-name
+export AZURE_PUBLISH_USER=your-scm-user
+export AZURE_PUBLISH_PASS=your-scm-password
+pnpm run deploy:server
 ```
 
-The `deploy:server` script calls `func azure functionapp publish` — make sure the Azure Functions Core Tools (`func`) are installed and you are logged in.
+See `docs/server-web-app.md` for the full App Service deployment notes.
 

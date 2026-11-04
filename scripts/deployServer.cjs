@@ -1,7 +1,5 @@
 // Zip-deploys dist/server to an Azure App Service Web App via the Kudu
 // zipdeploy endpoint (`<name>.scm.azurewebsites.net/api/zipdeploy`) (#28).
-// The same endpoint serves both Function Apps and Web Apps; nothing about
-// this script is Functions-specific.
 //
 // Required environment (root .env or shell):
 //   AZURE_PUBLISH_USER   SCM/publish username (fallback AZURE_USERNAME)

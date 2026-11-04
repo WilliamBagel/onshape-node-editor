@@ -49,8 +49,7 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     return { status: 400, body: 'missing host header' };
   }
   const proto = headers['x-forwarded-proto'] || (request as any).protocol || 'https';
-  // request.url is the full request URL (same shape as the Azure Functions
-  // HttpRequest.url); recover path+query so the authorize redirect nests
+  // request.url is the full request URL; recover path+query so the authorize redirect nests
   // under this endpoint instead of concatenating a second absolute URL.
   const parsed = new URL(request.url || '/oauthsignin', 'http://localhost');
   const script_uri = `${proto}://${host}${parsed.pathname}${parsed.search}`;

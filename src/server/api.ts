@@ -35,19 +35,10 @@ require('dotenv').config();
 
 export default async function (request: HttpRequest, context?: any): Promise<HttpResponseInit> {
   try {
-    // Prefer the bound wildcard path (route: "api/{*path}") provided by Azure Functions.
-    // This yields only the portion after /api/, which is what we want to forward.
-    const boundPath = (context && (context as any).bindingData && (context as any).bindingData.path) as string | undefined;
-
-    // Fallback: if no bindingData.path, remove leading "/api" from request.pathname
+    // The plain Node server (src/server/index.ts) routes /api and /api/*
+    // here; strip the leading "/api" segment to get the path to forward.
     const parsedUrl = new URL(request.url || '/', 'http://localhost');
-    let forwardPath = '';
-    if (boundPath && boundPath.length > 0) {
-      forwardPath = '/' + boundPath.replace(/^\/+/, '');
-    } else {
-      // remove first /api segment if present
-      forwardPath = parsedUrl.pathname.replace(/^\/api(\/|$)/, '/');
-    }
+    const forwardPath = parsedUrl.pathname.replace(/^\/api(\/|$)/, '/');
 
     // Preserve original query string
     const queryString = parsedUrl.search ? parsedUrl.search : '';

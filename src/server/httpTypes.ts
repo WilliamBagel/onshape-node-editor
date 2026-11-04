@@ -9,7 +9,7 @@ export type HeaderMap = Record<string, string> & {
 
 export interface HttpRequest {
   method?: string;
-  /** Full request URL, same shape as the Azure Functions HttpRequest.url. */
+  /** Full request URL (e.g. https://host/api/...). */
   url?: string;
   query: URLSearchParams;
   headers: HeaderMap;
