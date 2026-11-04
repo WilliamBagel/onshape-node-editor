@@ -85,8 +85,8 @@ export class BaseApp {
         const spinner = createDocumentElement('div', {
             class: 'thumbnail-spinner os-spinner-medium os-spinner-spinning',
             style: `-webkit-animation:osSpinnerSpinning 1.1s linear infinite;animation:
-             osSpinnerSpinning 1.1s linear infinite;border: 1.1em solid rgba(22,81,176,.2);
-             border-left-color: #1651b0;border-radius: 50%;height: 10em;
+             osSpinnerSpinning 1.1s linear infinite;border: 1.1em solid var(--hairline);
+             border-left-color: var(--accent-steel);border-radius: 50%;height: 10em;
              -webkit-transform:translateZ(0);transform: translateZ(0);width: 10em;font-size: 3px;`,
         });
         container.appendChild(style);

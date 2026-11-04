@@ -180,7 +180,7 @@ watch(() => tooltipState.visible, async (v) => {
   height: 0;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-bottom: 6px solid #1a1a1a;
+  border-bottom: 6px solid var(--ink);
   margin-top: -6px;
 }
 
@@ -191,14 +191,14 @@ watch(() => tooltipState.visible, async (v) => {
   height: 0;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top: 6px solid #1a1a1a;
+  border-top: 6px solid var(--ink);
   margin-bottom: -6px;
 }
 
 /* ── Tooltip body ───────────────────────────────────────────────── */
 .tooltip-inner {
-  background: #1a1a1a;
-  color: #f0f0f0;
+  background: var(--ink);
+  color: var(--on-steel);
   border-radius: 5px 5px 0 0;
   padding: 5px 9px 4px;
   font-size: 12px;
@@ -215,8 +215,9 @@ watch(() => tooltipState.visible, async (v) => {
 
 /* ── Optional description block ─────────────────────────────────── */
 .tooltip-expand {
-  background: #1a1a1a;
-  color: #b0b0b0;
+  background: var(--ink);
+  color: var(--on-steel);
+  opacity: var(--opacity-secondary);
   border-radius: 0 0 5px 5px;
   padding: 2px 9px 6px;
   font-size: 11px;
@@ -224,6 +225,6 @@ watch(() => tooltipState.visible, async (v) => {
   line-height: 1.4;
   white-space: normal;
   max-width: 220px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-1);
 }
 </style>

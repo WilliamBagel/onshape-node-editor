@@ -115,7 +115,6 @@ export default defineComponent({
 
 .map-header-title {
     // font-size: 14px;
-    // color: #333;
     // flex: 1;
 }
 
@@ -127,7 +126,7 @@ export default defineComponent({
     user-select: none;
     color: black;
     padding-top: 0px;
-    font-size: 15px;
+    font-size: 12px;
     overflow: visible;
     align-self: center;
 }
@@ -138,6 +137,6 @@ export default defineComponent({
 }
 
 .map-parameters ::v-deep(.input) {
-    background-color: #0000000F;
+    background-color: var(--hover-tint);
 }
 </style>

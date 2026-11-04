@@ -9,12 +9,12 @@
 }
 
 .background {
-  background-color: #ffffff;
+  background-color: var(--canvas-warm);
   opacity: 1;
-  background-image: linear-gradient(#f1f1f1 3.2px, transparent 3.2px),
-    linear-gradient(90deg, #f1f1f1 3.2px, transparent 3.2px),
-    linear-gradient(#f1f1f1 1.6px, transparent 1.6px),
-    linear-gradient(90deg, #f1f1f1 1.6px, #ffffff 1.6px);
+  background-image: linear-gradient(var(--canvas-grid) 3.2px, transparent 3.2px),
+    linear-gradient(90deg, var(--canvas-grid) 3.2px, transparent 3.2px),
+    linear-gradient(var(--canvas-grid) 1.6px, transparent 1.6px),
+    linear-gradient(90deg, var(--canvas-grid) 1.6px, var(--surface) 1.6px);
   background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
   background-position: -3.2px -3.2px, -3.2px -3.2px, -1.6px -1.6px,
     -1.6px -1.6px;

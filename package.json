@@ -23,7 +23,8 @@
     "scrape:docs-advanced": "node scripts/std-library-scrapper/scrapeFeatureScriptDocs-advanced.mjs",
     "scrape:docs-browser": "node scripts/std-library-scrapper/scrapeFeatureScriptDocs-advanced.mjs --browser",
     "organize:docs": "node scripts/std-library-scrapper/organizeLibrary.mjs",
-    "scrape:all": "npm run scrape:docs && npm run organize:docs"
+    "scrape:all": "npm run scrape:docs && npm run organize:docs",
+    "style-check": "node scripts/style-check.mjs"
   },
   "dependencies": {
     "@rwh/keystrokes": "^1.5.6",

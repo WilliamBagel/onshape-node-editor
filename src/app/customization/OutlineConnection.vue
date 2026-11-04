@@ -4,8 +4,8 @@
     <rect x="0" y="0" width="10000" height="10000" fill="none" pointer-events="none" />
     <path :d="path" class="path-outline" :style="{ 'marker-start': fixedLeft, 'marker-end': fixedRight }"></path>
     
-    <!-- Primary gradient path -->
-    <path :d="path" class="path" :style="{ stroke: `url(#${id})` }"></path>
+    <!-- Primary path: solid low-saturation stroke (STYLE_GUIDE.md: no gradient wires) -->
+    <path :d="path" class="path" :style="{ stroke: colorStart }"></path>
     
     <!-- Backup solid color paths with blending to simulate gradient -->
     <path :d="path" class="path-fallback-start" :style="{ stroke: colorStart }"></path>
@@ -25,15 +25,6 @@
       <marker id="circleMarker" viewBox="0 0 40 40" refX="20" refY="20" orient="auto" markerUnits="strokeWidth">
         <circle cx="20" cy="20" r="8" :fill="color" stroke="black" stroke-width="1.25" />
       </marker>
-      <linearGradient :id="id" x1="0%" y1="0%" x2="100%" y2="0%" gradientUnits="objectBoundingBox" spreadMethod="reflect">
-        <stop offset="0%" :style="{ 'stop-color': colorStart, 'stop-opacity': 1 }" />
-        <stop offset="100%" :style="{ 'stop-color': colorEnd, 'stop-opacity': 1 }" />
-      </linearGradient>
-      <!-- Fallback radial gradient for robustness -->
-      <radialGradient :id="`radial_${id}`" cx="50%" cy="50%" r="50%" fx="0%" fy="50%">
-        <stop offset="0%" :style="{ 'stop-color': colorStart, 'stop-opacity': 1 }" />
-        <stop offset="100%" :style="{ 'stop-color': colorEnd, 'stop-opacity': 1 }" />
-      </radialGradient>
     </defs>
   </svg>
 </template>
@@ -47,7 +38,7 @@ export default defineComponent({
   props: ['data', 'start', 'end', 'path'],
   data() {
     return {
-      color: 'rgb(79, 182, 70)',
+      color: 'var(--flow-teal)',
     }
   },
   methods: {
@@ -60,6 +51,8 @@ export default defineComponent({
         return this.color;
       }
       const color = (this.data as Schemes['Connection']).styleSettings.getStyle(socket);
+      // Socket colours are CSS tokens (var(--...)); Color() cannot lighten those.
+      if (!color.startsWith('#')) return color;
       const lighter = Color(color).lighten(0.3);
       return lighter.hex();
     },

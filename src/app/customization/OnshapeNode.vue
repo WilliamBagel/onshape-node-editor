@@ -229,14 +229,13 @@ export default defineComponent({
 //  - Palette follows the amended guide (d6fb185): hairline #d9d9d4,
 //    hover-sharpened hairline #8c8c86, steel-blue #2f5f8f for selection/focus
 //    only. The slate/blue page tokens in common.css are not used here.
-// Tokens are node-local (under `.node`) by design: the global token layer in
-// src/app/common.css is owned by another change, so no hex lives outside
-// this scoped stylesheet's own definitions.
+// Tokens are node-local aliases (under `.node`) of the single palette in
+// src/app/common.css (#33); no hex lives outside common.css.
 .node {
-  --node-ink: #1a1a1a;
-  --node-hairline: #d9d9d4;
-  --node-hairline-strong: #8c8c86;
-  --node-accent: #2f5f8f;
+  --node-ink: var(--ink);
+  --node-hairline: var(--hairline);
+  --node-hairline-strong: var(--hairline-strong);
+  --node-accent: var(--accent-steel);
   --node-font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --node-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --node-title-size: 14px;

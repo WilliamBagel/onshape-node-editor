@@ -66,13 +66,7 @@ const hoveredButton = ref<'search' | null>(null)
 <style scoped>
 /* ── Design tokens (match TopBar) ───────────────────────────────── */
 :root {
-  --toolbar-bg: #ffffff;
-  --toolbar-border: #e0e0e0;
-  --btn-color: #3a3a3a;
-  --btn-hover-bg: #ebebeb;
-  --btn-active-bg: #d6d6d6;
-  --btn-radius: 5px;
-  --divider-color: #d8d8d8;
+  --btn-radius: var(--radius-control);
   --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -82,7 +76,7 @@ const hoveredButton = ref<'search' | null>(null)
   align-items: center;
   justify-content: center;
   /* entire bar centred */
-  border-top: 1px solid var(--toolbar-border);
+  border-top: 1px solid var(--hairline);
   padding: 0 8px;
   user-select: none;
   font-family: var(--font-ui);
@@ -106,16 +100,16 @@ const hoveredButton = ref<'search' | null>(null)
   gap: 6px;
   padding: 0 8px;
   height: 22px;
-  border-radius: 11px;
-  background: #f2f2f2;
-  border: 1px solid #e2e2e2;
+  border-radius: var(--radius-control);
+  background: var(--surface-panel);
+  border: 1px solid var(--hairline);
 }
 
 .graph-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #4caf6e;
+  background: var(--flow-teal);
   /* green "active" indicator */
   flex-shrink: 0;
 }
@@ -123,7 +117,7 @@ const hoveredButton = ref<'search' | null>(null)
 .graph-name {
   font-size: 11px;
   font-weight: 600;
-  color: #444;
+  color: var(--ink);
   letter-spacing: 0.03em;
   max-width: 180px;
   overflow: hidden;
@@ -135,7 +129,7 @@ const hoveredButton = ref<'search' | null>(null)
 .toolbar-divider {
   width: 1px;
   height: 16px;
-  background: var(--divider-color);
+  background: var(--hairline);
   margin: 0 2px;
   flex-shrink: 0;
 }
@@ -157,7 +151,7 @@ const hoveredButton = ref<'search' | null>(null)
   border: none;
   border-radius: var(--btn-radius);
   background: transparent;
-  color: var(--btn-color);
+  color: var(--ink);
   cursor: pointer;
   font-size: 11px;
   font-family: var(--font-ui);
@@ -167,11 +161,11 @@ const hoveredButton = ref<'search' | null>(null)
 }
 
 .toolbar-btn:hover {
-  background: var(--btn-hover-bg);
+  background: var(--surface-sunken);
 }
 
 .toolbar-btn:active {
-  background: var(--btn-active-bg);
+  background: var(--border-subtle);
 }
 
 .btn-label {

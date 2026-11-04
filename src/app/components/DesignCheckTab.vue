@@ -115,17 +115,17 @@ function locate(nodeId: string): void {
   gap: 6px;
   height: 28px;
   padding: 0 8px;
-  border: 1px solid #d4d4d4;
+  border: 1px solid var(--hairline);
   border-radius: 4px;
-  background: #ffffff;
-  color: #1f2937;
+  background: var(--surface);
+  color: var(--ink);
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
 }
 
 .drc-tab:hover {
-  border-color: #9ca3af;
+  border-color: var(--hairline-strong);
 }
 
 .drc-label {
@@ -135,21 +135,22 @@ function locate(nodeId: string): void {
 .drc-count {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--ink);
+  opacity: var(--opacity-secondary);
 }
 
 .drc-count--error {
-  color: #e06c75;
+  color: var(--error);
   font-weight: 600;
 }
 
 .drc-count--warning {
-  color: #b45309;
+  color: var(--warning);
   font-weight: 600;
 }
 
 .drc-count--clean {
-  color: #15803d;
+  color: var(--flow-teal);
 }
 
 .drc-panel {
@@ -161,15 +162,16 @@ function locate(nodeId: string): void {
   max-height: 320px;
   overflow: auto;
   padding: 8px;
-  border: 1px solid #d4d4d4;
+  border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .drc-empty {
   margin: 4px;
-  color: #6b7280;
+  color: var(--ink);
+  opacity: var(--opacity-secondary);
   font-size: 12px;
 }
 
@@ -184,9 +186,9 @@ function locate(nodeId: string): void {
   align-items: baseline;
   gap: 6px;
   padding: 6px 4px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--hairline);
   font-size: 11px;
-  color: #1f2937;
+  color: var(--ink);
 }
 
 .drc-item:last-child {
@@ -199,15 +201,16 @@ function locate(nodeId: string): void {
 }
 
 .drc-item--error .drc-item-severity {
-  color: #e06c75;
+  color: var(--error);
 }
 
 .drc-item--warning .drc-item-severity {
-  color: #b45309;
+  color: var(--warning);
 }
 
 .drc-item-source {
-  color: #6b7280;
+  color: var(--ink);
+  opacity: var(--opacity-secondary);
 }
 
 .drc-item-message {
@@ -218,7 +221,7 @@ function locate(nodeId: string): void {
 .drc-locate {
   border: none;
   background: transparent;
-  color: #3b82f6;
+  color: var(--accent-steel);
   font-family: inherit;
   font-size: 11px;
   text-decoration: underline;
