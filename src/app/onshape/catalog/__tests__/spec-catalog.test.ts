@@ -55,8 +55,10 @@ describe('spec catalog (#7)', () => {
         expect(cross?.inputs.every((p) => p.valueType === 'Vector')).toBe(true);
     });
 
-    it('dedupes the library to the 1189 unique name+descriptor entries', () => {
-        expect(defaultCatalog.entries.length).toBe(1189);
+    it('dedupes the library to the 1189 unique name+descriptor entries plus the synthetic instance-on-points utility', () => {
+        // 1189 scraped name+descriptor entries + 1 synthetic utility entry
+        // (#11: instanceOnPoints has no scraped entry).
+        expect(defaultCatalog.entries.length).toBe(1190);
         const keys = defaultCatalog.entries.map((e) => e.key);
         expect(new Set(keys).size).toBe(keys.length);
     });

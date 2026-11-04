@@ -57,6 +57,9 @@ export function modifierCheckKey(modifier: string): string {
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
 // Module-level app reference for access from Rete components
+import type { DebugNodeSource, DebugSelection } from "../onshape-utils/evalfeaturescript";
+import { camelize } from "../utils/stringutils";
+
 export let reteAppInstance: any = null;
 
 export type StudioEvents = {
@@ -99,6 +102,11 @@ export type EditorControls = {
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
     addNodeFromCatalog: (entry: CatalogEntry, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /**
+     * #16: debug-grid sources for the #15 harness — one statement block per
+     * non-frame node, and one selection per output socket.
+     */
+    debugSources?: () => { nodes: DebugNodeSource[]; selections: DebugSelection[] }
     destroy: () => void
 }
 
@@ -131,6 +139,11 @@ type EditorBaseInfo = {
     loadGraph: (reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>
     /** #30: select a node by id; used by the design-check surface's Locate. */
     selectNode: (nodeId: string) => Promise<void>
+    /**
+     * #16: debug-grid sources for the #15 harness — one statement block per
+     * non-frame node, and one selection per output socket.
+     */
+    debugSources: () => { nodes: DebugNodeSource[]; selections: DebugSelection[] }
 }
 
 export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo> {
@@ -672,6 +685,41 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return node;
     };
 
+    /**
+     * #16: debug-grid sources for the #15 harness. One statement block per
+     * non-frame node (its own FeatureScript line) under a camelized unique
+     * variable, and one selection per output socket. Expression/value nodes
+     * contribute their hoisted `let` binding via the same line channel — the
+     * harness tolerates nodes whose statements are not standalone; the grid
+     * surfaces the server's attribution instead of guessing.
+     */
+    const debugSources = (): { nodes: DebugNodeSource[]; selections: DebugSelection[] } => {
+        const nodes: DebugNodeSource[] = [];
+        const selections: DebugSelection[] = [];
+        const usedVariables = new Set<string>();
+        for (const node of editor.getNodes()) {
+            if (node instanceof FrameNode) continue;
+            let variable = camelize(node.id).replace(/[^A-Za-z0-9_]/g, '_');
+            if (variable === '' || /^[0-9]/.test(variable)) variable = `n${variable}`;
+            const base = variable;
+            let suffix = 1;
+            while (usedVariables.has(variable)) variable = `${base}${suffix++}`;
+            usedVariables.add(variable);
+            let statements: string[] = [];
+            try {
+                const info = node.getFeatureScriptInfo({});
+                if (typeof info?.line === 'string' && info.line.trim() !== '') statements = [info.line];
+            } catch {
+                statements = [];
+            }
+            nodes.push({ nodeId: node.id, variable, statements });
+            for (const socket of Object.keys(node.outputs ?? {})) {
+                selections.push({ nodeId: node.id, socket });
+            }
+        }
+        return { nodes, selections };
+    };
+
     return {
         editor,
         area,
@@ -688,6 +736,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         serializeGraph,
         loadGraph,
         studioEvents: { build: buildStudio, describe: describeStudio },
+        debugSources,
         selectNode
     }
 }
