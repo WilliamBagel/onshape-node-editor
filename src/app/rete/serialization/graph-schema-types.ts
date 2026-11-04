@@ -42,6 +42,7 @@
  */
 import type { BTFeatureSpec129 } from "onshape-typescript-fetch";
 import type { Annotation } from "../../onshape-utils/featurescripttypes";
+import type { CatalogPort } from "../../onshape/catalog/types";
 import type { Precondition } from "../nodes/definefeaturenode";
 
 /** Version written by this build. Version 1 is still accepted on load. */
@@ -151,6 +152,7 @@ export interface SerializedOutputFeatureNode extends SerializedNodeBase {
 export interface SerializedFunctionNode extends SerializedNodeBase {
     kind: "function";
     functionName: string;
+    outputs?: CatalogPort[];
     inputs: import("../../onshape/catalog/types").CatalogPort[];
     /** Curated utility identity (issue #11), when the node came from the utility registry. */
     utilityId?: string;

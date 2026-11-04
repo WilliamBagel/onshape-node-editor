@@ -199,6 +199,42 @@ export function findGroupCycle(
  * would create a cycle — i.e. `innerId` already (transitively) contains
  * `containingId`, or they are the same definition.
  */
+
+/** Node kinds that can be cloned into a group definition (#47). */
+const GROUPABLE_KINDS: ReadonlySet<string> = new Set([
+    "function",
+    "utility-statement",
+    "math-expression",
+    "group-instance",
+    "array-literal",
+    "array-concat",
+    "array-index",
+    "array-size",
+    "map-array",
+    "for-each",
+    "bounded-for",
+]);
+
+/** Whether a node kind can be a member of a group (see cloneMember). */
+export function isGroupableKind(type: string): boolean {
+    return GROUPABLE_KINDS.has(type);
+}
+
+/**
+ * Throw naming the first selection member whose kind cannot be grouped
+ * (CustomFeature / define-feature / output-feature / frame / unknown).
+ * Used at group creation so the user learns upfront, not at Run.
+ */
+export function assertGroupableSelection(nodes: readonly OnshapeNode[]): void {
+    for (const node of nodes) {
+        if (!isGroupableKind(node.type)) {
+            throw new Error(
+                `Cannot group node "${node.getTitle()}" of kind "${node.type}": this node kind cannot be a group member.`,
+            );
+        }
+    }
+}
+
 export function wouldCreateGroupCycle(
     definitions: ReadonlyMap<string, GroupDefinition>,
     containingId: string,

@@ -29,6 +29,7 @@ import { GroupNode } from "../nodes/groupinstancenode";
 import { FunctionNode } from "../nodes/functionnode";
 import { ArrayConcatNode, ArrayIndexNode, ArrayLiteralNode, ArraySizeNode, BoundedForNode, ForEachNode, MapArrayNode } from "../nodes/arraynodes";
 import { UtilityStatementNode } from "../nodes/utilitystatementnode";
+import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { createUtilityNode } from "../catalog-node-factory";
 import { connectGraphNodes } from "../serialization/graph-serializer";
 import type { GroupDefinition } from "./groupmodel";
@@ -43,6 +44,15 @@ interface ExpandedInstance {
     inputs: Map<string, BoundaryTarget>;
     /** Boundary output socket id -> cloned member output. */
     outputs: Map<string, BoundaryTarget>;
+}
+
+/** Node that can receive a FeatureScript literal for an unconnected input. */
+interface LiteralCarrier { setLiteral(key: string, literal: string | undefined): void; }
+
+function asLiteralCarrier(node: OnshapeNode | undefined): LiteralCarrier | undefined {
+    return (node != null && "setLiteral" in node && typeof (node as LiteralCarrier).setLiteral === "function")
+        ? (node as unknown as LiteralCarrier)
+        : undefined;
 }
 
 function cloneMember(node: OnshapeNode, newId: string): OnshapeNode {
@@ -89,6 +99,11 @@ function cloneMember(node: OnshapeNode, newId: string): OnshapeNode {
             throw new Error(`Group expansion cannot clone statement node "${node.id}" without a utility id.`);
         }
         clone = created;
+        for (const [key, literal] of Object.entries(node.getLiterals())) {
+            (clone as UtilityStatementNode).setLiteral(key, literal);
+        }
+    } else if (node instanceof MathExpressionNode) {
+        clone = MathExpressionNode.fromJSON(node.toJSON());
     } else if (node instanceof ArrayLiteralNode) {
         clone = ArrayLiteralNode.fromJSON(node.toJSON());
     } else if (node instanceof ArrayConcatNode) {
@@ -240,13 +255,44 @@ export async function expandGroupInstances(
     // A muted instance has no boundary targets, so its connections drop —
     // consumers fall back to their own literals/defaults, as for an
     // unconnected input.
+    const connectedInputsByInstance = new Map<string, Set<string>>();
     for (const connection of editor.getConnections()) {
         const source = resolveEndpoint(connection.source, connection.sourceOutput, "output");
         const target = resolveEndpoint(connection.target, connection.targetInput, "input");
+        const instanceTarget = instances.find((candidate) => candidate.id === connection.target);
+        if (instanceTarget != null) {
+            const connected = connectedInputsByInstance.get(instanceTarget.id) ?? new Set<string>();
+            connected.add(connection.targetInput);
+            connectedInputsByInstance.set(instanceTarget.id, connected);
+        }
         if (source == null || target == null) {
             continue;
         }
         await addConnection(source.node, source.socketKey, target.node, target.socketKey);
+    }
+
+    // #47: a boundary input whose group socket carries a defaultLiteral,
+    // and which this instance left unconnected, feeds that literal to the
+    // cloned member (where the member supports literals).
+    for (const instance of instances) {
+        if (instance.muted) {
+            continue;
+        }
+        const boundary = boundaryByInstance.get(instance.id);
+        if (boundary == null) {
+            continue;
+        }
+        const connected = connectedInputsByInstance.get(instance.id) ?? new Set<string>();
+        for (const socket of instance.getDefinition().inputs) {
+            if (socket.defaultLiteral == null || connected.has(socket.id)) {
+                continue;
+            }
+            const target = boundary.inputs.get(socket.id);
+            if (target == null) {
+                continue;
+            }
+            asLiteralCarrier(target.node)?.setLiteral(target.socketKey, socket.defaultLiteral);
+        }
     }
 
     return { editor: expanded, engine };

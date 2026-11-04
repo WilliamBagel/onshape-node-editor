@@ -45,7 +45,7 @@ import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createNodeFromCatalogEntry, groupByCategory, nodeableEntries } from "./catalog-node-factory";
 import { GroupNode } from "./nodes/groupinstancenode";
-import { createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
+import { assertGroupableSelection, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
 import { GroupEditorController } from "./groups/group-editor";
 
 /** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
@@ -763,6 +763,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         if (selected.length === 0) {
             return null;
         }
+        assertGroupableSelection(selected);
         const memberIds = new Set(selected.map((node) => node.id));
         const allConnections = editor.getConnections().map((connection) => ({
             source: connection.source,
