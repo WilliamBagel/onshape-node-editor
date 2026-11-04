@@ -26,6 +26,7 @@ import {
     ValueExpression,
 } from "../onshape-utils/expressioncodegen";
 import { validateGraphNodes } from "./graph-validation";
+import { expandGroupInstances } from "./groups/group-expand";
 
 /**
  * Generate the Feature Studio source for `editor`'s graph.
@@ -41,6 +42,13 @@ export async function generateFeatureStudioSource(
     editor: NodeEditor<Schemes>,
     engine: DataflowEngine<Schemes>
 ): Promise<string | undefined> {
+    // #14: group instances are inlined (see groups/group-expand.ts for the
+    // inline-vs-function trade-off). The expanded editor has no instances,
+    // so the recursive call runs the ordinary pipeline below.
+    const expanded = await expandGroupInstances(editor);
+    if (expanded != null) {
+        return generateFeatureStudioSource(expanded.editor, expanded.engine);
+    }
     const nodeProcessor = new ReteOnshapeNodeProcessor(editor);
     const nodeArray = nodeProcessor.processNodes();
 

@@ -30,6 +30,8 @@ import { CustomConnectionPlugin } from "./customconnectionplugin";
 import { OnshapeNode } from "./nodes/onshapenode";
 import { FrameNode } from "./nodes/framenode";
 import FrameNodeView from "../customization/FrameNodeView.vue";
+import MathExpressionNodeView from "../customization/MathExpressionNodeView.vue";
+import { MathExpressionNode } from "./nodes/mathexpressionnode";
 import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
@@ -42,6 +44,9 @@ import { ContextMenuPlugin, Presets as ContextMenuPresets } from "rete-context-m
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createNodeFromCatalogEntry, groupByCategory, nodeableEntries } from "./catalog-node-factory";
+import { GroupNode } from "./nodes/groupinstancenode";
+import { createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
+import { GroupEditorController } from "./groups/group-editor";
 
 /** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
 export function modifierCheckKey(modifier: string): string {
@@ -98,6 +103,16 @@ export type EditorControls = {
     createFrameFromSelection: () => Promise<FrameNode | null>
     /** #13: flip a frame's collapsed state; descendants hide/show in place. */
     toggleFrameCollapsed: (frameId: string) => Promise<void>
+    /** #14: Tab — enter the selected group instance, or exit one level. */
+    toggleGroupEdit: () => Promise<string[]>
+    /** #14: M — mute the selected nodes; returns how many changed. */
+    toggleMuteSelected: () => Promise<number>
+    /** #14: known group definitions, for placing another instance. */
+    listGroupDefinitions: () => GroupDefinition[]
+    /** #14: place another instance of a group definition. */
+    addGroupInstance: (definitionId: string) => Promise<GroupNode | null>
+    /** #14: wrap the selected non-frame nodes in a new group definition. */
+    createGroupFromSelection: () => Promise<GroupNode | null>
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
@@ -129,6 +144,16 @@ type EditorBaseInfo = {
     createFrameFromSelection: () => Promise<FrameNode | null>
     /** #13: flip a frame's collapsed state; descendants hide/show in place. */
     toggleFrameCollapsed: (frameId: string) => Promise<void>
+    /** #14: Tab — enter the selected group instance, or exit one level. */
+    toggleGroupEdit: () => Promise<string[]>
+    /** #14: M — mute the selected nodes; returns how many changed. */
+    toggleMuteSelected: () => Promise<number>
+    /** #14: known group definitions, for placing another instance. */
+    listGroupDefinitions: () => GroupDefinition[]
+    /** #14: place another instance of a group definition. */
+    addGroupInstance: (definitionId: string) => Promise<GroupNode | null>
+    /** #14: wrap the selected non-frame nodes in a new group definition. */
+    createGroupFromSelection: () => Promise<GroupNode | null>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry. */
@@ -167,6 +192,9 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 node(context: any) {
                     if (context.payload instanceof FrameNode) {
                         return FrameNodeView;
+                    }
+                    if (context.payload instanceof MathExpressionNode) {
+                        return MathExpressionNodeView;
                     }
                     if (context.payload instanceof OnshapeNode) {
                         return CustomFeatureComp;
@@ -655,10 +683,179 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         // Restore collapsed frames after positions exist so hidden children
         // hide in place rather than flashing on load.
         applyCollapsedStates();
+        // #14: adopt the loaded definitions so instances can be re-placed
+        // and entered without a reload.
+        groupDefinitions.clear();
+        for (const definition of graph.groupDefinitions) {
+            groupDefinitions.set(definition.id, definition);
+        }
         return {
             nodes: graph.nodes.filter((node) => !(node instanceof FrameNode)).length,
             warnings: graph.warnings,
         };
+    };
+
+    // #14 grouping v2: definitions, instances, editing mode, mute -------
+
+    /** Known group definitions (loaded, or created from the selection). */
+    const groupDefinitions = new Map<string, GroupDefinition>();
+    let groupCounter = 0;
+
+    const canvasPositions = (): Record<string, { x: number; y: number } | null> => {
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        for (const node of editor.getNodes()) {
+            const view = area.nodeViews.get(node.id);
+            positions[node.id] = view != null ? { ...view.position } : null;
+        }
+        return positions;
+    };
+
+    const groupController = new GroupEditorController(editor, {
+        snapshot: () => ({ document: serializeGraph(), positions: canvasPositions() }),
+        restore: async (snap) => {
+            await loadGraph(snap.document, () => undefined);
+        },
+        getPositions: () => canvasPositions(),
+        setPositions: async (positions) => {
+            for (const [id, position] of Object.entries(positions)) {
+                if (position != null && editor.getNode(id) != null) {
+                    await area.translate(id, position);
+                }
+            }
+        },
+    });
+
+    const selectedInstanceId = (): string | undefined => {
+        const selected = editor.getNodes().find((node) => node.selected && node instanceof GroupNode);
+        return selected?.id;
+    };
+
+    const toggleGroupEdit = async (): Promise<string[]> => {
+        await groupController.toggle(selectedInstanceId());
+        return groupController.breadcrumb();
+    };
+
+    const toggleMuteSelected = async (): Promise<number> => {
+        const selected = editor.getNodes().filter((node) => node.selected && !(node instanceof FrameNode));
+        for (const node of selected) {
+            node.muted = !node.muted;
+        }
+        return selected.length;
+    };
+
+    const listGroupDefinitions = (): GroupDefinition[] => [...groupDefinitions.values()];
+
+    const addGroupInstance = async (definitionId: string): Promise<GroupNode | null> => {
+        const definition = groupDefinitions.get(definitionId);
+        if (definition == null) {
+            return null;
+        }
+        const instance = new GroupNode(definition);
+        await editor.addNode(instance);
+        await area.translate(instance.id, lastPointer ?? viewportCentre());
+        return instance;
+    };
+
+    const createGroupFromSelection = async (): Promise<GroupNode | null> => {
+        const selected = editor.getNodes().filter(
+            (node) => node.selected && !(node instanceof FrameNode),
+        );
+        if (selected.length === 0) {
+            return null;
+        }
+        const memberIds = new Set(selected.map((node) => node.id));
+        const allConnections = editor.getConnections().map((connection) => ({
+            source: connection.source,
+            sourceOutput: connection.sourceOutput,
+            target: connection.target,
+            targetInput: connection.targetInput,
+        }));
+        const { inputs, outputs } = extractBoundarySockets(memberIds, allConnections, (nodeId, socketKey, direction) => {
+            const node = editor.getNode(nodeId);
+            const side = direction === "input" ? node?.inputs : node?.outputs;
+            return (side?.[socketKey]?.socket as { valueType?: { name: string } } | undefined)?.valueType?.name;
+        });
+
+        const definition = createGroupDefinition(`group-${++groupCounter}`, `Group ${groupCounter}`);
+        definition.nodes = [...selected];
+        definition.connections = allConnections.filter(
+            (connection) => memberIds.has(connection.source) && memberIds.has(connection.target),
+        );
+        definition.inputs = inputs;
+        definition.outputs = outputs;
+        definition.positions = canvasPositions();
+        // A fresh definition cannot be part of a cycle, but a member that
+        // is an instance of a definition that (transitively) contains one
+        // of the selected nodes would be — refuse rather than build it.
+        const definitions = new Map(groupDefinitions);
+        definitions.set(definition.id, definition);
+        for (const member of selected) {
+            if (member instanceof GroupNode && wouldCreateGroupCycle(definitions, definition.id, member.definitionId)) {
+                return null;
+            }
+        }
+        groupDefinitions.set(definition.id, definition);
+
+        const instance = new GroupNode(definition);
+        // External connections are rewired to the instance's boundary
+        // sockets; the members leave the editor (they live in the
+        // definition until the group is entered).
+        const external = allConnections.filter(
+            (connection) => memberIds.has(connection.source) !== memberIds.has(connection.target),
+        );
+        for (const connection of [...editor.getConnections()]) {
+            if (memberIds.has(connection.source) || memberIds.has(connection.target)) {
+                await editor.removeConnection(connection.id);
+            }
+        }
+        for (const node of [...selected]) {
+            await editor.removeNode(node.id);
+        }
+        await editor.addNode(instance);
+        const memberPositions = selected
+            .map((node) => area.nodeViews.get(node.id)?.position ?? definition.positions[node.id])
+            .filter((position): position is { x: number; y: number } => position != null);
+        const centroid = memberPositions.length > 0
+            ? {
+                x: memberPositions.reduce((sum, position) => sum + position.x, 0) / memberPositions.length,
+                y: memberPositions.reduce((sum, position) => sum + position.y, 0) / memberPositions.length,
+            }
+            : viewportCentre();
+        await area.translate(instance.id, centroid);
+        for (const connection of external) {
+            if (memberIds.has(connection.target)) {
+                const socketId = `${connection.target}.${connection.targetInput}`;
+                if (instance.inputs[socketId] == null) continue;
+                const sourceNode = editor.getNode(connection.source);
+                if (sourceNode == null) continue;
+                const rewired = new Connection(
+                    sourceNode,
+                    connection.sourceOutput,
+                    sourceNode.outputs[connection.sourceOutput]?.socket.name ?? connection.sourceOutput,
+                    instance,
+                    socketId,
+                    instance.inputs[socketId].socket.name,
+                    styleSettings,
+                );
+                await editor.addConnection(rewired);
+            } else {
+                const socketId = `${connection.source}.${connection.sourceOutput}`;
+                if (instance.outputs[socketId] == null) continue;
+                const targetNode = editor.getNode(connection.target);
+                if (targetNode == null) continue;
+                const rewired = new Connection(
+                    instance,
+                    socketId,
+                    instance.outputs[socketId].socket.name,
+                    targetNode,
+                    connection.targetInput,
+                    targetNode.inputs[connection.targetInput]?.socket.name ?? connection.targetInput,
+                    styleSettings,
+                );
+                await editor.addConnection(rewired);
+            }
+        }
+        return instance;
     };
 
     // #8: last pointer position on the canvas, for palette placement.
@@ -731,6 +928,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         deleteSelectedNodes,
         createFrameFromSelection,
         toggleFrameCollapsed,
+        toggleGroupEdit,
+        toggleMuteSelected,
+        listGroupDefinitions,
+        addGroupInstance,
+        createGroupFromSelection,
         applyPreferences,
         addNodeFromCatalog,
         serializeGraph,

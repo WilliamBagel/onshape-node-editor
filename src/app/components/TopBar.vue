@@ -30,6 +30,8 @@ import type { BuildLogStore } from '../logging/buildlog'
 defineProps<{
   /** Optional graph / project name shown in the centre of the bar */
   projectName?: string
+  /** #14: group editing breadcrumb ("Top level / Group A / Group B"); empty at the top level. */
+  groupBreadcrumb?: string[]
   /** #30: the build/upload/run log; present when the design-check tab is shown. */
   log?: BuildLogStore
 }>()
@@ -121,8 +123,11 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
 
     </div>
 
-    <!-- ── Centre: optional project name ────────────────────────── -->
-    <div v-if="projectName" class="toolbar-centre">
+    <!-- ── Centre: optional project name, or the group breadcrumb ── -->
+    <div v-if="groupBreadcrumb && groupBreadcrumb.length > 1" class="toolbar-centre">
+      <span class="project-name group-breadcrumb">{{ groupBreadcrumb.join(' / ') }}</span>
+    </div>
+    <div v-else-if="projectName" class="toolbar-centre">
       <span class="project-name">{{ projectName }}</span>
     </div>
 
@@ -219,6 +224,11 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
   font-size: var(--font-size-title);
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+/* #14: the group editing breadcrumb replaces the project name while editing. */
+.group-breadcrumb {
+  color: var(--text-primary);
 }
 
 /* ── Divider ────────────────────────────────────────────────────── */

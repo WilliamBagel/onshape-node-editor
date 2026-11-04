@@ -19,7 +19,10 @@ import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
 import { FunctionNode } from "../nodes/functionnode";
+import { GroupNode } from "../nodes/groupinstancenode";
+import { createGroupDefinition, validateGroupDefinition, type GroupDefinition } from "../groups/groupmodel";
 import { UtilityStatementNode } from "../nodes/utilitystatementnode";
+import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { resolveUtilityStatement, utilityMeta } from "../catalog-node-factory";
 import { UTILITY_BY_ID } from "../../onshape/catalog/utility-overrides";
 import {
@@ -41,6 +44,7 @@ import {
     SerializedConnection,
     SerializedFrame,
     SerializedGraph,
+    SerializedGroupDefinition,
     SerializedNode,
     SerializedNodeBase,
     SerializedNodeKind,
@@ -60,6 +64,8 @@ export interface LoadedGraph {
      * Derived from the `nodes` array for a version-1 document.
      */
     nodeOrder: NodeOrder;
+    /** Group definitions (#14), stored once; instances reference them by id. */
+    groupDefinitions: GroupDefinition[];
     /** Non-fatal things the load had to do (migration, repaired order). */
     warnings: string[];
 }
@@ -87,6 +93,8 @@ const SUPPORTED_KINDS: SerializedNodeKind[] = [
     "map-array",
     "for-each",
     "bounded-for",
+    "math-expression",
+    "group-instance",
 ];
 
 /**
@@ -141,6 +149,39 @@ export function serializeGraph(
         targetInput: connection.targetInput,
     }));
 
+    // #14: definitions are stored once per graph, collected from every
+    // instance in the editor (recursively, for nested instances). Member
+    // nodes are not in the editor, so they never appear in `nodes` above.
+    const groupDefinitions: SerializedGroupDefinition[] = [];
+    const seenDefinitions = new Set<string>();
+    const collectDefinition = (definition: GroupDefinition): void => {
+        if (seenDefinitions.has(definition.id)) {
+            return;
+        }
+        seenDefinitions.add(definition.id);
+        for (const member of definition.nodes) {
+            if (member instanceof GroupNode) {
+                collectDefinition(member.getDefinition());
+            }
+        }
+        groupDefinitions.push({
+            id: definition.id,
+            name: definition.name,
+            nodes: definition.nodes.map((member) => ({
+                ...(member.toJSON() as SerializedNode),
+                position: definition.positions[member.id] ?? null,
+            }) as SerializedNode),
+            connections: definition.connections.map((connection) => ({ ...connection })),
+            inputs: definition.inputs.map((socket) => ({ ...socket })),
+            outputs: definition.outputs.map((socket) => ({ ...socket })),
+        });
+    };
+    for (const node of editor.getNodes()) {
+        if (node instanceof GroupNode) {
+            collectDefinition(node.getDefinition());
+        }
+    }
+
     return {
         schemaVersion: GRAPH_SCHEMA_VERSION,
         nodes,
@@ -148,7 +189,61 @@ export function serializeGraph(
         nodeOrder: reconcileOrder(nodeOrder, nodes.map((node) => node.id)),
         // Omitted when empty so pre-#13 documents keep their exact shape.
         ...(frames.length > 0 ? { frames } : {}),
+        ...(groupDefinitions.length > 0 ? { groupDefinitions } : {}),
     };
+}
+
+/**
+ * Rebuild one node from its serialized form (shared by the top-level graph
+ * and group definition members). Throws with a load-facing message.
+ */
+function buildNode(
+    serialized: SerializedNode,
+    options: DeserializeOptions,
+    definitions: ReadonlyMap<string, GroupDefinition>,
+): OnshapeNode {
+    switch (serialized.kind) {
+        case "CustomFeature":
+            return CustomFeatureNode.fromJSON(serialized, options.resolveSpec);
+        case "define-feature":
+            return DefineFeatureNode.fromJSON(serialized);
+        case "output-feature":
+            return OutputFeatureNode.fromJSON(serialized);
+        case "function":
+            return FunctionNode.fromJSON(serialized, undefined, (utilityId) => {
+                const override = UTILITY_BY_ID[utilityId];
+                return override != null ? utilityMeta(override) : undefined;
+            });
+        case "math-expression":
+            return MathExpressionNode.fromJSON(serialized);
+        case "utility-statement":
+            return UtilityStatementNode.fromJSON(serialized, resolveUtilityStatement);
+        case "array-literal":
+            return ArrayLiteralNode.fromJSON(serialized);
+        case "array-concat":
+            return ArrayConcatNode.fromJSON(serialized);
+        case "array-index":
+            return ArrayIndexNode.fromJSON(serialized);
+        case "array-size":
+            return ArraySizeNode.fromJSON(serialized);
+        case "map-array":
+            return MapArrayNode.fromJSON(serialized);
+        case "for-each":
+            return ForEachNode.fromJSON(serialized);
+        case "bounded-for":
+            return BoundedForNode.fromJSON(serialized);
+        case "group-instance": {
+            const definition = definitions.get(serialized.definitionId);
+            if (definition == null) {
+                throw new Error(
+                    `group instance "${serialized.id}" references missing group definition "${serialized.definitionId}".`
+                );
+            }
+            return GroupNode.fromJSON(serialized, definition);
+        }
+        default:
+            throw new Error(`unknown kind "${(serialized as SerializedNodeBase).kind}".`);
+    }
 }
 
 /**
@@ -222,6 +317,59 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
         }
     }
 
+    // #14: rebuild group definitions first (shells, then members), so an
+    // instance node — top-level or nested in another definition — can
+    // reference its definition by id. Member nodes live in the definition,
+    // not in the editor's top-level node list.
+    const groupDefinitions: GroupDefinition[] = [];
+    const groupDefinitionMap = new Map<string, GroupDefinition>();
+    if (document.groupDefinitions !== undefined) {
+        if (!Array.isArray(document.groupDefinitions)) {
+            return { ok: false, error: "Graph could not be loaded: \"groupDefinitions\" must be an array." };
+        }
+        for (const serialized of document.groupDefinitions) {
+            if (serialized == null || typeof serialized !== "object" || typeof serialized.id !== "string" || serialized.id === "") {
+                return { ok: false, error: "Graph could not be loaded: a group definition is malformed." };
+            }
+            if (groupDefinitionMap.has(serialized.id)) {
+                return { ok: false, error: `Graph could not be loaded: duplicate group definition id "${serialized.id}".` };
+            }
+            const definition = createGroupDefinition(serialized.id, typeof serialized.name === "string" ? serialized.name : serialized.id);
+            definition.inputs = (serialized.inputs ?? []).map((socket) => ({ ...socket }));
+            definition.outputs = (serialized.outputs ?? []).map((socket) => ({ ...socket }));
+            definition.connections = (serialized.connections ?? []).map((connection) => ({ ...connection }));
+            groupDefinitions.push(definition);
+            groupDefinitionMap.set(serialized.id, definition);
+        }
+        for (const serialized of document.groupDefinitions) {
+            const definition = groupDefinitionMap.get(serialized.id) as GroupDefinition;
+            for (const [memberIndex, member] of (serialized.nodes ?? []).entries()) {
+                const problem = validateNodeBase(member, memberIndex);
+                if (problem != null) {
+                    return { ok: false, error: `Group definition "${serialized.id}": ${problem}` };
+                }
+                let memberNode: OnshapeNode;
+                try {
+                    memberNode = buildNode(member, options, groupDefinitionMap);
+                } catch (error) {
+                    return {
+                        ok: false,
+                        error: `Graph could not be loaded: group definition "${serialized.id}": ${error instanceof Error ? error.message : String(error)}`,
+                    };
+                }
+                if (definition.nodes.some((existing) => existing.id === memberNode.id)) {
+                    return { ok: false, error: `Graph could not be loaded: group definition "${serialized.id}" has duplicate member id "${memberNode.id}".` };
+                }
+                definition.nodes.push(memberNode);
+                definition.positions[memberNode.id] = member.position ?? null;
+            }
+            const invalid = validateGroupDefinition(definition, groupDefinitionMap);
+            if (invalid != null) {
+                return { ok: false, error: `Graph could not be loaded: ${invalid}` };
+            }
+        }
+    }
+
     for (const [index, serialized] of document.nodes.entries()) {
         const problem = validateNodeBase(serialized, index);
         if (problem != null) {
@@ -230,52 +378,7 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
 
         let node: OnshapeNode;
         try {
-            switch (serialized.kind) {
-                case "CustomFeature":
-                    node = CustomFeatureNode.fromJSON(serialized, options.resolveSpec);
-                    break;
-                case "define-feature":
-                    node = DefineFeatureNode.fromJSON(serialized);
-                    break;
-                case "output-feature":
-                    node = OutputFeatureNode.fromJSON(serialized);
-                    break;
-                case "function":
-                    node = FunctionNode.fromJSON(serialized, undefined, (utilityId) => {
-                        const override = UTILITY_BY_ID[utilityId];
-                        return override != null ? utilityMeta(override) : undefined;
-                    });
-                    break;
-                case "utility-statement":
-                    node = UtilityStatementNode.fromJSON(serialized, resolveUtilityStatement);
-                    break;
-                case "array-literal":
-                    node = ArrayLiteralNode.fromJSON(serialized);
-                    break;
-                case "array-concat":
-                    node = ArrayConcatNode.fromJSON(serialized);
-                    break;
-                case "array-index":
-                    node = ArrayIndexNode.fromJSON(serialized);
-                    break;
-                case "array-size":
-                    node = ArraySizeNode.fromJSON(serialized);
-                    break;
-                case "map-array":
-                    node = MapArrayNode.fromJSON(serialized);
-                    break;
-                case "for-each":
-                    node = ForEachNode.fromJSON(serialized);
-                    break;
-                case "bounded-for":
-                    node = BoundedForNode.fromJSON(serialized);
-                    break;
-                default:
-                    return {
-                        ok: false,
-                        error: `Graph could not be loaded: node ${index} has unknown kind "${(serialized as SerializedNodeBase).kind}".`,
-                    };
-            }
+            node = buildNode(serialized, options, groupDefinitionMap);
         } catch (error) {
             return {
                 ok: false,
@@ -360,7 +463,7 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
         );
     }
 
-    return { ok: true, graph: { nodes, connections, positions, nodeOrder: orderResult.order, warnings } };
+    return { ok: true, graph: { nodes, connections, positions, nodeOrder: orderResult.order, groupDefinitions, warnings } };
 }
 
 /**

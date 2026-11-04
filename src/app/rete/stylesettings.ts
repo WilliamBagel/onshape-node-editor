@@ -1,32 +1,36 @@
 export class StyleSettings {
 
-    private default: string = 'var(--flow-teal)'
+    // Port fills are DATA ENCODING, not chrome: each value family keeps one
+    // bright, distinguishable hue from the --socket-* tokens in
+    // src/app/common.css (STYLE_GUIDE.md "Port colours: data-encoding
+    // exception"), informed by the pre-#33 hues but tuned to read on the
+    // white node surface. Brighter than the muted page tokens by design.
+    private default: string = 'var(--socket-context)'
 
     private values: { [type: string]: string } = {
-        "Context": "var(--flow-teal)",
-        "Id": "var(--socket-ink)",
-        "BTParameterSpecQuery-174": "var(--accent-steel)",
-        "BTParameterSpecEnum-171": "var(--accent-steel)",
-        "BTParameterSpecQuantity-173": "var(--flow-teal-soft)",
-        "BTParameterSpecString-170_Concat": "var(--socket-ink)",
-        "BTParameterSpecBoolean-170": "var(--accent-steel)",
-        "BTParameterSpecString-175": "var(--socket-ink)",
-        "QueryList": "var(--accent-steel)",
-        "Enum": "var(--accent-steel)",
-        "ValueWithUnits": "var(--flow-teal-soft)",
-        "Boolean": "var(--accent-steel)",
-        "String": "var(--socket-ink)",
-        // Value types from the typed-socket model (issue #9), mapped onto the
-        // canonical token palette from STYLE_GUIDE.md (issue #33).
-        "Vector": "var(--flow-teal)",
-        "Matrix": "var(--flow-teal-soft)",
-        "Transform": "var(--accent-steel)",
-        "CoordSystem": "var(--socket-ink)",
-        "number": "var(--flow-teal-soft)",
-        "boolean": "var(--accent-steel)",
-        "string": "var(--socket-ink)",
-        "Query": "var(--accent-steel)",
-        "map": "var(--hairline-strong)"
+        "Context": "var(--socket-context)",
+        "Id": "var(--socket-id)",
+        "BTParameterSpecQuery-174": "var(--socket-query)",
+        "BTParameterSpecEnum-171": "var(--socket-enum)",
+        "BTParameterSpecQuantity-173": "var(--socket-quantity)",
+        "BTParameterSpecString-170_Concat": "var(--socket-string)",
+        "BTParameterSpecBoolean-170": "var(--socket-boolean)",
+        "BTParameterSpecString-175": "var(--socket-string)",
+        "QueryList": "var(--socket-query)",
+        "Enum": "var(--socket-enum)",
+        "ValueWithUnits": "var(--socket-quantity)",
+        "Boolean": "var(--socket-boolean)",
+        "String": "var(--socket-string)",
+        // Value types from the typed-socket model (issue #9).
+        "Vector": "var(--socket-vector)",
+        "Matrix": "var(--socket-matrix)",
+        "Transform": "var(--socket-transform)",
+        "CoordSystem": "var(--socket-coordsystem)",
+        "number": "var(--socket-number)",
+        "boolean": "var(--socket-boolean)",
+        "string": "var(--socket-string)",
+        "Query": "var(--socket-query)",
+        "map": "var(--socket-map)"
     }
 
     public getStyle(socket: string): string {
