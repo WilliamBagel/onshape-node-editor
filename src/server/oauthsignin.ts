@@ -31,6 +31,7 @@
 
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
 import { CLIENT_ID } from "./config";
+import { getCanonicalBaseUrl, isAllowedRedirectOnshapeUri } from "./security";
 require('dotenv').config()
 
 // This endpoint constructs an Onshape OAuth authorize redirect similar to the PHP original
@@ -42,22 +43,45 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     return { status: 400, body: 'missing redirectOnshapeUri' };
   }
 
-  // Determine script uri from request headers
-  const headers = request.headers || {};
-  const host = headers['host'] || headers['Host'];
-  if (!host) {
-    return { status: 400, body: 'missing host header' };
+  // #51: the bounce-back target must be an Onshape host over https.
+  if (!isAllowedRedirectOnshapeUri(redirectOnshapeUri)) {
+    return { status: 400, body: 'redirectOnshapeUri not allowed' };
   }
-  const proto = headers['x-forwarded-proto'] || (request as any).protocol || 'https';
-  // request.url is the full request URL (same shape as the Azure Functions
-  // HttpRequest.url); recover path+query so the authorize redirect nests
-  // under this endpoint instead of concatenating a second absolute URL.
-  const parsed = new URL(request.url || '/oauthsignin', 'http://localhost');
-  const script_uri = `${proto}://${host}${parsed.pathname}${parsed.search}`;
 
-  const onshape_uri = `https://oauth.onshape.com/oauth/authorize?response_type=code&redirect_uri=${encodeURIComponent(script_uri + '?redirectOnshapeUri=' + redirectOnshapeUri)}&client_id=${CLIENT_ID}`;
+  // #51: misconfiguration fails fast instead of minting a bogus authorize URL.
+  if (!CLIENT_ID) {
+    return { status: 500, body: 'server configuration error' };
+  }
+
+  const parsed = new URL(request.url || '/oauthsignin', 'http://localhost');
+
+  // #51: prefer the configured canonical base URL over the (untrusted)
+  // Host / X-Forwarded-* headers when building the registered redirect_uri.
+  const canonical = getCanonicalBaseUrl();
+  let scriptBase: string;
+  if (canonical) {
+    scriptBase = canonical;
+  } else {
+    const headers = request.headers || {};
+    const host = headers['host'] || headers['Host'];
+    // Validate the fallback Host header strictly (host[:port], no tricks).
+    if (!host || !/^[A-Za-z0-9.-]+(?::[0-9]+)?$/.test(host)) {
+      return { status: 400, body: 'missing or invalid host header' };
+    }
+    const protoHeader = headers['x-forwarded-proto'] || (request as any).protocol || 'https';
+    const proto = typeof protoHeader === 'string' && protoHeader.split(',')[0].trim().toLowerCase();
+    if (proto !== 'http' && proto !== 'https') {
+      return { status: 400, body: 'missing or invalid host header' };
+    }
+    scriptBase = `${proto}://${host}`;
+  }
+
+  const script_uri = scriptBase + parsed.pathname;
+  // #51: the nested value is encoded on its own so &, # or ? inside it
+  // can't break out of the parameter; the whole redirect_uri is then
+  // encoded again as a single query value.
+  const redirect_uri = `${script_uri}?redirectOnshapeUri=${encodeURIComponent(redirectOnshapeUri)}`;
+  const onshape_uri = `https://oauth.onshape.com/oauth/authorize?response_type=code&redirect_uri=${encodeURIComponent(redirect_uri)}&client_id=${encodeURIComponent(CLIENT_ID)}`;
 
   return { status: 302, headers: { Location: onshape_uri } };
 }
-
-module.exports = exports.default;

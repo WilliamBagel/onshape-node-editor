@@ -31,6 +31,7 @@
 
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
+import { fetchWithTimeout } from "./security";
 
 export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
 
@@ -44,8 +45,15 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
   // validate URL
   try {
     const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
+    // Hardened: https only, no userinfo, no non-standard port.
+    if (parsed.protocol !== 'https:') {
       return { status: 400, body: 'invalid url protocol' };
+    }
+    if (parsed.username || parsed.password) {
+      return { status: 400, body: 'invalid url' };
+    }
+    if (parsed.port && parsed.port !== '443') {
+      return { status: 400, body: 'invalid url' };
     }
     // #28: /getfile used to forward any http(s) URL (an open proxy). Allowlist
     // the only host the client fetches from (baseapp.getOnshapeFile pulls
@@ -59,28 +67,27 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
   }
 
   try {
-    // Filter out headers that shouldn't be forwarded
+    // #49: forward only Accept / Accept-Language — never Authorization,
+    // Cookie, or anything else the browser attached.
     const forwardHeaders: Record<string, string> = {};
-    const skipHeaders = ['host', 'connection', 'content-length', 'transfer-encoding'];
-    
+    const passThrough = ['accept', 'accept-language'];
     request.headers.forEach((value, key) => {
-      if (!skipHeaders.includes(key.toLowerCase())) {
+      if (passThrough.includes(key.toLowerCase())) {
         forwardHeaders[key] = value;
       }
     });
 
-    const response = await fetch(url, { 
-      method: request.method || 'GET', 
-      headers: forwardHeaders
+    const response = await fetchWithTimeout(fetch, url, {
+      method: request.method || 'GET',
+      headers: forwardHeaders,
+      redirect: 'manual'
     });
     
     const buf = await response.arrayBuffer();
     
     // Get the content-type from the response
     const contentType = response.headers.get('content-type');
-    const responseHeaders: Record<string, string> = {
-      'Access-Control-Allow-Origin': '*'
-    };
+    const responseHeaders: Record<string, string> = {};
     
     if (contentType) {
       responseHeaders['Content-Type'] = contentType;
@@ -92,8 +99,8 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
       body: Buffer.from(buf)
     };
   } catch (err: any) {
-    return { status: 502, body: String(err.message || err) };
+    // #51: log detail server-side, return a generic error.
+    console.error('getfile upstream fetch failed', err?.message || err);
+    return { status: 502, body: 'upstream error' };
   }
 }
-
-module.exports = exports.default;
