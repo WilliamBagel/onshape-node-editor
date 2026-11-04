@@ -503,7 +503,9 @@ export class OnshapeAPI {
         // }
         // console.log(options, imageURL);
         const imgChildThumbnail = createDocumentElement('img', {
-            src: 'https://cad.onshape.com/images/default-document.png',
+            // #28: served locally (public/images/default-document.png) instead
+            // of pulling static resources from cad.onshape.com
+            src: 'images/default-document.png',
             width: String(width),
             height: String(height),
             id: id,
