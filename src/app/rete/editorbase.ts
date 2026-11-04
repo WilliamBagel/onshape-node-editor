@@ -43,7 +43,7 @@ import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "
 import { ContextMenuPlugin, Presets as ContextMenuPresets } from "rete-context-menu-plugin";
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
-import { createNodeFromCatalogEntry, groupByCategory, nodeableEntries } from "./catalog-node-factory";
+import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
 import { GroupNode } from "./nodes/groupinstancenode";
 import { assertGroupableSelection, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
 import { GroupEditorController } from "./groups/group-editor";
@@ -117,6 +117,12 @@ export type EditorControls = {
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
     addNodeFromCatalog: (entry: CatalogEntry, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /** #73: create an array/iteration node by variant (palette "Array" group). */
+    addArrayNode: (variant: ArrayNodeVariant, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /** #73: create a math expression node (palette "Math" group). */
+    addMathExpressionNode: (position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /** #73: create a curated utility node by id (palette "Utility" group). */
+    addUtilityNode: (utilityId: string, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
     /**
      * #16: debug-grid sources for the #15 harness — one statement block per
      * non-frame node, and one selection per output socket.
@@ -158,6 +164,12 @@ type EditorBaseInfo = {
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry. */
     addNodeFromCatalog: (entry: CatalogEntry, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /** #73: create an array/iteration node by variant. */
+    addArrayNode: (variant: ArrayNodeVariant, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /** #73: create a math expression node. */
+    addMathExpressionNode: (position?: { x: number; y: number }) => Promise<OnshapeNode | null>
+    /** #73: create a curated utility node by id. */
+    addUtilityNode: (utilityId: string, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
     /** #6: the open graph as a serialized JSON document (schema v2). */
     serializeGraph: () => string
     /** #6: replace the editor's contents with a stored graph. */
@@ -874,14 +886,29 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return { x: (container.clientWidth / 2 - (t?.x ?? 0)) / k, y: (container.clientHeight / 2 - (t?.y ?? 0)) / k };
     };
 
-    /** #8: create a catalog node and place it at the given / last-click / centre position. */
-    const addNodeFromCatalog = async (entry: CatalogEntry, position?: { x: number; y: number }): Promise<OnshapeNode | null> => {
-        const node = createNodeFromCatalogEntry(entry);
+    /** #73: place a node at the given / last-click / centre position. */
+    const placeNode = async (node: OnshapeNode | null, position?: { x: number; y: number }): Promise<OnshapeNode | null> => {
         if (node == null) return null;
         await editor.addNode(node);
         await area.translate(node.id, position ?? lastPointer ?? viewportCentre());
         return node;
     };
+
+    /** #8: create a catalog node and place it at the given / last-click / centre position. */
+    const addNodeFromCatalog = async (entry: CatalogEntry, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
+        placeNode(createNodeFromCatalogEntry(entry), position);
+
+    /** #73: array/iteration nodes the catalog does not contain. */
+    const addArrayNode = async (variant: ArrayNodeVariant, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
+        placeNode(createArrayNode(variant), position);
+
+    /** #73: a free-form math expression node. */
+    const addMathExpressionNode = async (position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
+        placeNode(createMathExpressionNode(), position);
+
+    /** #73: a curated utility node by id. */
+    const addUtilityNode = async (utilityId: string, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
+        placeNode(createUtilityNode(utilityId), position);
 
     /**
      * #16: debug-grid sources for the #15 harness. One statement block per
@@ -936,6 +963,9 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         createGroupFromSelection,
         applyPreferences,
         addNodeFromCatalog,
+        addArrayNode,
+        addMathExpressionNode,
+        addUtilityNode,
         serializeGraph,
         loadGraph,
         studioEvents: { build: buildStudio, describe: describeStudio },

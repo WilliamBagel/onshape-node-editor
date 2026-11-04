@@ -19,8 +19,11 @@ import type { FeatureInsertion } from './onshape-utils/partstudiofeature';
 import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 import NodePalette from './components/NodePalette.vue';
+import ActionPalette from './components/ActionPalette.vue';
+import { buildPaletteInsertables, type PaletteInsertable } from './rete/catalog-node-factory';
+import { canDispatchAction } from './ui/actionPalette';
+import type { CommandId } from './ui/editorSettings';
 import { defaultCatalog } from './onshape/catalog/spec-catalog';
-import type { CatalogEntry } from './onshape/catalog/types';
 import type { DebugNodeSource, DebugSelection, EvalFeatureScriptApiLike } from './onshape-utils/evalfeaturescript';
 
 /**
@@ -75,6 +78,8 @@ export default defineComponent({
     DebugGrid: DebugGrid,
     BottomBar: BottomBar,
     LogPanel: LogPanel,
+    NodePalette: NodePalette,
+    ActionPalette: ActionPalette,
     ToolTip: ToolTip
   },
   // Options-API injection: `provide('app', this)` in `App.startVueApp()`.
@@ -90,6 +95,10 @@ export default defineComponent({
       graphName: 'My Graph',
       /** #8: catalog palette visibility. */
       paletteOpen: false,
+      /** #73: action palette (Search button / F3) visibility. */
+      actionsOpen: false,
+      /** #73: group definitions offered by the node palette; refreshed on open. */
+      paletteGroupDefs: [] as { id: string; name: string }[],
       /** #14: group editing breadcrumb, from the toolbar down to the open group. */
       groupBreadcrumb: [] as string[],
       /** #16: debug grid panel visibility plus a graph-change pulse the panel debounces. */
@@ -127,6 +136,14 @@ export default defineComponent({
     debugMicroversion(): string | null {
       const target = this.debugTarget;
       return target != null && target.wvm === 'm' ? target.wvmid : null;
+    },
+    /** #73: live shortcut bindings for the action palette keycaps. */
+    bindings() {
+      return editorSettings.getBindings();
+    },
+    /** #73: the full insertable catalog for the node palette. */
+    paletteInsertables(): PaletteInsertable[] {
+      return buildPaletteInsertables(this.catalogEntries, this.paletteGroupDefs);
     },
     debugApi(): EvalFeatureScriptApiLike | null {
       const api = this.featureStudioHost()?.onshape?.partStudioApi;
@@ -384,11 +401,21 @@ export default defineComponent({
       const command = matchCommand(event, event.target, editorSettings.getBindings());
       if (command == null) return;
       event.preventDefault();
+      await this.runCommand(command);
+    },
+    /**
+     * #73: dispatch a command by id — the one path shortcuts and the
+     * action palette share. No-ops while a dialog is open.
+     */
+    async runCommand(command: CommandId) {
+      if (!canDispatchAction({ dialogOpen: dialogService.current != null })) return;
       switch (command) {
         case 'build': await this.runBuild(); break;
         case 'run': await this.runRun(); break;
         case 'upload': await this.runUpload(); break;
-        case 'addNode': this.paletteOpen = true; break;
+        case 'save': await this.runSave(); break;
+        case 'open': await this.runOpen(); break;
+        case 'addNode': this.refreshPaletteGroupDefs(); this.paletteOpen = true; break;
         case 'settings': await this.runSettings(); break;
         case 'debugGrid': this.debugGridOpen = !this.debugGridOpen; break;
         case 'fitView': await this.controls?.fitView(); break;
@@ -406,11 +433,31 @@ export default defineComponent({
           }
           break;
         }
+        // #73: F3 / the bottom Search button opens the action palette.
+        case 'actionPalette': this.actionsOpen = true; break;
       }
     },
-    /** #8: toolbar search opens the catalog palette. */
-    runSearch() { this.paletteOpen = true; },
-    async onPaletteSelect(entry: CatalogEntry) { this.paletteOpen = false; await this.controls?.addNodeFromCatalog(entry); },
+    /** #73: group instances are runtime state; snapshot them when a palette opens. */
+    refreshPaletteGroupDefs() {
+      this.paletteGroupDefs = this.controls?.listGroupDefinitions().map(d => ({ id: d.id, name: d.name })) ?? [];
+    },
+    /** #73: an action chosen in the palette; guarded like any dispatch. */
+    async onActionSelect(command: CommandId) {
+      this.actionsOpen = false;
+      if (!canDispatchAction({ dialogOpen: dialogService.current != null })) return;
+      await this.runCommand(command);
+    },
+    /** #73: the bottom Search button opens the Blender-style action palette. */
+    runSearch() { this.actionsOpen = true; },
+    /** #73: resolve a palette insertable to its creation path. */
+    async onPaletteSelect(item: PaletteInsertable) {
+      this.paletteOpen = false;
+      if (item.entry != null) { await this.controls?.addNodeFromCatalog(item.entry); return; }
+      if (item.arrayVariant != null) { await this.controls?.addArrayNode(item.arrayVariant); return; }
+      if (item.isMathExpression === true) { await this.controls?.addMathExpressionNode(); return; }
+      if (item.utilityId != null) { await this.controls?.addUtilityNode(item.utilityId); return; }
+      if (item.groupDefinitionId != null) { await this.controls?.addGroupInstance(item.groupDefinitionId); }
+    },
     /**
      * #30: "Locate" on a design check row. Select the node; a no-op when the
      * canvas is not ready or the node is gone. (Scrolling the viewport to the
@@ -432,7 +479,8 @@ export default defineComponent({
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
   <ToolTip />
-  <NodePalette :open="paletteOpen" :entries="catalogEntries" @select="onPaletteSelect" @close="paletteOpen = false" />
+  <ActionPalette :open="actionsOpen" :bindings="bindings" @select="onActionSelect" @close="actionsOpen = false" />
+  <NodePalette :open="paletteOpen" :insertables="paletteInsertables" @select="onPaletteSelect" @close="paletteOpen = false" />
     <AppDialog />
     <!-- #16: debug grid (node-wrangler view); row click focuses the node. -->
     <DebugGrid

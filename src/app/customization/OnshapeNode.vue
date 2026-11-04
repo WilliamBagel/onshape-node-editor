@@ -8,17 +8,26 @@
     <div class="feature-dialog-main ns-dialog-frame">
       <div class="ns-dialog-header" role="dialog" data-backdrop="false">
         <div class="ns-drag-area">
-          <div class="ns-dialog-title-container">
-            <div class="ns-dialog-title" data-bs-placement="right" style="user-select: none;" v-show="!titleEditFocus"
-              @click="" @mouseover="titleHover = true" @mouseleave="titleHover = false">{{ title }}</div>
-          </div>
-          <input maxlength="256" class="os-dialog-header-rename-textbox" ref="titleEditElem" v-model="title"
-            v-show="titleEditFocus" @blur="titleEditFocus = false" v-on:keydown.enter="blurTitleEdit()">
-          <div class="os-dialog-button-edit-name" @click="focusTitleEdit()" v-show="titleHover"
-            @mouseover="titleHover = true" @mouseleave="titleHover = false">
-            <svg class="os-svg-icon osc-svg-vertical-align" style="display: inline-flex;">
-              <use href="#svg-icon-edit-button"></use>
-            </svg>
+          <div class="ns-dialog-title-container node-title-container">
+            <button type="button" class="node-header-button node-collapse-toggle" @click="toggleCollapsed"
+              @pointerdown.stop :aria-label="collapsed ? 'Expand node' : 'Collapse node'"
+              :aria-expanded="!collapsed">
+              <svg class="os-svg-icon osc-svg-vertical-align node-collapse-icon" :class="{ expanded: !collapsed }">
+                <use href="#svg-icon-expanded"></use>
+              </svg>
+            </button>
+            <div class="ns-dialog-title node-title" data-bs-placement="right" style="user-select: none;"
+              v-show="!titleEditFocus" @pointerdown="onTitlePress" @click="onTitleClick" @dblclick="focusTitleEdit">{{
+                title }}</div>
+            <input maxlength="256" class="os-dialog-header-rename-textbox node-title-editor" ref="titleEditElem"
+              v-model="titleDraft" v-show="titleEditFocus" @blur="onTitleEditBlur" @keydown="onTitleEditKeydown"
+              @pointerdown.stop>
+            <button type="button" class="os-dialog-button-edit-name node-header-button node-title-edit-toggle"
+              @click="focusTitleEdit" @pointerdown.stop aria-label="Rename node">
+              <svg class="os-svg-icon osc-svg-vertical-align" style="display: inline-flex;">
+                <use href="#svg-icon-edit-button"></use>
+              </svg>
+            </button>
           </div>
           <div class="ns-dialog-edit-hover-area"></div>
         </div>
@@ -33,7 +42,7 @@
           </svg>
         </div> -->
       </div>
-      <div class="dialog-content">
+      <div class="dialog-content" v-show="!collapsed">
         <!-- Outputs-->
         <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
           :key="'output' + key + seed" :data-testid="'output-' + key">
@@ -85,6 +94,12 @@ import { OnshapeOutput } from '../rete/inputoutput/onshapeoutput.js'
 import { OnshapeNode } from '../rete/nodes/onshapenode'
 import { OnshapeInput as OnshapeInputType } from '../rete/inputoutput/onshapeinput.js'
 import { OnshapeInput as OnshapeInputClass } from '../rete/inputoutput/onshapeinput.js';
+import {
+  commitTitleEdit,
+  nextCollapsed,
+  shouldStartTitleEdit,
+  titleEditActionForKey,
+} from './nodechrome-helpers.js';
 
 export default defineComponent({
   props: {
@@ -99,7 +114,17 @@ export default defineComponent({
     return {
       title: this.data.getTitle(),
       titleEditFocus: false,
-      titleHover: false,
+      // Draft while renaming (#72): the committed value only reaches `title`
+      // (and the `title` watcher -> `data.setTitle`) on Enter/blur, and
+      // Escape can still restore the original untouched.
+      titleDraft: '',
+      titleEditOriginal: '',
+      titleEditCancelled: false,
+      titlePressX: null as number | null,
+      titlePressY: null as number | null,
+      // Collapsed state (#72): kept in memory on the node object so it
+      // survives component remounts, but it is NOT serialized to disk.
+      collapsed: ((this.data as any).collapsed ?? false) as boolean,
 
       width: this.data.width,
       height: this.data.height,
@@ -154,16 +179,57 @@ export default defineComponent({
     //   this.emit('update:title', e?.target?.value)
     // },
     focusTitleEdit() {
+      this.titleEditOriginal = this.title;
+      this.titleDraft = this.title;
+      this.titleEditCancelled = false;
       this.$data.titleEditFocus = true;
       this.$nextTick(() => {
         const titleEditRef = this.$refs.titleEditElem as HTMLInputElement;
-        this.titleHover = false;
-        titleEditRef.focus();
-        titleEditRef.select();
+        titleEditRef?.focus();
+        titleEditRef?.select();
       });
     },
-    blurTitleEdit() {
+    onTitlePress(event: PointerEvent) {
+      // Remember where the press landed: the click handler only starts an
+      // edit if the pointer barely moved, so dragging the node by its title
+      // still moves it instead of opening the rename box (#72).
+      this.titlePressX = event.clientX;
+      this.titlePressY = event.clientY;
+    },
+    onTitleClick(event: MouseEvent) {
+      if (!shouldStartTitleEdit(this.titlePressX, this.titlePressY, event.clientX, event.clientY)) {
+        return;
+      }
+      this.focusTitleEdit();
+    },
+    onTitleEditKeydown(event: KeyboardEvent) {
+      const action = titleEditActionForKey(event.key);
+      if (action === 'cancel') {
+        // Cancel discards the draft; the blur that follows is guarded by
+        // `titleEditCancelled` so it cannot commit the restored value.
+        this.titleDraft = this.titleEditOriginal;
+        this.titleEditCancelled = true;
+        this.$data.titleEditFocus = false;
+      } else if (action === 'commit') {
+        (event.target as HTMLInputElement).blur();
+      }
+    },
+    onTitleEditBlur() {
+      // Blur commits the draft through the existing `title` watcher
+      // (`data.setTitle`); a cancelled edit exits without touching it.
+      if (!this.titleEditCancelled) {
+        this.title = commitTitleEdit(this.titleEditOriginal, this.titleDraft);
+      }
+      this.titleEditCancelled = false;
       this.$data.titleEditFocus = false;
+    },
+    toggleCollapsed() {
+      this.collapsed = nextCollapsed(this.collapsed);
+      // In-memory only: the node object outlives this component, but the
+      // graph serializer does not persist `collapsed` (#72).
+      (this.data as any).collapsed = this.collapsed;
+      // The body height changed; let rete re-measure the node.
+      this.$nextTick(() => this.data.update());
     },
     onResize(dx: number) {
       const previousWidth = this.data.width;
@@ -415,5 +481,83 @@ export default defineComponent({
 .feature-dialog {
   left: 0px;
   top: 0px;
+}
+
+// Header chrome (#72): the title is centred between two small header buttons.
+// The title box and the rename input are absolutely centred inside the
+// container so the side buttons hold the edges and the text stays in the
+// middle; the container itself is still the drag surface, so drag/resize
+// behaves exactly as before.
+.node-title-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.node-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: calc(100% - 64px);
+  text-align: center;
+  cursor: text;
+}
+
+.node-title-editor {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(200px, calc(100% - 64px));
+  text-align: center;
+}
+
+.node-header-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--node-ink);
+  cursor: pointer;
+}
+
+.node-header-button:focus-visible {
+  outline: 1px solid var(--node-accent);
+  outline-offset: 1px;
+}
+
+.node-collapse-icon {
+  transition: transform 0.2s ease;
+
+  &.expanded {
+    transform: rotate(180deg);
+  }
+}
+
+// Rename affordance: hidden until the header is hovered or has focus, so it
+// is easy to reach but never flickers while moving the pointer between the
+// title and the button (#72 used a JS hover flag that hid the button
+// mid-move). The button stays in the layout, so it remains natively
+// focusable.
+.node-title-edit-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.node-title-container:hover .node-title-edit-toggle,
+.node-title-container:focus-within .node-title-edit-toggle,
+.node-title-edit-toggle:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 </style>

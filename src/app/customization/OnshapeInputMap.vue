@@ -12,9 +12,14 @@
             </div>
         <!-- Map Parameters -->
         <div v-if="isExpanded" class="map-parameters">
-            <OnshapeInput v-for="param in visibleParameters" :key="'map-param-' + param.key + seed"
-                :inputKey="param.key" :input="param.input" :nodeId="nodeId" :emit="emit"
-                @value-change="onControlValueChange(param.input?.control as unknown as OnshapeInputControl<any>, param.key, $event)" />
+            <template v-for="param in visibleParameters">
+                <OnshapeInputMap v-if="isNestedMap(param.input)" :key="'map-param-' + param.key + seed"
+                    :input="param.input" :nodeId="nodeId" :emit="emit" :seed="seed"
+                    @value-change="onControlValueChange(param.input?.control as unknown as OnshapeInputControl<any>, param.key, $event)" />
+                <OnshapeInput v-else :key="'map-param-' + param.key + seed"
+                    :inputKey="param.key" :input="param.input" :nodeId="nodeId" :emit="emit"
+                    @value-change="onControlValueChange(param.input?.control as unknown as OnshapeInputControl<any>, param.key, $event)" />
+            </template>
         </div>
     </div>
 </template>
@@ -27,8 +32,10 @@ import { OnshapeInputControl } from '../rete/controls/onshapeinputcontrol.js'
 import { OnshapeFeatureSpecInput } from '../rete/inputoutput/onshapefeaturespecinput.js';
 import { OnshapeInput as OnshapeInputClass } from '../rete/inputoutput/onshapeinput.js';
 import TranslateLock from '../components/TranslateLock.vue';
+import { expandedFromInput, isNestedMapInput, visibleParamEntries } from './nodechrome-helpers.js';
 
-export default defineComponent({
+const OnshapeInputMap = defineComponent({
+    name: 'OnshapeInputMap',
     props: {
         input: {
             required: true,
@@ -42,36 +49,41 @@ export default defineComponent({
         seed: Number
     },
     data() {
-        // console.log(this.input);
+        // Local mirror of `input.expanded` (the reactive source); the watch
+        // below resyncs it whenever a new input object is passed in, and
+        // `toggleExpanded` writes back so the model stays the source of
+        // truth (#72: the copied value used to go stale on prop swap).
         return {
-            isExpanded: this.input.expanded
+            isExpanded: expandedFromInput(this.input)
         }
     },
     computed: {
         visibleParameters(): Array<{ key: string, input: OnshapeInputClass<any> }> {
             const paramInputs = (this.input as OnshapeFeatureSpecInput)?.paramInputs;
-
-            if (paramInputs == null) {
-                return [];
-            }
-
-            // Filter parameters based on the map input's hiddenParameters
-            return Object.entries(paramInputs)
-                .filter(([key]: [string, any]) => this.input.hiddenParameters?.[key] !== true)
-                .map(([key, input]) => { return { key, input } });
+            const hiddenParameters = (this.input as OnshapeFeatureSpecInput)?.hiddenParameters;
+            return visibleParamEntries(paramInputs, hiddenParameters);
+        }
+    },
+    watch: {
+        input(newInput: unknown) {
+            this.isExpanded = expandedFromInput(newInput);
         }
     },
     methods: {
         toggleExpanded(): void {
-            console.log("expanded");
             this.isExpanded = !this.isExpanded;
             this.input.expanded = this.isExpanded;
+        },
+        isNestedMap(input: unknown): boolean {
+            return isNestedMapInput(input);
         },
         onControlValueChange(control: OnshapeInputControl<any>, key: string, value: any) {
             if (this.input instanceof OnshapeFeatureSpecInput) {
                 (this.input as OnshapeFeatureSpecInput).updateParameter(key, value);
             }
-            this.$emit('value-change', control, value);
+            // Single-arg value, like OnshapeInput: a nested map forwards the
+            // same shape its leaf children use, so parents can handle both.
+            this.$emit('value-change', value);
         },
     },
     components: {
@@ -79,6 +91,14 @@ export default defineComponent({
         TranslateLock
     }
 });
+
+// Self-registration for recursive rendering of nested maps (#72). A
+// `name`-based self-reference is not reliable in Vue 3, so register the
+// component under its own name after definition.
+(OnshapeInputMap as unknown as { components: Record<string, unknown> }).components.OnshapeInputMap =
+    OnshapeInputMap;
+
+export default OnshapeInputMap
 </script>
 
 <style lang="scss" scoped>
@@ -90,7 +110,7 @@ export default defineComponent({
 
 .map-input-header {
     cursor: pointer;
-    user-select: all;
+    user-select: none;
     pointer-events: auto;
 }
 
