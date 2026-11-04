@@ -55,7 +55,7 @@ import {
     PartStudioTarget,
     PartStudioTargetSettings,
 } from "./onshape-utils/partstudiofeature";
-import { resolveSinglePartStudio } from "./onshape-utils/partstudiotarget";
+import { resolveRunTarget } from "./onshape-utils/partstudiotarget";
 import { saveGraphVerified, openGraph, type SaveOutcome, type OpenOutcome, type GraphListing } from "./onshape-utils/graphsaveopen";
 import { dialogService } from "./ui/dialog";
 import type { SpecResolver, FeatureSpecReference } from "./rete/serialization/graph-schema-types";
@@ -700,18 +700,18 @@ export class App extends BaseApp {
     }
 
     /**
-     * #2: auto-resolve the run target from the active document.
+     * #2 / #74: resolve the run target from the active document.
      *
-     * Lists the active document's elements and, when exactly one Part Studio
-     * exists, persists it as the target and returns it — so Run never asks
-     * for a raw id string in the single-studio case. Zero or multiple Part
-     * Studios returns `undefined` without prompting; the caller (`runRun()`)
-     * then falls back to the manual dialog prompt. An already-configured
-     * target is returned as-is (auto-resolution is never consulted).
+     * The persisted target is validated against the active document's element
+     * list (via `resolveRunTarget`) before it is used — a target from another
+     * document, a version/microversion target, or a deleted element never
+     * wins. When exactly one Part Studio exists it is persisted and returned,
+     * even if a stale target was stored. Zero or multiple Part Studios clears
+     * any stale target and returns `undefined`; the caller then falls back to
+     * the manual picker. Without an active document no target is trusted.
      */
     public async resolveSinglePartStudioTarget(): Promise<PartStudioTarget | undefined> {
         const existing = this.getPartStudioTarget();
-        if (existing != null) return existing;
 
         const documentApi = this.onshape?.documentApi;
         if (documentApi == null || this.documentId === '' || this.workspaceId === '') {
@@ -725,10 +725,14 @@ export class App extends BaseApp {
 
         let result;
         try {
-            result = await resolveSinglePartStudio(documentApi, {
-                did: this.documentId,
-                workspaceId: this.workspaceId,
-            });
+            result = await resolveRunTarget(
+                documentApi,
+                {
+                    did: this.documentId,
+                    workspaceId: this.workspaceId,
+                },
+                existing,
+            );
         } catch (error) {
             this.reportMessage(
                 `Cannot auto-select a Part Studio: ${error instanceof Error ? error.message : String(error)} Choose the Part Studio target manually.`,
@@ -739,32 +743,45 @@ export class App extends BaseApp {
         }
 
         switch (result.status) {
-            case 'unique': {
+            case 'use-existing':
+                return result.target;
+            case 'use-auto': {
                 const stored = this.setPartStudioTarget(result.target);
                 const name = result.element.name != null && result.element.name !== ''
                     ? ` "${result.element.name}"`
                     : '';
                 this.reportMessage(
-                    `Auto-selected the single Part Studio${name} (${stored.eid}) in the active document as the run target.`,
+                    result.staleExisting
+                        ? `Ignored the stale stored Part Studio target and auto-selected the single Part Studio${name} (${stored.eid}) in the active document as the run target.`
+                        : `Auto-selected the single Part Studio${name} (${stored.eid}) in the active document as the run target.`,
                     'info',
                     'run',
                 );
                 return stored;
             }
-            case 'none':
-                this.reportMessage(
-                    'No Part Studio found in the active document (0 found); choose the Part Studio target manually.',
-                    'warning',
-                    'run',
-                );
-                return undefined;
-            case 'ambiguous': {
-                const list = result.elements.map((el) => `${el.name ?? el.id} (${el.id})`).join(', ');
-                this.reportMessage(
-                    `${result.count} Part Studios found in the active document (${list}); choose which one to run into.`,
-                    'warning',
-                    'run',
-                );
+            case 'prompt': {
+                if (result.staleExisting) {
+                    this.partStudioTargets.clear();
+                    this.reportMessage(
+                        'Ignored the stale stored Part Studio target: it does not belong to the active document/workspace.',
+                        'warning',
+                        'run',
+                    );
+                }
+                if (result.auto.status === 'none') {
+                    this.reportMessage(
+                        'No Part Studio found in the active document (0 found); choose the Part Studio target manually.',
+                        'warning',
+                        'run',
+                    );
+                } else {
+                    const list = result.auto.elements.map((el) => `${el.name ?? el.id} (${el.id})`).join(', ');
+                    this.reportMessage(
+                        `${result.auto.count} Part Studios found in the active document (${list}); choose which one to run into.`,
+                        'warning',
+                        'run',
+                    );
+                }
                 return undefined;
             }
         }
@@ -779,6 +796,11 @@ export class App extends BaseApp {
      * Studio target, and every failure is reported through `reportMessage()`.
      */
     public async insertPartStudioFeature(feature: FeatureInsertion): Promise<InsertOutcome> {
+        // #74: validate/resolve the target against the active document first,
+        // so a stale persisted target can never be inserted into. When the
+        // resolution fails (zero/multiple Part Studios) the inserter reports
+        // its own "no target" failure and nothing is inserted.
+        await this.resolveSinglePartStudioTarget();
         const inserter = new PartStudioFeatureInserter({
             partStudioApi: this.onshape?.partStudioApi,
             featureStudioApi: this.onshape?.featureStudioApi,
