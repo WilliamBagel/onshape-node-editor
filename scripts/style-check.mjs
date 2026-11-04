@@ -5,6 +5,10 @@
 //   2. gradients       linear-/radial-/conic-gradient() and SVG <linearGradient>/<radialGradient>
 //   3. blur/glass      backdrop-filter, filter: blur(...), backdrop-blur (not JS .blur())
 //   4. literal hex     #rgb/#rrggbb/#rrggbbaa outside src/app/common.css (the one palette file)
+//   5. raw rgb/hsl     rgb()/rgba()/hsl()/hsla() outside src/app/common.css (#81) —
+//                      hex rules above cover #…, this covers functional colour
+//                      notation so untokenized chrome (e.g. rgba scaffold in
+//                      assets/base.css) cannot pass; palette file exempt as above
 //
 // Explicit allowlists (see docs/style-audit.md):
 //   - vendored CSS: src/app/onshape/**, src/app/OnshapeHTMLCSSReference/** (Onshape/Bootstrap bundles)
@@ -29,6 +33,7 @@ const BANNED_HEX = ['#1f2937', '#6b7280', '#3b82f6']
 const HEX_RE = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/g
 const GRADIENT_RE = /(?:linear-gradient|radial-gradient|conic-gradient)\s*\(|<linearGradient\b|<radialGradient\b/gi
 const BLUR_RE = /(?:backdrop-filter\s*:|filter\s*:[^;{}]*\bblur\s*\(|backdrop-blur\b)/gi
+const RGB_RE = /\b(?:rgba?|hsla?)\s*\(/gi
 
 const VENDORED = [/^src\/app\/onshape\//, /^src\/app\/OnshapeHTMLCSSReference\//]
 const DEFERRED = [
@@ -95,6 +100,7 @@ for (const file of walk(SRC)) {
     if (rel !== 'src/app/common.css') {
       const hexes = [...line.matchAll(HEX_RE)].map((m) => m[0]).filter((h) => !BANNED_HEX.includes(h.toLowerCase()))
       check('literal-hex', hexes)
+      check('raw-rgb', [...line.matchAll(RGB_RE)].map((m) => m[0]))
       void lower
     }
   })

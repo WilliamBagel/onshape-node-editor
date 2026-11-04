@@ -13,6 +13,7 @@ No banned-hex, gradient, blur, or literal-hex hits remain outside `src/app/commo
 2. `linear-/radial-/conic-gradient()` and SVG `<linearGradient>`/`<radialGradient>`;
 3. `backdrop-filter`, `filter: blur(…)`, `backdrop-blur` (JS `.blur()` is not matched);
 4. any literal hex outside `src/app/common.css` (the one palette file).
+5. (#81) any raw `rgb()/rgba()/hsl()/hsla()` outside `src/app/common.css` (same palette exemption; the guide's max shadow `rgba(0,0,0,.08)` lives there as `--shadow-1` and is consumed via `var()`).
 
 Allowlists: vendored CSS `src/app/onshape/**` + `src/app/OnshapeHTMLCSSReference/**` (Onshape/Bootstrap bundles, never edited); deferred files below (reported, non-blocking); one exception — `src/app/customization/background.css` gradients, which are the canvas grid technique named in the guide, not decorative colour gradients.
 
@@ -197,3 +198,13 @@ Allowlists: vendored CSS `src/app/onshape/**` + `src/app/OnshapeHTMLCSSReference
 - `SnappingSocket.vue` uses `rgba(0,0,0,0)` (fully transparent hit area) — not a colour violation.
 - Remaining 11px sizes are meta/keycap only; node typography was not restyled (settled in #35).
 - Vendored bundles (`src/app/onshape/onshape-design-tokens.min.css`, `vendor-bundle.css`, `woolsthorpe.css`, `OnshapeHTMLCSSReference/`) still contain blanket hex/gradients by upstream design; they are allowlisted, not edited.
+
+## Update — #81 raw rgb/rgba/hsl gate
+
+`scripts/style-check.mjs` gained rule 5 (`raw-rgb`): `rgb()/rgba()/hsl()/hsla()` outside the palette file `src/app/common.css`. On HEAD `193281b` it found 8 blocking hits, 0 deferred, 0 vendored (vendored `src/app/onshape/**` + `OnshapeHTMLCSSReference/**` still skipped; comment-only and `DhslHb` identifier non-hits confirmed).
+
+- `src/app/assets/base.css` (6): scaffold `--vt-c-divider/text-*` rgba tints moved to `--scaffold-*` tokens in `common.css`, aliased via `var()` — values unchanged.
+- `src/app/components/DesignCheckTab.vue` (1): `box-shadow: 0 1px 3px rgba(0,0,0,0.08)` (guide's max shadow) → `var(--shadow-1)`, no exception needed.
+- `src/app/rete/connection-snapping/SnappingSocket.vue` (1): `rgba(0,0,0,0)` transparent hit area → `transparent` keyword (semantically identical, no exception).
+- No new per-file exceptions; `common.css` remains the sole palette exemption. Negative probe: temp file with `color: rgba(0,0,0,.5)` failed the gate, then removed.
+- Gate after: 0 violations, 0 blocking.

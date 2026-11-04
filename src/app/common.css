@@ -82,6 +82,14 @@ body {
     --line-height-body: 1.35;
     --line-height-title: 1.2;
     --backdrop-scrim: rgba(26, 26, 26, 0.32);
+    /* Scaffold tints (#81): the only rgba literals outside --shadow-1/--hover-tint/
+     * --active-tint/--flow-teal-soft/--backdrop-scrim; assets/base.css aliases these. */
+    --scaffold-divider-light-1: rgba(60, 60, 60, 0.29);
+    --scaffold-divider-light-2: rgba(60, 60, 60, 0.12);
+    --scaffold-divider-dark-1: rgba(84, 84, 84, 0.65);
+    --scaffold-divider-dark-2: rgba(84, 84, 84, 0.48);
+    --scaffold-text-light-2: rgba(60, 60, 60, 0.66);
+    --scaffold-text-dark-2: rgba(235, 235, 235, 0.64);
     /*
      * Port fills are DATA ENCODING, not chrome (exception to the muted-page
      * palette, see STYLE_GUIDE.md "Port colours: data-encoding exception").
