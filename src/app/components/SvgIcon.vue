@@ -31,7 +31,7 @@ defineProps<{
   ariaLabel?: string
 }>()
 
-type OnshapeSvgIcon = "#svg-icon-AssemblyReplicate" |
+export type OnshapeSvgIcon = "#svg-icon-AssemblyReplicate" |
   "#svg-icon-ConeAngleLimit" |
   "#svg-icon-Fix_Icon_Default" |
   "#svg-icon-Fix_Icon_Suppressed" |

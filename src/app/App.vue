@@ -233,14 +233,23 @@ export default defineComponent({
     runSearch() {
 
     },
+    /**
+     * #30: "Locate" on a design check row. Select the node; a no-op when the
+     * canvas is not ready or the node is gone. (Scrolling the viewport to the
+     * selection is not implemented yet — the canvas does not expose a
+     * scroll-to-node API.)
+     */
+    runLocateNode(nodeId: string) {
+      this.controls?.selectNode(nodeId);
+    },
   },
 })
 </script>
 
 <template>
-  <TopBar :project-name="graphName" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
+  <TopBar :project-name="graphName" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
-    @run-target="runSelectPartStudioTarget" />
+    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" />
   <main class="rete" ref="rete"></main>
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />

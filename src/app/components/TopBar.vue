@@ -22,11 +22,16 @@
 <script setup lang="ts">
 // Claude Sonnet 4.6: Import shared icon + tooltip sub-components
 import SvgIcon from './SvgIcon.vue'
+// #30: the design-rule check tab reads the one log store and reports its state.
+import DesignCheckTab from './DesignCheckTab.vue'
+import type { BuildLogStore } from '../logging/buildlog'
 
 /* ── Props ─────────────────────────────────────────────────────── */
 defineProps<{
   /** Optional graph / project name shown in the centre of the bar */
   projectName?: string
+  /** #30: the build/upload/run log; present when the design-check tab is shown. */
+  log?: BuildLogStore
 }>()
 
 /* ── Emits ─────────────────────────────────────────────────────── */
@@ -40,6 +45,8 @@ const emit = defineEmits<{
   (e: 'save'): void
   (e: 'open'): void
   (e: 'settings'): void
+  /** #30: "Locate" on a design check row; the app selects that node. */
+  (e: 'locateNode', nodeId: string): void
 }>()
 
 /* ── Tooltip hover state ────────────────────────────────────────── */
@@ -122,6 +129,10 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
     <!-- ── Right group: Save, Open, Settings ────────────────────── -->
     <!-- Claude Sonnet 4.6: Right action group -->
     <div class="toolbar-group toolbar-group--right">
+
+      <!-- #30: always-visible design-rule check tab -->
+      <DesignCheckTab v-if="log" :store="log" @locate-node="emit('locateNode', $event)" />
+      <div v-if="log" class="toolbar-divider" aria-hidden="true" />
 
       <!-- Save file button -->
       <div class="toolbar-btn-wrap">

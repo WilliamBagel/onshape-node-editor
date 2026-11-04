@@ -79,6 +79,13 @@ export async function createEditor(container: HTMLElement) {
     studioEvents,
     getNodeOrder: () => nodeOrder.getOrder(),
     destroy: () => area.destroy(),
+    selectNode: async (nodeId: string) => {
+      // #30: the standard editor's sample graph does not expose a selection API
+      // to the host yet; this satisfies the EditorControls contract so the
+      // design-check "Locate" action compiles. Selecting in the real editor is
+      // tracked separately (see #30 follow-up).
+      console.warn(`editor: selectNode(${nodeId}) is a no-op`);
+    },
   };
 }
 

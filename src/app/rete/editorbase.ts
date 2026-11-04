@@ -52,6 +52,11 @@ export type EditorControls = {
     studioEvents: StudioEvents
     /** The canvas's node paint order, bottom-most first (#27 / DR-007). */
     getNodeOrder: () => string[]
+    /**
+     * #30: select a node by id, replacing the current selection. Used by the
+     * design-check surface's "Locate" action; a no-op for an unknown id.
+     */
+    selectNode: (nodeId: string) => Promise<void>
     destroy: () => void
 }
 
@@ -61,7 +66,9 @@ type EditorBaseInfo = {
     connection: ConnectionSnappingPlugin<Schemes, AreaExtra>,
     studioEvents: StudioEvents,
     /** Owner of the node paint order (#27); the save path reads `getOrder()`. */
-    nodeOrder: NodeOrderKeeper<Schemes, Area2D<Schemes> | AreaExtra>
+    nodeOrder: NodeOrderKeeper<Schemes, Area2D<Schemes> | AreaExtra>,
+    /** #30: select a node by id; used by the design-check surface's Locate. */
+    selectNode: (nodeId: string) => Promise<void>
 }
 
 export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo> {
@@ -289,11 +296,27 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     const buildStudio: () => Promise<string | undefined> = async () => generateFeatureStudioSource(editor, engine);
     const describeStudio = (): GeneratedFeatureDescription => describeGeneratedFeature(editor.getNodes());
 
+    /**
+     * #30: select a node by id, replacing the current selection. The design
+     * check surface's "Locate" action uses this. Unknown ids are ignored.
+     */
+    const selectNode = async (id: string): Promise<void> => {
+        const node = editor.getNode(id);
+        if (node == null) {
+            return;
+        }
+        // AreaExtensions.selectableNodes registered `selector` for the area;
+        // adding to it is what a click does. `accumulate: false` replaces the
+        // current selection rather than adding to it.
+        await selector.add(node as unknown as Parameters<typeof selector.add>[0], false);
+    };
+
     return {
         editor,
         area,
         connection,
         nodeOrder,
-        studioEvents: { build: buildStudio, describe: describeStudio }
+        studioEvents: { build: buildStudio, describe: describeStudio },
+        selectNode
     }
 }

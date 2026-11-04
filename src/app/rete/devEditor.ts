@@ -72,6 +72,12 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
     studioEvents,
     getNodeOrder: () => nodeOrder.getOrder(),
     destroy: () => area.destroy(),
+    selectNode: async (nodeId: string) => {
+      // The dev editor's sample graph has no design-check surface to locate
+      // from; this satisfies the EditorControls contract without pretending to
+      // select anything.
+      console.warn(`devEditor: selectNode(${nodeId}) is a no-op`);
+    },
   };
 
   // const aType = 'Mirror';
