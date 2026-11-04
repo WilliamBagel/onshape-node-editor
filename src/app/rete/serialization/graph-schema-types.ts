@@ -55,7 +55,19 @@ export const GRAPH_SCHEMA_VERSION = 2;
 export const LOADABLE_SCHEMA_VERSIONS: readonly number[] = [1, GRAPH_SCHEMA_VERSION];
 
 /** `OnshapeNode.type` values that can appear in a saved graph. */
-export type SerializedNodeKind = "CustomFeature" | "define-feature" | "output-feature" | "function" | "utility-statement";
+export type SerializedNodeKind =
+    | "CustomFeature"
+    | "define-feature"
+    | "output-feature"
+    | "function"
+    | "utility-statement"
+    | "array-literal"
+    | "array-concat"
+    | "array-index"
+    | "array-size"
+    | "map-array"
+    | "for-each"
+    | "bounded-for";
 
 export interface Vec2 {
     x: number;
@@ -157,7 +169,58 @@ export type SerializedNode =
     | SerializedDefineFeatureNode
     | SerializedOutputFeatureNode
     | SerializedFunctionNode
-    | SerializedUtilityStatementNode;
+    | SerializedUtilityStatementNode
+    | SerializedArrayLiteralNode
+    | SerializedArrayConcatNode
+    | SerializedArrayIndexNode
+    | SerializedArraySizeNode
+    | SerializedMapArrayNode
+    | SerializedForEachNode
+    | SerializedBoundedForNode;
+
+/**
+ * Issue #12: array and iteration nodes. Value types are stored whole (not
+ * as names) so `array<Query>` round-trips exactly; see `valuetypes.ts`.
+ */
+export interface SerializedArrayLiteralNode extends SerializedNodeBase {
+    kind: "array-literal";
+    element: import("../../onshape-utils/valuetypes").ValueType;
+    count: number;
+}
+
+export interface SerializedArrayConcatNode extends SerializedNodeBase {
+    kind: "array-concat";
+    element: import("../../onshape-utils/valuetypes").ValueType;
+}
+
+export interface SerializedArrayIndexNode extends SerializedNodeBase {
+    kind: "array-index";
+    element: import("../../onshape-utils/valuetypes").ValueType;
+}
+
+export interface SerializedArraySizeNode extends SerializedNodeBase {
+    kind: "array-size";
+}
+
+export interface SerializedMapArrayNode extends SerializedNodeBase {
+    kind: "map-array";
+    element: import("../../onshape-utils/valuetypes").ValueType;
+    resultElement: import("../../onshape-utils/valuetypes").ValueType;
+    body: string;
+}
+
+export interface SerializedForEachNode extends SerializedNodeBase {
+    kind: "for-each";
+    body: string;
+}
+
+export interface SerializedBoundedForNode extends SerializedNodeBase {
+    kind: "bounded-for";
+    /** Literal loop bound; omitted when the `count` input is wired instead. */
+    bound?: number;
+    indexVar: string;
+    body: string;
+}
 
 /**
  * A grouping frame (#13). Frames are presentation only: they are not nodes in

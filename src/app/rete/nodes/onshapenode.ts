@@ -28,6 +28,21 @@ export interface VariablePointer {
   id: string;
 }
 
+/**
+ * Issue #12: context supplied to {@link OnshapeNode.validateGraph}.
+ * `producers` maps an input key to the producing node/output; `getNode(id)`
+ * resolves a node by id (undefined when the producer is gone).
+ */
+export interface GraphValidationContext {
+  producers: Record<string, GraphProducer>;
+  getNode: (id: string) => OnshapeNode | undefined;
+}
+
+export interface GraphProducer {
+  nodeId: string;
+  outputKey: string;
+}
+
 export interface TopLevelVariableDefintion {
   identifier: string,
   featurescript: string
@@ -142,6 +157,22 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     inputProducers: Record<string, string>;
   }): ValueExpression | undefined {
     return undefined;
+  }
+
+  /**
+   * Issue #12: build-time validation. Override to refuse a node whose
+   * wiring would generate code that hangs or misbehaves in Onshape (e.g.
+   * iterating over a `Query`, or a `for` loop with no bound). Return a
+   * message naming the problem, or `null` when valid; `graph-validation.ts`
+   * collects every node's result and the codegen refuses to run.
+   *
+   * `producers` maps an input key to the node/output producing it, so a
+   * node can inspect the type of the value it is being fed (e.g. reject a
+   * `Query` where an `array<T>` is expected — sockets alone do not cover
+   * the case where a connection was built programmatically).
+   */
+  public validateGraph(_context: GraphValidationContext): string | null {
+    return null;
   }
 
   public getTitle(): string {
