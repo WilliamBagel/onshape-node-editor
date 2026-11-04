@@ -421,7 +421,7 @@ export class AppStorage<Data> {
         })
     }
 
-    private _createAppElement(elementName: string): Promise<BTAppElementModifyInfo> {
+    protected _createAppElement(elementName: string): Promise<BTAppElementModifyInfo> {
         return new Promise((resolve, reject) => {
             this.onshape.appElementApi.createElement({
                 did: this.documentId,

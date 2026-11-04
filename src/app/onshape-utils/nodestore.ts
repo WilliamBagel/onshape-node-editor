@@ -48,6 +48,24 @@ export class NodeStore extends AppStorage<NodeData> {
         return await this._setData(data)
     }
 
+    /**
+     * #31: create the app element holding one graph's serialized form in an
+     * already-known document/workspace (the active document), and return its
+     * element id. Reuses `AppStorage._createAppElement`; it does not look the
+     * graph up by name first, so creating a second graph never adopts the
+     * first graph's element.
+     */
+    public async createGraphElement(did: string, wid: string, elementName: string): Promise<string> {
+        this.documentId = did;
+        this.workspaceId = wid;
+        const info = await this._createAppElement(elementName);
+        if (info?.elementId == null) {
+            throw new Error(`Creating graph element "${elementName}" returned no element id.`);
+        }
+        this.elementId = info.elementId;
+        return info.elementId;
+    }
+
     // this can be done by by the instantiating code
     // public async init(did?: string, eid?: string, ) {
     //     if (did) {
