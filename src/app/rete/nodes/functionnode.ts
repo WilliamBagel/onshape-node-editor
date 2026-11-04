@@ -6,6 +6,7 @@ import { NodeFeaturescriptInfo } from "../../onshape-utils/featurestudiogenerato
 import { ValueExpression } from "../../onshape-utils/expressioncodegen";
 import { parseValueType, ValueType } from "../../onshape-utils/valuetypes";
 import type { CatalogEntry, CatalogPort } from "../../onshape/catalog/types";
+import { UTILITY_BY_ID } from "../../onshape/catalog/utility-overrides";
 import type { SerializedFunctionNode, SerializedNodeBase } from "../serialization/graph-schema-types";
 
 export interface FunctionNodeMeta {
@@ -23,6 +24,8 @@ export interface FunctionNodeMeta {
 export class FunctionNode extends OnshapeNode {
   public readonly functionName: string;
   public readonly ports: readonly CatalogPort[];
+  /** Output port definition (value type of the `return` socket); persisted for round-trip. */
+  public readonly outputPorts: readonly CatalogPort[];
   /** Curated utility identity, when created by the utility registry. */
   public readonly utilityId?: string;
   /** Tooltip text naming the FeatureScript function mapped to. */
@@ -36,6 +39,7 @@ export class FunctionNode extends OnshapeNode {
     super("function", meta.displayName ?? entry.name);
     this.functionName = entry.name;
     this.ports = entry.inputs;
+    this.outputPorts = [...entry.outputs];
     this.utilityId = meta.utilityId ?? entry.utilityId;
     this.tooltip = meta.tooltip ?? entry.description;
     this.template = meta.template;
@@ -75,6 +79,7 @@ export class FunctionNode extends OnshapeNode {
       ...(super.toJSON() as SerializedNodeBase),
       kind: "function",
       functionName: this.functionName,
+      outputs: this.outputPorts.length > 0 ? this.outputPorts.map(p => ({ ...p })) : [{ name: "return", valueType: ((this.outputs["return"]?.socket as OnshapeSocket | undefined)?.valueType?.name ?? "Unknown") as CatalogPort["valueType"], scrapedType: ((this.outputs["return"]?.socket as OnshapeSocket | undefined)?.valueType?.name ?? "Unknown"), description: "" } as CatalogPort],
       inputs: this.ports.map(p => ({ ...p })),
       ...(this.utilityId != null ? { utilityId: this.utilityId } : {}),
       ...(Object.keys(this.literals).length > 0 ? { literals: { ...this.literals } } : {}),
@@ -88,7 +93,10 @@ export class FunctionNode extends OnshapeNode {
       key: `function::${data.functionName}`, name: data.functionName, category: "Math", file: "", descriptor: "", signature: "",
       description: "", kind: "value" as const, nodeable: true, inputs: data.inputs ?? [], outputs: [],
     };
-    const node = new FunctionNode({ ...base, ...(data.utilityId != null ? { utilityId: data.utilityId } : {}) }, meta ?? {});
+    const persistedOutputs = data.outputs != null && data.outputs.length > 0 ? data.outputs : undefined;
+    const utilityOutputs = (data.utilityId != null ? (UTILITY_BY_ID[data.utilityId]?.outputs ?? undefined) : undefined);
+    const resolvedOutputs = persistedOutputs ?? (base.outputs.length > 0 ? base.outputs : (utilityOutputs ?? []));
+    const node = new FunctionNode({ ...base, outputs: resolvedOutputs, ...(data.utilityId != null ? { utilityId: data.utilityId } : {}) }, meta ?? {});
     if (data.literals != null) {
       for (const [key, literal] of Object.entries(data.literals)) {
         node.setLiteral(key, literal);
