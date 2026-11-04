@@ -37,6 +37,15 @@ import { TransientSelection } from "./featurescripttypes";
  */
 
 type MessageCallback = (info: any[]) => boolean;
+type SelectionFailureCallback = (reason: string) => void;
+
+interface PendingSelectionRequest {
+    entityType: string[];
+    callback: MessageCallback;
+    count?: number;
+    controlId?: string;
+    onError?: SelectionFailureCallback;
+}
 
 export class ClientMessaging {
     public selections!: TransientSelection[];
@@ -50,11 +59,18 @@ export class ClientMessaging {
 
     private requestSelectionMessageId: string | null = null;
     private requestSelectionCallback: MessageCallback | null = null;
+    private requestSelectionOnError: SelectionFailureCallback | null = null;
+    private requestSelectionDelivered = false;
+    /** True between sending `stopRequest` and receiving the matching `STOP`. */
+    private stoppingSelection = false;
+    /** Latest request made while one was in flight; dispatched on `STOP`. */
+    private queuedSelectionRequest: PendingSelectionRequest | null = null;
+    private failureReporter: SelectionFailureCallback | null = null;
 
-    /** Tracks which control IDs have already been warned for non-developer-mode selection */
-    private warnedControls = new Set<string>();
-
-    /** Whether the app is running in developer/debug mode (DR-001) */
+    /** Whether the app is running in developer/debug mode. Retained for
+     * compatibility; DR-001 (issue #29 amendment) no longer gates
+     * `requestSelection` on it — selection is an authoring gesture, never
+     * persisted, with or without developer mode. */
     public developerMode = false;
 
     constructor(documentId: string, workspaceId: string, elementId: string) {
@@ -66,14 +82,33 @@ export class ClientMessaging {
         this.sendInitMessage();
     }
 
-    /** Sets developer mode (DR-001: selection is debug-only) */
+    /** Sets developer mode (retained for compatibility; no longer gates selection) */
     public setDeveloperMode(enabled: boolean): void {
         this.developerMode = enabled;
     }
 
-    /** Clears the warning tracker (e.g., on new graph load) */
+    /** No-op retained for compatibility: the DR-001 developer-mode warning
+     * tracker was removed by the issue #29 amendment. */
     public clearWarningTracker(): void {
-        this.warnedControls.clear();
+    }
+
+    /**
+     * Optional sink for selection failures (failed send, aborted/superseded
+     * request). The caller wires this to the log store (`App.reportMessage`,
+     * which writes to `BuildLogStore`); per-request `onError` callbacks are
+     * also invoked. Failures are never reported by calling the success
+     * callback with `[]`.
+     */
+    public setFailureReporter(reporter: SelectionFailureCallback | null): void {
+        this.failureReporter = reporter;
+    }
+
+    private reportSelectionFailure(reason: string, onError?: SelectionFailureCallback | null): void {
+        const callback = onError ?? this.requestSelectionOnError;
+        try { callback?.(reason); } catch { /* a failing reporter must not break messaging */ }
+        if (callback !== this.failureReporter) {
+            try { this.failureReporter?.(reason); } catch { /* see above */ }
+        }
     }
 
     public showMessageBubble(message: string) {
@@ -84,51 +119,83 @@ export class ClientMessaging {
     }
 
     /**
-     * DEBUG-ONLY: see design rule DR-001 (docs/design-rules.md).
-     * Selections returned here are transient (microversion-bound), do not survive
+     * Authoring gesture under DR-001 (docs/design-rules.md, issue #29
+     * amendment): selections are transient (microversion-bound), do not survive
      * document edits, only work while embedded, and bypass parameter filters.
-     * Do not build production node behavior or saved-graph state on this path;
-     * use explicit Query inputs or a re-evaluable query instead.
-     * @param controlId Unique identifier for the calling control (used to deduplicate warnings)
+     * Consume the result to produce a reconstructible query; never persist a
+     * live selection or build production node behavior on it.
+     *
+     * Re-entrant safe (issue #29): exactly one request is in flight at a time.
+     * A call made while one is pending does not send immediately — it queues
+     * (latest wins), sends one `stopRequest`, and is dispatched only when the
+     * matching `STOP` arrives. The superseded request's `onError` is invoked
+     * with an abort reason and its success callback is never called with `[]`.
+     * @param controlId Unique identifier for the calling control (retained for
+     * compatibility; no longer used for warning deduplication).
+     * @param onError Optional failure callback, wired by callers to the log
+     * store so a failed/aborted request is reported, not silently dropped.
      */
-    public requestSelection(entityType: string[], callback: MessageCallback, count?: number, controlId?: string) {
-        // DR-001: Gate selection behind developer mode
-        if (!this.developerMode) {
-            const warningKey = controlId ?? 'unknown-control';
-            if (!this.warnedControls.has(warningKey)) {
-                this.warnedControls.add(warningKey);
-                this.showMessageBubble(
-                    'DR-001: Interactive selection (requestSelection) is debug-only. ' +
-                    'This control uses live Onshape selection which does not persist. ' +
-                    'Enable developer mode to use this feature, or replace with a Query input.'
+    public requestSelection(entityType: string[], callback: MessageCallback, count?: number, controlId?: string, onError?: SelectionFailureCallback) {
+        const request: PendingSelectionRequest = { entityType, callback, count, controlId, onError };
+
+        if (this.requestSelectionMessageId !== null || this.stoppingSelection) {
+            const supersededQueued = this.queuedSelectionRequest;
+            this.queuedSelectionRequest = request;
+            if (supersededQueued?.onError != null) {
+                this.reportSelectionFailure(
+                    'Selection request superseded by a newer request before it was sent.',
+                    supersededQueued.onError,
                 );
             }
-            // Still call the callback with empty selections to not break the control flow
-            callback([]);
+            if (!this.stoppingSelection) {
+                this.stopRequest();
+            }
             return;
         }
 
-        if (this.requestSelectionMessageId !== null) {
-            this.stopRequest();
-            this.stopMessagePromise?.promise.then(() => {
-                this.requestSelectionMessageId = null;
-                this.requestSelectionCallback = null;
-                this.requestSelection(entityType, callback, count, controlId);
-            });
-        }
+        this.dispatchSelectionRequest(request);
+    }
 
+    private dispatchSelectionRequest(request: PendingSelectionRequest): void {
         const id = crypto.randomUUID();
         this.requestSelectionMessageId = id;
-        this.requestSelectionCallback = callback;
-        this.sendMessage({
-            messageName: 'requestSelection',
-            messageId: crypto.randomUUID(),
-            entityTypeSpecifier: entityType,
-            requiredSelectionCount: count
-        });
+        this.requestSelectionCallback = request.callback;
+        this.requestSelectionOnError = request.onError ?? null;
+        this.requestSelectionDelivered = false;
+        let sent = false;
+        try {
+            sent = this.sendMessage({
+                messageName: 'requestSelection',
+                messageId: id,
+                entityTypeSpecifier: request.entityType,
+                requiredSelectionCount: request.count
+            });
+        } catch (error) {
+            this.clearSelectionInFlight();
+            this.reportSelectionFailure(
+                `Selection request failed to send: ${error instanceof Error ? error.message : String(error)}`,
+                request.onError ?? null,
+            );
+            return;
+        }
+        if (!sent) {
+            this.clearSelectionInFlight();
+            this.reportSelectionFailure('Selection request failed to send.', request.onError ?? null);
+        }
+    }
+
+    private clearSelectionInFlight(): void {
+        this.requestSelectionMessageId = null;
+        this.requestSelectionCallback = null;
+        this.requestSelectionOnError = null;
+        this.requestSelectionDelivered = false;
     }
 
     public stopRequest() {
+        if (this.requestSelectionMessageId === null && this.stopMessagePromise != null) {
+            return;
+        }
+        this.stoppingSelection = true;
         this.sendMessage({ messageName: 'stopRequest' });
         this.stopMessagePromise = Promise.withResolvers();
     }
@@ -188,9 +255,32 @@ export class ClientMessaging {
         if (messageType === 'SELECTION') {
             console.log('SELECTION event data: %o', event.data);
             this.selections = event.data?.selections;
+            // A SELECTION for a request that is being stopped belongs to the
+            // superseded request: do not deliver it to its callback (which
+            // was already told it aborted) and do not treat the queued
+            // request as fulfilled. It is dispatched on STOP.
+            if (this.stoppingSelection || this.requestSelectionMessageId === null) {
+                return;
+            }
+            this.requestSelectionDelivered = true;
             this.requestSelectionCallback?.(event.data?.selections);
         } else if (messageType === 'STOP') {
+            const inFlightOnError = this.requestSelectionOnError;
+            const delivered = this.requestSelectionDelivered;
+            this.stoppingSelection = false;
+            this.clearSelectionInFlight();
             this.stopMessagePromise?.resolve();
+            this.stopMessagePromise = null;
+            if (!delivered && inFlightOnError != null) {
+                // Stopped before any selection arrived: aborted, not an
+                // empty success. The success callback is not called.
+                this.reportSelectionFailure('Selection request was stopped before a selection arrived.', inFlightOnError);
+            }
+            const queued = this.queuedSelectionRequest;
+            this.queuedSelectionRequest = null;
+            if (queued != null) {
+                this.dispatchSelectionRequest(queued);
+            }
         }
 
         else {
