@@ -29,10 +29,10 @@
 // Copyright notice included from reference file
 
 import fetch from "node-fetch";
-import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { HttpRequest, HttpResponseInit } from "./httpTypes";
 import { CLIENT_URL, CLIENT_ID, CLIENT_SECRET } from "./config";
 
-export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
   const qs = request.query as URLSearchParams | undefined;
   const refresh_token = qs ? (qs.get('refresh_token') || qs.get('refreshToken')) : undefined;
   if (!refresh_token) {

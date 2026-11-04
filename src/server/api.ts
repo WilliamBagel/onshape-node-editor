@@ -30,17 +30,17 @@
 // Manual edits by William Degele
 
 import fetch from "node-fetch";
-import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { HttpRequest, HttpResponseInit } from "./httpTypes";
 require('dotenv').config();
 
-export default async function (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+export default async function (request: HttpRequest, context?: any): Promise<HttpResponseInit> {
   try {
     // Prefer the bound wildcard path (route: "api/{*path}") provided by Azure Functions.
     // This yields only the portion after /api/, which is what we want to forward.
     const boundPath = (context && (context as any).bindingData && (context as any).bindingData.path) as string | undefined;
 
     // Fallback: if no bindingData.path, remove leading "/api" from request.pathname
-    const parsedUrl = new URL(request.url);
+    const parsedUrl = new URL(request.url || '/', 'http://localhost');
     let forwardPath = '';
     if (boundPath && boundPath.length > 0) {
       forwardPath = '/' + boundPath.replace(/^\/+/, '');

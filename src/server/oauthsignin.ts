@@ -29,12 +29,12 @@
 // and improved with Claude
 // Copyright notice included from reference file
 
-import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { HttpRequest, HttpResponseInit } from "./httpTypes";
 import { CLIENT_ID } from "./config";
 require('dotenv').config()
 
 // This endpoint constructs an Onshape OAuth authorize redirect similar to the PHP original
-export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
   const qs = request.query as URLSearchParams | undefined;
   const redirectOnshapeUri = qs ? qs.get('redirectOnshapeUri') : undefined;
 
@@ -49,7 +49,11 @@ export default async function (request: HttpRequest, _context: InvocationContext
     return { status: 400, body: 'missing host header' };
   }
   const proto = headers['x-forwarded-proto'] || (request as any).protocol || 'https';
-  const script_uri = `${proto}://${host}${request.url || ''}`;
+  // request.url is the full request URL (same shape as the Azure Functions
+  // HttpRequest.url); recover path+query so the authorize redirect nests
+  // under this endpoint instead of concatenating a second absolute URL.
+  const parsed = new URL(request.url || '/oauthsignin', 'http://localhost');
+  const script_uri = `${proto}://${host}${parsed.pathname}${parsed.search}`;
 
   const onshape_uri = `https://oauth.onshape.com/oauth/authorize?response_type=code&redirect_uri=${encodeURIComponent(script_uri + '?redirectOnshapeUri=' + redirectOnshapeUri)}&client_id=${CLIENT_ID}`;
 
