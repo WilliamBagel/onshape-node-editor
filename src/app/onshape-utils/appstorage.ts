@@ -125,7 +125,7 @@ export class AppStorage<Data> {
                 }
                 resolve(res);
                 this.lastElements = res;
-            })
+            }).catch(reject);
         })
     }
 
@@ -140,7 +140,7 @@ export class AppStorage<Data> {
                 this._fetchDocumentElements().then(() => {
                     // try again
                     resolve(this._setAppElement(eid, fallbackName, data));
-                })
+                }).catch(reject);
                 return;
             }
             for (let element of this.lastElements) {
@@ -156,7 +156,7 @@ export class AppStorage<Data> {
             // const json: any = JSON.stringify(data);
             this.__setWithJSONPatch(data).then(() => {
                 resolve();
-            })
+            }).catch(reject);
         })
     }
 
@@ -184,10 +184,11 @@ export class AppStorage<Data> {
             }).then((res) => {
                 if (res == null) {
                     console.error("something isn't right here");
-                    resolve(undefined);
+                    reject(new Error("Updating the app element returned no result."));
+                    return;
                 }
                 resolve();
-            });
+            }).catch(reject);
         })
     }
 
@@ -435,7 +436,7 @@ export class AppStorage<Data> {
                 }
                 this.elementId = res.elementId;
                 resolve(res)
-            })
+            }).catch(reject)
         })
     }
 
@@ -456,7 +457,7 @@ export class AppStorage<Data> {
                 }
                 delete res.tree["_nodeId"];
                 resolve(res.tree as Data);
-            })
+            }).catch(reject)
         })
     }
 

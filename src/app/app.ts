@@ -55,6 +55,7 @@ import {
     PartStudioTargetSettings,
 } from "./onshape-utils/partstudiofeature";
 import { resolveSinglePartStudio } from "./onshape-utils/partstudiotarget";
+import { saveGraphVerified, type SaveOutcome } from "./onshape-utils/graphsaveopen";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
@@ -245,6 +246,100 @@ export class App extends BaseApp {
         const outcome = await service.createAdditionalGraph(graphName);
         if (outcome.status === 'created') {
             this.registerGraph(outcome.identity);
+        }
+        return outcome;
+    }
+
+    /**
+     * #6: write the open graph into its `NodeStore` element, then read it
+     * back and only claim success on an exact round-trip. With no active
+     * graph yet, the element (and its Feature Studio) is created first —
+     * that create path (`ensureGraphForDeploy`) already persists the
+     * serialized graph through the provider, and the read-back below is
+     * what verifies it. Every outcome is reported through the log.
+     */
+    public async saveGraph(graphName: string): Promise<SaveOutcome> {
+        const api = this.onshape;
+        const did = this.documentId;
+        const wid = this.workspaceId;
+        const name = graphName.trim() === '' ? 'Untitled graph' : graphName.trim();
+        if (api == null || did === '' || wid === '') {
+            const outcome: SaveOutcome = {
+                status: 'failed',
+                stage: 'write',
+                message: 'No active Onshape document: the app must run inside an Onshape document to save.',
+            };
+            this.reportMessage(`Save failed (write): ${outcome.message}`, 'error', 'editor');
+            return outcome;
+        }
+
+        const writeToActiveElement = async (reteJSON: string): Promise<void> => {
+            const identity = this.activeGraphIdentity;
+            if (identity == null) {
+                throw new Error('No active graph element to write to.');
+            }
+            const store = new NodeStore(api);
+            await store.initFromExisting(did, identity.graphElementId, graphElementNameFor(identity.graphName));
+            await store.setNodeData({ reteJSON });
+        };
+
+        const outcome = await saveGraphVerified({
+            serialize: () => {
+                const serialized = this.serializedGraphProvider?.();
+                if (typeof serialized !== 'string' || serialized === '') {
+                    throw new Error('No editor graph is available to save yet.');
+                }
+                return serialized;
+            },
+            storage: {
+                write: async (reteJSON) => {
+                    if (this.activeGraphIdentity != null) {
+                        await writeToActiveElement(reteJSON);
+                        return;
+                    }
+                    const ensured = await this.ensureGraphForDeploy(name);
+                    if (ensured == null) {
+                        throw new Error('Could not create a graph element in this document.');
+                    }
+                    if (ensured.status === 'created') {
+                        // ensureGraphForDeploy's persistGraph already wrote the
+                        // serialized graph into the new element; the read-back
+                        // in saveGraphVerified is what verifies it.
+                        return;
+                    }
+                    if (ensured.status === 'resolved') {
+                        await writeToActiveElement(reteJSON);
+                        return;
+                    }
+                    if (ensured.status === 'failed') {
+                        throw new Error(ensured.message);
+                    }
+                    if (ensured.status === 'drift') {
+                        throw new Error(ensured.issues.map((issue) => issue.message).join(' '));
+                    }
+                    throw new Error(`Creating graph "${name}" was cancelled; nothing was saved.`);
+                },
+                read: async () => {
+                    const identity = this.activeGraphIdentity;
+                    if (identity == null) {
+                        return undefined;
+                    }
+                    const store = new NodeStore(api);
+                    await store.initFromExisting(did, identity.graphElementId, graphElementNameFor(identity.graphName));
+                    const data = await store.getNodeData();
+                    return data?.reteJSON;
+                },
+            },
+        });
+
+        if (outcome.status === 'saved') {
+            this.reportMessage(
+                `Saved graph "${this.activeGraphIdentity?.graphName ?? name}" (${outcome.bytes} bytes; verified by reading it back).`,
+                'info',
+                'editor',
+            );
+        } else {
+            this.reportMessage(`Save failed (${outcome.stage}): ${outcome.message}`, 'error', 'editor');
         }
         return outcome;
     }

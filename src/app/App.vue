@@ -44,6 +44,10 @@ interface FeatureStudioHost {
   reportBuildResult(source: string | undefined, failure?: string): void;
   insertPartStudioFeature(feature: FeatureInsertion): Promise<unknown>;
   uploadFeatureStudio(source: string | undefined): Promise<unknown>;
+  /** #6: the editor's serialized graph, once the editor exists. */
+  serializedGraphProvider?: (() => string | undefined) | undefined;
+  /** #6: save the open graph to its element, verified by read-back. */
+  saveGraph(graphName: string): Promise<unknown> | unknown;
 }
 
 /**
@@ -90,6 +94,11 @@ export default defineComponent({
       editorControls = await createEditor(this.$refs.rete as HTMLElement);
     }
     this.controls = editorControls;
+    // #6: the App's save path reads the open graph through this provider.
+    const host = this.featureStudioHost();
+    if (host != null) {
+      host.serializedGraphProvider = () => editorControls.serializeGraph();
+    }
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.onShortcutKeydown);
@@ -262,8 +271,11 @@ export default defineComponent({
         parameters: description.parameters,
       });
     },
-    runSave() {
-
+    /** #6: write the open graph to its element; App reports the verified outcome. */
+    async runSave() {
+      const host = this.featureStudioHost();
+      if (host == null) return;
+      await host.saveGraph(this.graphName);
     },
     runOpen() {
 
