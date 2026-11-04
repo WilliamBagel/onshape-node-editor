@@ -64,6 +64,7 @@ A saved graph is a single JSON document produced by
 | `nodes` | array | Every node on the canvas, in creation order. Not paint order — see `nodeOrder`. |
 | `connections` | array | Every connection. Endpoints are node ids plus port keys. |
 | `nodeOrder` | string[] | Node ids, **bottom-most first**: the last id paints on top. Every node appears exactly once. Always written by this build; absent from version-1 documents. |
+| `frames` | array (optional) | Grouping frames (#13). Omitted when the graph has none, so pre-#13 documents keep their exact shape. |
 
 `nodeOrder` is the canvas paint order and nothing else. It is one list for the
 whole graph rather than a per-node `order` ordinal, because a single list cannot
@@ -71,7 +72,8 @@ disagree with itself and needs no renumbering when a node is added or removed.
 The canvas owns it (`NodeOrderKeeper` in
 `src/app/rete/modified-rete/nodeorder.ts`); the serializer records what the
 canvas reports and the loader hands it back. Nothing encodes stacking in CSS —
-see DR-007.
+see DR-007. Frames are excluded from `nodeOrder`: the canvas pins frame
+elements behind their children instead of stacking them with the nodes.
 
 ## Nodes
 
@@ -83,7 +85,7 @@ All nodes carry the same five header fields:
 | `kind` | `"CustomFeature"` \| `"define-feature"` \| `"output-feature"` | Node class discriminant (`OnshapeNode.type`). |
 | `position` | `{x, y}` or `null` | Canvas position. Owned by the rete area plugin, not the node, so the graph serializer fills it from the caller's placement map. `null` means "no known position". |
 | `size` | `{width, height}` | Node box size (`OnshapeNode.width` / `.height`). |
-| `group` | string or `null` | Frame/group id. No grouping exists yet (#13); the field is written and restored so grouping does not need a schema bump. |
+| `group` | string or `null` | Frame id the node belongs to (#13). `null` means ungrouped. The scopes plugin reads and writes this as `node.parent` (an alias on `OnshapeNode`), so `group` and `parent` never disagree. |
 
 ### `kind: "CustomFeature"` — a call to an Onshape custom feature
 
@@ -149,6 +151,22 @@ selection ids.
 ### `kind: "output-feature"`
 
 No extra fields; it is the terminator for codegen.
+
+## Frames
+
+```json
+{ "id": "<frame id>", "label": "Finishing", "color": "#2f5f8f", "collapsed": false, "position": {"x": 120, "y": 80}, "size": {"width": 400, "height": 240}, "group": null }
+```
+
+A frame is a grouping rectangle the rete-scopes-plugin parents nodes into
+(`node.parent`). Frames are not codegen nodes: they have no inputs or
+outputs, so the flattening walk (which follows connection parents from the
+output node) never reaches them and generated FeatureScript is unaffected by
+framing. `label` and `color` are the frame header's; `collapsed` hides the
+frame's descendants on the canvas without deleting them. A frame's own
+`group` is its parent frame's id (frames nest). A child whose `group` names a
+frame that is missing from the document loads ungrouped, with a warning, and
+so does a frame whose parent frame is missing.
 
 ## Connections
 

@@ -28,6 +28,9 @@ import { snapGrid } from "./modified-rete/areasnap";
 import { StyleSettings } from "./stylesettings";
 import { CustomConnectionPlugin } from "./customconnectionplugin";
 import { OnshapeNode } from "./nodes/onshapenode";
+import { FrameNode } from "./nodes/framenode";
+import FrameNodeView from "../customization/FrameNodeView.vue";
+import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
@@ -84,6 +87,10 @@ export type EditorControls = {
     fitView: () => Promise<void>
     /** #36: remove the selected nodes; returns how many were removed. */
     deleteSelectedNodes: () => Promise<number>
+    /** #13: wrap the selected non-frame nodes in a new frame. Null when nothing is selected. */
+    createFrameFromSelection: () => Promise<FrameNode | null>
+    /** #13: flip a frame's collapsed state; descendants hide/show in place. */
+    toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     destroy: () => void
@@ -104,6 +111,10 @@ type EditorBaseInfo = {
     fitView: () => Promise<void>
     /** #36: remove selected nodes, returning the count. */
     deleteSelectedNodes: () => Promise<number>
+    /** #13: wrap the selected non-frame nodes in a new frame. Null when nothing is selected. */
+    createFrameFromSelection: () => Promise<FrameNode | null>
+    /** #13: flip a frame's collapsed state; descendants hide/show in place. */
+    toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #6: the open graph as a serialized JSON document (schema v2). */
@@ -133,6 +144,9 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         VuePresets.classic.setup({
             customize: {
                 node(context: any) {
+                    if (context.payload instanceof FrameNode) {
+                        return FrameNodeView;
+                    }
                     if (context.payload instanceof OnshapeNode) {
                         return CustomFeatureComp;
                     }
@@ -231,10 +245,41 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     addCustomBackground(area);
 
+    // #13 grouping v1: frames/scopes. The scopes plugin parents nodes into
+    // frame nodes (`node.parent`, which OnshapeNode aliases to the serialized
+    // `group`): drag a node onto a frame to group it, drag a frame to move
+    // its contents with it, and it auto-fits the frame to its children. The
+    // classic preset is its long-press-capture interaction.
+    const scopes = new ScopesPlugin<Schemes>();
+    scopes.addPreset(ScopesPresets.classic.setup());
+
     editor.use(area);
     area.use(connection);
     area.use(vueRender);
+    area.use(scopes);
     area.area.setZoomHandler(new Zoom(0.001) as any);
+
+    // #13: the scopes plugin's own ordering moves a picked element to the
+    // top of the holder, which would put a picked frame over its children.
+    // This pipe is registered after the plugin's, so it runs after it and
+    // re-pins every frame element to the front of the holder; the order
+    // keeper (below) stacks the regular nodes on top of it.
+    area.addPipe((context) => {
+        const signal = context as { type?: string };
+        if (signal.type === 'nodepicked' || signal.type === 'nodecreated') {
+            const holder = area.area.content.holder;
+            for (const node of editor.getNodes()) {
+                if (!(node instanceof FrameNode)) {
+                    continue;
+                }
+                const view = area.nodeViews.get(node.id);
+                if (view != null && view.element.parentNode === holder) {
+                    holder.insertBefore(view.element, holder.firstChild);
+                }
+            }
+        }
+        return context;
+    });
 
     area.addPipe(context => {
         if (context.type === 'zoom' || context.type === 'zoomed') {
@@ -328,7 +373,10 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     const nodeOrder = installNodeOrder(area, {
         getSelectedIds: () => Array.from(selector.entities.values())
             .filter((entity) => entity.label === 'node')
-            .map((entity) => entity.id)
+            .map((entity) => entity.id),
+        // #13: frames are excluded from the paint order entirely — the
+        // pinning pipe above keeps their elements behind their children.
+        isExcluded: (id) => editor.getNodes().find((node) => node.id === id) instanceof FrameNode,
     });
 
 
@@ -365,11 +413,125 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         const ids = Array.from(selector.entities.values())
             .filter((entity) => entity.label === 'node')
             .map((entity) => entity.id);
+        const selectedNodes = ids
+            .map((id) => editor.getNodes().find((node) => node.id === id))
+            .filter((node): node is OnshapeNode => node != null);
+        const selectedIds = new Set(selectedNodes.map((node) => node.id));
+
+        // #13: the scopes plugin refuses to remove a frame that still has
+        // children. Children that are not themselves being deleted are
+        // ungrouped first; children that are, go first (below).
+        for (const node of selectedNodes) {
+            if (!(node instanceof FrameNode)) {
+                continue;
+            }
+            for (const child of editor.getNodes()) {
+                if (child.group === node.id && !selectedIds.has(child.id)) {
+                    child.group = null;
+                }
+            }
+        }
+
         let removed = 0;
-        for (const id of ids) {
-            if (editor.getNode(id) != null && await editor.removeNode(id)) removed++;
+        const ordered = [...selectedNodes].sort(
+            (a, b) => Number(a instanceof FrameNode) - Number(b instanceof FrameNode)
+        );
+        for (const node of ordered) {
+            if (await editor.removeNode(node.id)) removed++;
         }
         return removed;
+    };
+
+    // #13 frame helpers --------------------------------------------------
+
+    /** True when any frame above `node` in the group chain is collapsed. */
+    const isEffectivelyHidden = (node: OnshapeNode): boolean => {
+        let parentId = node.group;
+        const seen = new Set<string>();
+        while (parentId != null && !seen.has(parentId)) {
+            seen.add(parentId);
+            const parent = editor.getNodes().find((candidate) => candidate.id === parentId);
+            if (parent instanceof FrameNode && parent.collapsed) {
+                return true;
+            }
+            parentId = parent?.group ?? null;
+        }
+        return false;
+    };
+
+    /** Recompute every node's visibility from the frames' collapsed flags. */
+    const applyCollapsedStates = (): void => {
+        for (const node of editor.getNodes()) {
+            const view = area.nodeViews.get(node.id);
+            if (view != null) {
+                view.element.style.display = isEffectivelyHidden(node) ? 'none' : '';
+            }
+        }
+    };
+
+    /** Wire a frame's view toggle to the canvas (the view only flips the flag). */
+    const prepareFrame = (frame: FrameNode): void => {
+        frame.onCollapsedChanged = () => {
+            applyCollapsedStates();
+        };
+    };
+
+    const toggleFrameCollapsed = async (frameId: string): Promise<void> => {
+        const frame = editor.getNodes().find((node) => node.id === frameId);
+        if (!(frame instanceof FrameNode)) {
+            return;
+        }
+        frame.collapsed = !frame.collapsed;
+        applyCollapsedStates();
+    };
+
+    const createFrameFromSelection = async (): Promise<FrameNode | null> => {
+        const selected = editor.getNodes().filter(
+            (node) => node.selected && !(node instanceof FrameNode)
+        );
+        if (selected.length === 0) {
+            return null;
+        }
+
+        const padding = 16;
+        const boxes = selected.map((node) => {
+            const position = area.nodeViews.get(node.id)?.position ?? { x: 0, y: 0 };
+            return {
+                left: position.x,
+                top: position.y,
+                right: position.x + node.width,
+                bottom: position.y + node.height,
+            };
+        });
+        const left = Math.min(...boxes.map((box) => box.left)) - padding;
+        const top = Math.min(...boxes.map((box) => box.top)) - padding;
+        const right = Math.max(...boxes.map((box) => box.right)) + padding;
+        const bottom = Math.max(...boxes.map((box) => box.bottom)) + padding;
+
+        const frame = new FrameNode();
+        frame.width = Math.max(frame.minWidth, right - left);
+        frame.height = Math.max(80, bottom - top);
+        prepareFrame(frame);
+        await editor.addNode(frame);
+        // The new element starts on top of the holder; pin it behind its
+        // children (the pinning pipe does this on later picks, but a fresh
+        // frame needs it now).
+        const holder = area.area.content.holder;
+        const frameView = area.nodeViews.get(frame.id);
+        if (frameView != null && frameView.element.parentNode === holder) {
+            holder.insertBefore(frameView.element, holder.firstChild);
+        }
+        await area.translate(frame.id, { x: left, y: top });
+
+        // Group after the frame exists and is positioned: the plugin's
+        // validator requires the parent to be in the editor before a
+        // grouped node is added, and assigning `group` is what the plugin
+        // reads as `parent`.
+        for (const node of selected) {
+            node.group = frame.id;
+        }
+        applyCollapsedStates();
+        return frame;
     };
 
     const applyPreferences = (prefs: EditorPreferences): void => {
@@ -407,10 +569,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             throw new Error(result.error);
         }
         const graph = result.graph;
-        for (const node of [...editor.getNodes()]) {
+        // #13: the scopes plugin refuses to remove a frame that still has
+        // children, so existing non-frame nodes go first and frames last.
+        for (const node of [...editor.getNodes()].sort(
+            (a, b) => Number(a instanceof FrameNode) - Number(b instanceof FrameNode)
+        )) {
             await editor.removeNode(node.id);
         }
         for (const node of graph.nodes) {
+            if (node instanceof FrameNode) {
+                prepareFrame(node);
+            }
             await editor.addNode(node);
         }
         for (const connection of graph.connections) {
@@ -423,7 +592,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             }
         }
         await nodeOrder.setOrder(graph.nodeOrder);
-        return { nodes: graph.nodes.length, warnings: graph.warnings };
+        // Restore collapsed frames after positions exist so hidden children
+        // hide in place rather than flashing on load.
+        applyCollapsedStates();
+        return {
+            nodes: graph.nodes.filter((node) => !(node instanceof FrameNode)).length,
+            warnings: graph.warnings,
+        };
     };
 
     return {
@@ -435,6 +610,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         accumulateModifier: () => editorSettings.getPreferences().accumulateModifier,
         fitView,
         deleteSelectedNodes,
+        createFrameFromSelection,
+        toggleFrameCollapsed,
         applyPreferences,
         serializeGraph,
         loadGraph,

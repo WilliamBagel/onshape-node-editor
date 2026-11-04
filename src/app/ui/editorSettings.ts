@@ -69,7 +69,7 @@ export function validateSnapGridSize(value: unknown): number | null {
 }
 
 /** A command the app actually honours, with its default binding. */
-export type CommandId = 'build' | 'run' | 'upload' | 'settings' | 'fitView' | 'deleteSelected';
+export type CommandId = 'build' | 'run' | 'upload' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame';
 
 export interface CommandDefinition {
     id: CommandId;
@@ -85,6 +85,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
     { id: 'settings', label: 'Settings', description: 'Open this settings dialog.', defaultCombo: 'Ctrl+,' },
     { id: 'fitView', label: 'Fit view', description: 'Zoom the canvas to fit all nodes.', defaultCombo: 'Ctrl+0' },
     { id: 'deleteSelected', label: 'Delete selected nodes', description: 'Remove the currently selected nodes from the canvas.', defaultCombo: 'Delete' },
+    { id: 'createFrame', label: 'Frame selected nodes', description: 'Wrap the selected nodes in a grouping frame (#13).', defaultCombo: 'Ctrl+G' },
 ];
 
 /** Commands with no implementation yet — listed in the dialog so the omission is explicit, never bound. */
@@ -103,6 +104,7 @@ export const DEFAULT_BINDINGS: ShortcutBindings = {
     settings: 'Ctrl+,',
     fitView: 'Ctrl+0',
     deleteSelected: 'Delete',
+    createFrame: 'Ctrl+G',
 };
 
 const MODIFIER_ORDER = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const;

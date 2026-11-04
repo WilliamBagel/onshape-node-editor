@@ -104,8 +104,8 @@ describe('editorSettings: persistence', () => {
 });
 
 describe('editorSettings: shortcut registry', () => {
-  it('lists exactly the six implemented commands, each with a unique default', () => {
-    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'settings', 'fitView', 'deleteSelected']);
+  it('lists exactly the seven implemented commands, each with a unique default', () => {
+    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'settings', 'fitView', 'deleteSelected', 'createFrame']);
     expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(COMMANDS.length);
   });
 
