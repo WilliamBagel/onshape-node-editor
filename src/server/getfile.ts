@@ -30,9 +30,9 @@
 // Copyright notice included from reference file
 
 import fetch from "node-fetch";
-import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { HttpRequest, HttpResponseInit } from "./httpTypes";
 
-export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
 
   const q = request.query;
   const body = request.method === 'POST' ? request.body : undefined;
@@ -46,6 +46,13 @@ export default async function (request: HttpRequest, _context: InvocationContext
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return { status: 400, body: 'invalid url protocol' };
+    }
+    // #28: /getfile used to forward any http(s) URL (an open proxy). Allowlist
+    // the only host the client fetches from (baseapp.getOnshapeFile pulls
+    // Onshape pages/CSS from cad.onshape.com); everything else is refused.
+    const ALLOWED_HOSTS = new Set(['cad.onshape.com']);
+    if (!ALLOWED_HOSTS.has(parsed.hostname.toLowerCase())) {
+      return { status: 403, body: 'url not allowed' };
     }
   } catch (e) {
     return { status: 400, body: 'invalid url' };

@@ -3,7 +3,7 @@
 This is the human-facing setup document for `onshape-node-editor`. It covers what
 the extension is, how to register it in the Onshape developer portal, which OAuth
 scopes it uses and why, every environment variable the server reads, the full
-OAuth flow, local development, the GitHub Pages deploy, the Azure Functions
+OAuth flow, local development, the GitHub Pages deploy, the Azure Web App
 deploy, a verification checklist, and an explicit list of what cannot be verified
 from this repository.
 
@@ -71,7 +71,7 @@ it expects, not the registration.
 | App name | `onshape-node-editor` | `package.json:2` (`"name"`). Cosmetic, but keep it equal to the repo name so portal entries are identifiable. |
 | Application kind | An Onshape **app extension** (iframe action URL) **and** an OAuth2 **confidential** application (authorization-code grant with a client secret) | The extension supplies `documentId`/`workspaceId`/`elementId` to the iframe (§1); the token exchange is performed server-side and requires `CLIENT_SECRET` (`src/server/oauth.ts:62-77`). If the portal models these as separate registrations, both are needed. Exact radio labels are portal-side — verify them there. |
 | OAuth client id | the value of `CLIENT_ID` in `src/server/.env` | Read at `src/server/config.ts:3`, used at `src/server/oauth.ts:36`, embedded in the authorize URL at `src/server/oauthsignin.ts:54`, and required as a `client_id` query parameter by `public/redirect.html:8`. |
-| OAuth client secret | the value of `CLIENT_SECRET` in `src/server/.env` | Read at `src/server/config.ts:4` and `src/server/oauth.ts:37`; posted to the token endpoint at `src/server/oauth.ts:65`. **Never** enters the client bundle — only the Functions app has it. |
+| OAuth client secret | the value of `CLIENT_SECRET` in `src/server/.env` | Read at `src/server/config.ts:4` and `src/server/oauth.ts:37`; posted to the token endpoint at `src/server/oauth.ts:65`. **Never** enters the client bundle — only the Web App server has it. |
 | Token endpoint (`CLIENT_URL`) | `https://oauth.onshape.com/oauth/token` | `CLIENT_URL` is read at `src/server/config.ts:5` and `src/server/oauth.ts:35`, and used as the POST target at `src/server/oauth.ts:71`. Its value in `src/server/.env` is redacted here — confirm it is the token endpoint on the same host as the authorize URL that `src/server/oauthsignin.ts:54` builds (`oauth.onshape.com`). |
 | Redirect URI (registered) | `https://williambagel.github.io/onshape-node-editor/?documentId=<documentId>&workspaceId=<workspaceId>&elementId=<elementId>` | Reconstructed client-side at `src/app/common/onshapeapi.ts:266-272`; the comment at `:269` says it "must match EXACTLY what is put into the ActionURL `redirect_uri` for the extension". The same string is built in the static page at `public/redirect.html:17`. Onshape appends the three ids; the portal therefore has to accept query parameters on the registered redirect URI — **check that in the portal**, because a strict exact-match registration cannot express the interpolated ids. |
 | Action URL / junction URL | `https://williambagel.github.io/onshape-node-editor/redirect.html?client_id=<CLIENT_ID>` | `public/redirect.html` is the only file that turns a portal `client_id` plus the three document ids into an `oauth.onshape.com/oauth/authorize` URL (`public/redirect.html:7-18`). It is copied verbatim into the deployed site (`vite.config.ts:27` sets `publicDir`, and `dist/app/redirect.html` exists after `pnpm run build:app`). It rejects the request if any of `client_id`, `documentId`, `workspaceId`, `elementId` is missing (`public/redirect.html:13-15`), so all four must arrive in the action URL. Onshape supplies the three ids; the `client_id` has to be in the registered URL itself — confirm that in the portal. |
@@ -87,7 +87,7 @@ src/app/app.ts:50  public myserver = 'https://onshape-node-editor-function.azure
 src/app/app.ts:51  public myclient = 'https://williambagel.github.io/onshape-node-editor';
 ```
 
-`myserver` is the **Azure Functions host** (`§8`). It is the base for every
+`myserver` is the **Azure Web App server host** (`§8`). It is the base for every
 server call the client makes:
 
 * token exchange — `this.myserver + '/oauth'` (`src/app/common/onshapeapi.ts:278`)
@@ -122,7 +122,7 @@ above. For a second environment (staging, a fork, a local tunnel):
 
 | | production (as committed) | any other environment |
 |---|---|---|
-| `myserver` (`src/app/app.ts:50`) | `https://onshape-node-editor-function.azurewebsites.net` | that environment's Functions host |
+| `myserver` (`src/app/app.ts:50`) | `https://onshape-node-editor-function.azurewebsites.net` | that environment's Web App server host |
 | `myclient` (`src/app/app.ts:51`) | `https://williambagel.github.io/onshape-node-editor` | that environment's static site root |
 | `vite.config.ts:56` `base` | `/onshape-node-editor/` | must match the site's path component of `myclient` |
 | `public/redirect.html:17` | hardcodes `https://williambagel.github.io/onshape-node-editor/` | must be edited to the same `myclient` |
@@ -191,7 +191,7 @@ src/server/oauth.ts:36:const CLIENT_ID = process.env.CLIENT_ID;
 src/server/oauth.ts:37:const CLIENT_SECRET = process.env.CLIENT_SECRET;
 ```
 
-### 4.1 `src/server/.env` (the Functions app)
+### 4.1 `src/server/.env` (local server config; never deployed)
 
 | Key | Purpose | Read at | Status in the current file |
 |---|---|---|---|
@@ -222,21 +222,20 @@ Read by `scripts/deployServer.cjs:10-12`, required by `:14-17`:
 |---|---|
 | `AZURE_PUBLISH_USER` | SCM/publish username for zip deploy (falls back to `AZURE_USERNAME`, `:10`) |
 | `AZURE_PUBLISH_PASS` | SCM/publish password (falls back to `AZURE_PASSWORD`, `:11`) |
-| `AZURE_FUNCTIONAPP_NAME` | Functions app name; the SCM host becomes `<name>.scm.azurewebsites.net` (`:44`) |
+| `AZURE_WEBAPP_NAME` | Web App name; the SCM host becomes `<name>.scm.azurewebsites.net` (`AZURE_FUNCTIONAPP_NAME` still accepted as a fallback) |
 
 Both `.env` files are gitignored (`/.gitignore:31` lists `.env`), so a clean
 checkout has neither and you must create them.
 
-**Leak warning that is currently true:** `scripts/copyServerAssets.cjs:38-42`
-copies `src/server/.env` into `dist/server/.env` if it exists, and
-`scripts/deployServer.cjs:39-41` zips the whole of `dist/server` and uploads it.
-So the client secret is shipped to the Functions app inside the deployment
-package (verified: `dist/server/.env` exists after `pnpm run build:server`). The
-correct place for these values in Azure is **Application Settings**; because
-`dotenv` only fills keys that are *not* already in `process.env`
-(`dotenv` default behaviour), Application Settings win at runtime. Treat the
-zipped `.env` as a leak surface: do not build-and-publish with a real secret on a
-machine you do not trust, and rotate the secret if a `dist/` tree escapes.
+**#23 (fixed by the #28 migration):** the old `scripts/copyServerAssets.cjs`
+copied `src/server/.env` into `dist/server/.env`, and `deployServer.cjs` then
+zipped and uploaded it — shipping the client secret inside the deployment
+package. The current copy script never copies `.env` (verified: no
+`dist/server/.env` after `pnpm run build:server`). The correct place for these
+values in Azure is the Web App's **Application Settings**; because `dotenv`
+only fills keys that are *not* already in `process.env` (`dotenv` default
+behaviour), Application Settings win at runtime. Keep it that way: never add a
+credential copy back into the packaging scripts.
 
 ---
 
@@ -506,103 +505,81 @@ still returns 200. The Pages deployment is recorded against the environment:
 
 ---
 
-## 8. Azure Functions deployment
+## 8. Azure App Service (Web App) deployment
+
+As of issue #28 the server is a **plain Node HTTP server** deployed to an
+Azure App Service **Web App** — not an Azure Functions app. There is no
+`host.json`, no `*.function.json`, and no `@azure/functions` anywhere in the
+server path. `src/server/index.ts` is a normal `node:http` server that
+listens on `process.env.PORT` and routes:
+
+| Route | Methods | Handler |
+|---|---|---|
+| `/getfile` | GET, POST | `src/server/getfile.ts` (allowlisted — §8.4) |
+| `/oauth` | GET, POST | `src/server/oauth.ts` |
+| `/oauthsignin` | GET | `src/server/oauthsignin.ts` |
+| `/refresh` | POST | `src/server/refresh.ts` |
+| `/api/{*path}` | GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD | `src/server/api.ts` (Onshape API proxy) |
+
+Handlers keep the shape they had under the Functions programming model:
+receive a request object (`query`, `headers`, `arrayBuffer()`, `url`,
+`protocol`) and return `{ status, headers, body }`. `src/server/index.ts`
+adapts a real `IncomingMessage` to that shape (including JSON/form body
+parsing for `/getfile` POST) and serialises the result.
+`src/server/httpTypes.ts` defines the minimal types. One deliberate behaviour
+note: `oauthsignin.ts` recovers path+query from the full request URL before
+building the authorize `redirect_uri` — the Functions-era string
+concatenation produced a nested double URL, so the port implements the
+intended single-URL form.
 
 ### 8.1 What `pnpm run build:server` produces
 
 `package.json:13` runs `tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs`.
 
-* `tsconfig.server.json:5` sets `outDir: dist/server-src`, `rootDir: src/server`,
-  `module: CommonJS` (`:4`) — so `dist/server-src/*.js` are the compiled
-  handlers (`api.js`, `config.js`, `getfile.js`, `index.js`, `oauth.js`,
-  `oauthsignin.js`, `redirect.js`, `refresh.js`).
-* `scripts/copyServerAssets.cjs` then **assembles the deployable tree** in
-  `dist/server`:
-  * wipes and recreates `dist/server` (`:26-30`)
-  * copies `src/server/host.json` (`:32-36`) — `routePrefix: ""` (`host.json:11-13`),
-    which is why the proxy lives at `<myserver>/api/…` and the OAuth endpoints at
-    `<myserver>/oauth`, `/refresh`, `/getfile`
-  * copies `src/server/.env` if present (`:38-42`) — see the leak warning in §4.2
-  * for every `*.function.json` in `src/server`, creates `<name>/` with
-    `function.json` and the compiled `<name>.js` renamed to `index.js`
-    (`:44-66`), plus the shared `config.js` (`:67-74`) and `config.json` if any
-    (`:75-82`)
-  * writes a minimal `package.json` with `main: index.js` and dependencies
-    `node-fetch@^2.6.7`, `@azure/functions` (taken from the root
-    `package.json`), `dotenv` (`:86-107`)
-  * copies the compiled registration bundle `dist/server-src/index.js` to
-    `dist/server/index.js` (`:109-113`)
-  * copies `scripts/server-lock/package-lock.json` to
-    `dist/server/package-lock.json` (`:114-117`), or writes a minimal lock if it
-    is missing (`:119-133`)
+* `tsconfig.server.json` sets `outDir: dist/server-src`, `rootDir: src/server`,
+  `module: CommonJS` — so `dist/server-src/*.js` are the compiled handlers
+  (`api.js`, `config.js`, `getfile.js`, `httpTypes.js`, `index.js`, `oauth.js`,
+  `oauthsignin.js`, `refresh.js`).
+* `scripts/copyServerAssets.cjs` **assembles the deployable tree** in
+  `dist/server`: wipes and recreates `dist/server`, copies every compiled
+  `.js` flat into it, writes a minimal `package.json` (`main: index.js`,
+  `scripts.start: node index.js`, dependencies `node-fetch@^2.6.7` and
+  `dotenv`), and copies `scripts/server-lock/package-lock.json` next to it
+  (or writes a minimal lock if that file is missing).
+* It deliberately does **not** copy `src/server/.env` (see the #23 note in
+  §4.1): no credential value is ever placed in the deployment package.
 
-Verified output of a real run in this tree:
+Verified output of a real run in this tree (issue #28):
 
 ```
 $ pnpm run build:server
 $ tsc -p tsconfig.server.json && node ./scripts/copyServerAssets.cjs
 Server assets copied to /home/willi/…/dist/server
-exit=0
 
-$ find dist/server -type f | sort
-dist/server/api/config.js
-dist/server/api/function.json
-dist/server/api/index.js
-dist/server/.env
-dist/server/getfile/config.js
-dist/server/getfile/function.json
-dist/server/getfile/index.js
-dist/server/host.json
-dist/server/index.js
-dist/server/oauth/config.js
-dist/server/oauth/function.json
-dist/server/oauth/index.js
-dist/server/oauthsignin/config.js
-dist/server/oauthsignin/function.json
-dist/server/oauthsignin/index.js
-dist/server/package.json
-dist/server/package-lock.json
-dist/server/redirect/config.js
-dist/server/redirect/function.json
-dist/server/redirect/index.js
-dist/server/refresh/config.js
-dist/server/refresh/function.json
-dist/server/refresh/index.js
+$ ls dist/server
+api.js  config.js  getfile.js  httpTypes.js  index.js  oauth.js
+oauthsignin.js  package.json  package-lock.json  refresh.js
 ```
 
-Two facts about that tree worth knowing before you debug it:
-
-* **The live registration is `dist/server/index.js`.** The Functions v4
-  programming model registers handlers at module load
-  (`src/server/index.ts:9-39`: `getfile`, `oauth`, `oauthsignin`, `refresh`,
-  `api` with `route: "api/{*path}"`). The per-function `function.json` folders
-  are legacy v3-layout artifacts emitted by the copy script; they are not what
-  registers the routes. If a route 404s, check `index.ts`, not `function.json`.
-* **`dist/server/redirect/` is stale.** `src/server/redirect.function.json`
-  exists but there is no `src/server/redirect.ts`, and `redirect` is not
-  registered in `index.ts`. The copy script's fallback (`:61-65`) copies the TS
-  source as `index.js` when no compiled file is found; in this tree
-  `dist/server-src/redirect.js` is a leftover from an earlier build, so
-  `dist/server/redirect/index.js` is stale compiled JS. It is harmless (never
-  routed) but do not read it as evidence of a redirect function.
+Run it locally the same way Azure does: `npm ci --omit=dev` inside
+`dist/server`, then `PORT=8080 node dist/server/index.js` (or `npm start`).
+Azure App Service sets `PORT` itself; the fallback is `8080`.
 
 ### 8.2 Why `scripts/server-lock/package-lock.json` is copied
 
-The compiled handlers are CommonJS (`tsconfig.server.json:4`) and
-`require("node-fetch")` at the top of every handler
-(`src/server/oauth.ts:31`, `refresh.ts:31`, `api.ts:32`, `getfile.ts:32`).
-`scripts/copyServerAssets.cjs:96-107` writes a `package.json` that depends on
-`node-fetch@^2.6.7`. The root workspace does **not** install `node-fetch`: the
-root only carries the typings, `@types/node-fetch@^2.6.13` (`package.json:57`),
-because the root build only needs to type-check (`AIREADME.md:78-80`).
-`scripts/server-lock/package.json:6` pins `node-fetch: "^2.6.7"` for the
-Functions runtime; node-fetch v2 is CommonJS, whereas v3 is ESM-only and cannot
-be `require`d by these compiled files.
+The compiled handlers are CommonJS and `require("node-fetch")` at the top of
+every handler (`src/server/oauth.ts:31`, `refresh.ts:31`, `api.ts:32`,
+`getfile.ts:32`). `scripts/copyServerAssets.cjs` writes a `package.json` that
+depends on `node-fetch@^2.6.7`. The root workspace does **not** install
+`node-fetch`: the root only carries the typings, `@types/node-fetch@^2.6.13`,
+because the root build only needs to type-check.
+`scripts/server-lock/package.json` pins `node-fetch: "^2.6.7"` for the Web
+App runtime; node-fetch v2 is CommonJS, whereas v3 is ESM-only and cannot be
+`require`d by these compiled files.
 
-The lockfile is copied (`:114-117`) so that the `npm ci` that
-`scripts/deployServer.cjs:34` runs **inside `dist/server`** is deterministic. That
-is the whole reason the file is tracked; `AIREADME.md:48-51` says explicitly not
-to delete it.
+The lockfile is copied so that the `npm ci` that `scripts/deployServer.cjs`
+runs **inside `dist/server`** is deterministic. That is the whole reason the
+file is tracked; do not delete it.
 
 ### 8.3 What `scripts/deployServer.cjs` does
 
@@ -610,61 +587,67 @@ to delete it.
 pnpm run deploy:server   # package.json:23 -> build:server, then node ./scripts/deployServer.cjs
 ```
 
-1. Loads the root `.env` (`:5`) and requires
-   `AZURE_PUBLISH_USER`, `AZURE_PUBLISH_PASS`, `AZURE_FUNCTIONAPP_NAME`
-   (`:10-17`); exits 1 with a message if any is missing.
-2. Requires `dist/server` to exist (`:19-22`), otherwise tells you to run
-   `npm run build:server` first.
-3. Runs `npm ci --no-audit --no-fund --omit=dev` inside `dist/server` (`:24-37`)
-   so the runtime `node_modules` — `node-fetch@2`, `@azure/functions`, `dotenv` —
-   is materialized from the copied lockfile.
-4. Zips the whole directory (`:39-41`) and POSTs it to
-   `https://<AZURE_FUNCTIONAPP_NAME>.scm.azurewebsites.net/api/zipdeploy`
-   with `Content-Type: application/zip` and HTTP basic auth
-   `<user>:<pass>` (`:43-52`).
-5. Streams the response and exits with the HTTP status (`:54-67`).
+1. Loads the root `.env` and requires `AZURE_PUBLISH_USER`,
+   `AZURE_PUBLISH_PASS`, and the app name. The name is read from
+   `AZURE_WEBAPP_NAME`, falling back to `AZURE_FUNCTIONAPP_NAME` for existing
+   `.env` files. Exits 1 with a message if any is missing.
+2. Requires `dist/server` to exist, otherwise tells you to run
+   `pnpm run build:server` first.
+3. Runs `npm ci --no-audit --no-fund --omit=dev` inside `dist/server` and
+   **exits 1 if it fails** — a partial package is never deployed.
+4. Zips the whole directory and POSTs it to
+   `https://<AZURE_WEBAPP_NAME>.scm.azurewebsites.net/api/zipdeploy` with
+   `Content-Type: application/zip` and HTTP basic auth `<user>:<pass>`. The
+   `scm.azurewebsites.net` Kudu endpoint is the standard zip-deploy endpoint
+   for Web Apps (it is the same one the old Functions deploy used).
+5. Streams the response and exits with the HTTP status.
 
-The credentials it wants are the Function App's **SCM / publish** credentials
-(Deployment Center → FTPS/publish credentials in the Azure portal), not an AAD
-token. They are separate from the OAuth client secret in §4.1.
+The credentials it wants are the Web App's **SCM / publish** credentials
+(Deployment Center → FTPS/publish credentials in the Azure portal), not an
+AAD token. They are separate from the OAuth client secret in §4.1.
 
-### 8.4 `.funcignore`
+**L3 (deployed Web App answering on Azure) is not verified by the #28
+change.** Manual steps for the maintainer: create or convert the
+`onshape-node-editor-function` app to a Node Web App (or create a new one and
+update `src/app/app.ts:50` `myserver`), set the Application Settings from
+§4.1, run `pnpm run deploy:server` with the root `.env` filled in, then check
+`curl -s -o /dev/null -w '%{http_code}' https://<app>.azurewebsites.net/oauthsignin?redirectOnshapeUri=https%3A%2F%2Fcad.onshape.com%2F`
+returns `302` and the Pages URLs in §9 return `200`.
 
-```
-.funcignore
-node_modules
-*.log
-dist
-src
-tests
-```
+### 8.4 `/getfile` allowlist (issue #28)
 
-This file is consumed by the Azure Functions **Core Tools**
-(`func azure functionapp publish`), not by `scripts/deployServer.cjs` — that
-script zips an already-assembled `dist/server` and never looks at `.funcignore`
-(`:39-41`). Its contents are consistent with the intended artifact: the thing
-you publish is the *contents of* `dist/server`, so the repo's own `dist/`,
-`src/`, `tests/` and `node_modules/` must never be uploaded. If you deploy with
-Core Tools instead, run it **from `dist/server`**, or the ignore list will strip
-the very files you meant to ship.
+`/getfile` used to forward **any** `http(s)` URL — an open proxy. It now
+allowlist-checks the target (`src/server/getfile.ts`) and only proxies
+`cad.onshape.com`, the single host the client fetches Onshape pages/CSS from
+(`src/app/common/baseapp.ts` `getOnshapeFile`). Other hosts get
+`403 url not allowed`; missing/invalid/non-http(s) URLs still get the old
+`400` responses. If the client ever needs another host, add it to
+`ALLOWED_HOSTS` there — do not remove the check.
 
-### 8.5 Azure-side configuration
+### 8.5 Static resources (issue #28)
 
-In the Function App:
+The app no longer pulls static resources from `cad.onshape.com`:
 
-* **Application Settings** (Configuration → Application settings):
-  `CLIENT_ID`, `CLIENT_SECRET`, `CLIENT_URL`, and optionally `APP_NAME`,
-  `ENABLE_LOG` (§4.1). These override the zipped `.env`, because `dotenv` does
-  not overwrite keys already present in `process.env`.
-* **CORS**: not needed. Every server response sets
-  `Access-Control-Allow-Origin: *` (`src/server/oauth.ts:84`,
-  `src/server/api.ts:147`, `src/server/getfile.ts:75`), so the browser calls from
-  the Pages origin are not blocked by a Functions CORS allow-list. (If you add
-  one anyway, the Basic-auth-free anonymous routes must stay anonymous:
-  `authLevel: "anonymous"` at `src/server/index.ts:11`, `:17`, `:23`, `:29`, `:36`.)
-* **Platform**: Node 20 or 22 to match `package.json:6-8` and the CI Node 22.
+* `default-document.png` is served locally from `public/images/`
+  (referenced as `images/default-document.png` in
+  `src/app/common/onshapeapi.ts` `createThumbnailImage`).
+* The three Onshape CSS files (`onshape-design-tokens.min.css`,
+  `vendor-bundle.css`, `woolsthorpe.css`) are copied to `dist/app/onshape/`
+  by the `copyOnshapeAssets` plugin in `vite.config.ts`, so the
+  `./onshape/*.css` links in `src/app/common/baseapp.ts` `initDev()` resolve
+  `200` on the Pages site (they were 404 in production before).
+* The ~1.5 MB `icons.svg` sprite is no longer inlined into `index.html`
+  (the old `vite-plugin-html` `svgDefs` injection is gone). It is copied to
+  `dist/app/onshape/icons.svg` and `src/app/index.html` fetches and injects
+  it at runtime, so same-document `<use href="#svg-icon-…">` keeps working
+  and the file is browser-cacheable.
+* The FeatureScript library JSON (`featurescript-library.json`,
+  `featurescript-library-organized.json` from `src/app/onshape/`) is copied
+  to the `dist/app` root by the same plugin and served statically.
 
-The deployment itself is **not** verifiable from this repo — see §10.
+`grep -rn 'cad.onshape.com' src/app` now shows only the API host assignments
+(`baseapp.ts`, `onshapeapi.ts`, `clientmessaging.ts`), comments, and test
+fixtures — plus the dynamic per-document thumbnail path under `myserver`.
 
 ---
 
@@ -681,12 +664,12 @@ result, and the citation for why that is the expected result.
 | 4 | `find node_modules -type f \| wc -l` | thousands, not 0 | `AIREADME.md:169-171` (empty package dirs are a real failure mode) |
 | 5 | `pnpm run type-check:gate` | `errors under src/**: 0`, `GATE PASSED`, exit 0 | `scripts/typecheck-gate.mjs`; verified in this tree |
 | 6 | `pnpm run build:app` | exit 0; `dist/app/index.html`, `dist/app/redirect.html`, `dist/app/assets/*` | `vite.config.ts:46-56` |
-| 7 | `pnpm run build:server` | exit 0; `dist/server/index.js`, `dist/server/package.json`, `dist/server/package-lock.json`, one folder per handler | §8.1; verified in this tree |
-| 8 | `node -e "console.log(require('./dist/server/package.json').dependencies)"` | contains `node-fetch: '^2.6.7'` | `scripts/copyServerAssets.cjs:101-105` |
+| 7 | `pnpm run build:server` | exit 0; flat `dist/server/*.js` including `index.js`, plus `package.json` (`start: node index.js`) and `package-lock.json`; no `.env`, no `host.json`, no `function.json` | §8.1; verified in this tree (#28) |
+| 8 | `node -e "console.log(require('./dist/server/package.json').dependencies)"` | `node-fetch: '^2.6.7'` and `dotenv`, no `@azure/functions` | `scripts/copyServerAssets.cjs` |
 | 9 | `git grep -n "process.env" -- src/server` | the 9 lines quoted in §4 | — |
 | 10 | `curl -s -o /dev/null -w '%{http_code}' -L https://williambagel.github.io/onshape-node-editor/` | `200` | verified in this session |
 | 11 | `curl -s -o /dev/null -w '%{http_code}' -L https://williambagel.github.io/onshape-node-editor/redirect.html` | `200` | verified in this session; file comes from `public/redirect.html` |
-| 12 | `curl -s -o /dev/null -w '%{http_code}' https://onshape-node-editor-function.azurewebsites.net/` | `200` (host is up) | verified in this session; proves the app exists, not that config is right |
+| 12 | `curl -s -o /dev/null -w '%{http_code}' https://onshape-node-editor-function.azurewebsites.net/` | `200` (host is up) | pre-#28 check; proves the app exists, not that config is right. L3 re-verification after the Web App migration is a manual maintainer step (§8.3) |
 | 13 | Open the extension from a Part Studio, DevTools → Network | `GET …/oauth?code=…&redirect_uri=…` → `200` with `access_token`, `refresh_token`, `expires_in`, `scope` | fields at `src/app/common/oauth.ts:28-34`; server at `src/server/oauth.ts:90-94` |
 | 14 | In the Network panel, the first API call after init | `GET https://onshape-node-editor-function.azurewebsites.net/api/documents/…` → `200`, response headers include `Proxy-Url` | `src/server/api.ts:154`; the call is `getDocument` from `src/app/app.ts:84` |
 | 15 | Console | `Post message received in application extension.` | `src/app/onshape-utils/clientmessaging.ts:138` — proves the iframe channel is live |
@@ -694,8 +677,8 @@ result, and the citation for why that is the expected result.
 | 17 | Wait for token expiry (~1 h), or force `expires_token` into the past | **`400 missing refresh token`** — this is the known defect in §5.1, not a misconfiguration | `src/app/common/oauth.ts:72-74` vs `src/server/refresh.ts:37` |
 | 18 | `gh run list --workflow deploy-production.yml --limit 3` | a `success` run for `Deploy to GitHub Pages (Production)` | verified in this session |
 
-If step 13 returns `500 {"error":"server configuration error"}`, the Functions
-app is missing `CLIENT_ID`/`CLIENT_SECRET`/`CLIENT_URL` (§4.1). If it returns
+If step 13 returns `500 {"error":"server configuration error"}`, the Web App
+server is missing `CLIENT_ID`/`CLIENT_SECRET`/`CLIENT_URL` (§4.1). If it returns
 `400` with an Onshape error body, the `redirect_uri` did not match the
 registration (§2.2). If step 14 returns `401`, the granted scopes are wrong
 (§3). If step 15 never prints, the page was opened outside Onshape (§1).
@@ -729,16 +712,16 @@ closes them. Each entry says what would count as evidence.
    (`src/app/common/oauth.ts:33`) is the evidence, and it is only observable at
    runtime. *Evidence:* the `scope` value in the `/oauth` response.
 5. **`CLIENT_URL`'s actual value and validity.** It is redacted here and only
-   used at runtime. *Evidence:* the request the Functions app makes, or a
+   used at runtime. *Evidence:* the request the Web App server makes, or a
    successful token exchange.
-6. **The Azure Function App's Application Settings, runtime version and
+6. **The Azure Web App's Application Settings, runtime version and
    deployment state.** Nothing in the repo records them, and this session did not
    (and must not) deploy with `scripts/deployServer.cjs` — the credentials in the
    root `.env` were not exercised. `curl` proves the host answers `200`
    (`§9` step 12), which is all.
-   *Evidence:* `az functionapp config appsettings list -n <name> -g <rg>` (names
-   only, never values in a ticket), `az functionapp show` for the runtime, and a
-   deployment log or `zipdeploy` status from `scripts/deployServer.cjs:54-58`.
+   *Evidence:* `az webapp config appsettings list -n <name> -g <rg>` (names
+   only, never values in a ticket), `az webapp show` for the runtime, and a
+   deployment log or `zipdeploy` status from `scripts/deployServer.cjs`.
 7. **That the deployed bundle matches this commit.** Pages serves whatever the
    last workflow built; no build provenance (commit SHA) is embedded in
    `dist/app`. *Evidence:* the Actions run that produced the live artifact

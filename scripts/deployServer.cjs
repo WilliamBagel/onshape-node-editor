@@ -1,3 +1,16 @@
+// Zip-deploys dist/server to an Azure App Service Web App via the Kudu
+// zipdeploy endpoint (`<name>.scm.azurewebsites.net/api/zipdeploy`) (#28).
+// The same endpoint serves both Function Apps and Web Apps; nothing about
+// this script is Functions-specific.
+//
+// Required environment (root .env or shell):
+//   AZURE_PUBLISH_USER   SCM/publish username (fallback AZURE_USERNAME)
+//   AZURE_PUBLISH_PASS   SCM/publish password (fallback AZURE_PASSWORD)
+//   AZURE_WEBAPP_NAME    Web App name; AZURE_FUNCTIONAPP_NAME is still
+//                        accepted as a fallback for existing .env files.
+//
+// Exits 1 loudly when any of them is missing or when `npm ci` fails.
+
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -9,15 +22,15 @@ const serverDir = path.join(root, 'dist', 'server');
 
 const user = process.env.AZURE_PUBLISH_USER || process.env.AZURE_USERNAME;
 const pass = process.env.AZURE_PUBLISH_PASS || process.env.AZURE_PASSWORD;
-const appName = process.env.AZURE_FUNCTIONAPP_NAME;
+const appName = process.env.AZURE_WEBAPP_NAME || process.env.AZURE_FUNCTIONAPP_NAME;
 
 if (!user || !pass || !appName) {
-  console.error('Missing AZURE_PUBLISH_USER/AZURE_PUBLISH_PASS and AZURE_FUNCTIONAPP_NAME environment variables.');
+  console.error('Missing AZURE_PUBLISH_USER/AZURE_PUBLISH_PASS and AZURE_WEBAPP_NAME environment variables.');
   process.exit(1);
 }
 
 if (!fs.existsSync(serverDir)) {
-  console.error('server dir not found, run `npm run build:server` first');
+  console.error('server dir not found, run `pnpm run build:server` first');
   process.exit(1);
 }
 
@@ -25,15 +38,16 @@ if (!fs.existsSync(serverDir)) {
 console.log('Installing production dependencies into', serverDir);
 const { spawnSync } = require('child_process');
 const npmCmd = 'npm';
-// try npm ci, fall back to npm install --omit=dev if no lockfile
+
 function runSpawn(cmd, args, cwd) {
   return spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: true });
 }
 
-console.log('Running npm ci/install in deploy step');
-let install = runSpawn(npmCmd, ['ci', '--no-audit', '--no-fund', '--omit=dev'], serverDir);
+console.log('Running npm ci in deploy step');
+const install = runSpawn(npmCmd, ['ci', '--no-audit', '--no-fund', '--omit=dev'], serverDir);
 if (install.status !== 0) {
-  if (install.error) console.warn('npm ci error:', install.error && install.error.stack || install.error);
+  console.error('npm ci failed; refusing to deploy an incomplete package.');
+  process.exit(1);
 }
 
 const zip = new AdmZip();
@@ -46,9 +60,9 @@ const options = {
   method: 'POST',
   headers: {
     'Content-Type': 'application/zip',
-    'Content-Length': buffer.length
+    'Content-Length': buffer.length,
   },
-  auth: `${user}:${pass}`
+  auth: `${user}:${pass}`,
 };
 
 const req = https.request(options, (res) => {

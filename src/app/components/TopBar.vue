@@ -35,6 +35,7 @@ const emit = defineEmits<{
   (e: 'run'): void
   (e: 'upload'): void
   (e: 'target'): void
+  (e: 'newGraph'): void
   (e: 'runTarget'): void
   (e: 'save'): void
   (e: 'open'): void
@@ -84,12 +85,21 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
         </button>
       </div>
 
-      <!-- Upload target: did / wvm / wvmid / eid of the Feature Studio to write -->
+      <!-- Graph target: resolve the active graph's Feature Studio in the active document (#31) -->
       <div class="toolbar-btn-wrap">
-        <button class="toolbar-btn" aria-label="Upload target"
-          v-tooltip="{ label: 'Upload Target', description: 'Set the document, workspace and Feature Studio element the Build result is uploaded to.' }"
+        <button class="toolbar-btn" aria-label="Graph target"
+          v-tooltip="{ label: 'Graph Target', description: 'Resolve this graph\'s Feature Studio in the active document, or make a new node graph.' }"
           @click="emit('target')">
-          <SvgIcon href="#svg-icon-feature-studio-element" :size="16" aria-label="Upload target" />
+          <SvgIcon href="#svg-icon-feature-studio-element" :size="16" aria-label="Graph target" />
+        </button>
+      </div>
+
+      <!-- New graph: an additional graph with its own studio and element (#31) -->
+      <div class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="New graph"
+          v-tooltip="{ label: 'New Graph', description: 'Create an additional node graph with its own Feature Studio and graph element.' }"
+          @click="emit('newGraph')">
+          <SvgIcon href="#svg-icon-add-button" :size="16" aria-label="New graph" />
         </button>
       </div>
 

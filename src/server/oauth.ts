@@ -29,14 +29,14 @@
 // Original source: https://github.com/Team2901/OnshapeInsertTool/blob/main/server/oauth.php
 
 import fetch from "node-fetch";
-import { HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
+import { HttpRequest, HttpResponseInit } from "./httpTypes";
 require('dotenv').config()
 
 const CLIENT_URL = process.env.CLIENT_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 
-export default async function (request: HttpRequest, _context: InvocationContext): Promise<HttpResponseInit> {
+export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
   const code = request.query.get('code');
   const redirect_uri = request.query.get('redirect_uri');
 

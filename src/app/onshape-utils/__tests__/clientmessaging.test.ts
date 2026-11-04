@@ -1,6 +1,8 @@
 /**
- * Unit tests for DR-001 enforcement in ClientMessaging.requestSelection
- * Tests the warning gate with developer mode off/on.
+ * Unit tests for ClientMessaging.requestSelection (issue #29, amended DR-001).
+ * Selection is an authoring gesture and is no longer gated on developer mode;
+ * the re-entrancy sequence and failure reporting are exercised here with a
+ * stubbed postMessage and simulated SELECTION/STOP messages.
  * Run with: npx vitest run src/app/onshape-utils/__tests__/clientmessaging.test.ts
  */
 
@@ -8,11 +10,15 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Mock browser APIs
 const mockPostMessage = vi.fn();
-const mockAddEventListener = vi.fn();
+let capturedMessageHandler: ((event: any) => void) | null = null;
+const mockAddEventListener = vi.fn((_type: string, handler: any) => {
+  capturedMessageHandler = handler;
+});
 const mockCryptoRandomUUID = vi.fn(() => 'test-uuid-' + Math.random().toString(36).slice(2));
 
 beforeEach(() => {
   vi.resetModules();
+  capturedMessageHandler = null;
   vi.stubGlobal('window', {
     parent: { postMessage: mockPostMessage },
     addEventListener: mockAddEventListener,
@@ -24,6 +30,7 @@ beforeEach(() => {
   mockPostMessage.mockClear();
   mockAddEventListener.mockClear();
   mockCryptoRandomUUID.mockClear();
+  mockPostMessage.mockReset();
 });
 
 afterEach(() => {
@@ -33,160 +40,130 @@ afterEach(() => {
 // Import after mocks are set up
 const { ClientMessaging } = await import('../clientmessaging');
 
-describe('ClientMessaging.requestSelection DR-001 gate', () => {
-  let messaging: InstanceType<typeof ClientMessaging>;
-  const mockCallback = vi.fn();
+function postCalls(messageName: string) {
+  return mockPostMessage.mock.calls.filter((call: any) => call[0]?.messageName === messageName);
+}
 
-  beforeEach(() => {
-    messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
-    mockCallback.mockClear();
+function simulateMessage(messageName: string, data: Record<string, any> = {}) {
+  expect(capturedMessageHandler).not.toBeNull();
+  capturedMessageHandler!({
+    origin: 'https://cad.onshape.com',
+    data: { messageName, ...data },
   });
+}
 
-  it('emits a visible warning when developer mode is OFF', () => {
-    messaging.setDeveloperMode(false);
-
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-
-    // Should show message bubble (visible warning)
-    expect(mockPostMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        messageName: 'showMessageBubble',
-        message: expect.stringContaining('DR-001: Interactive selection'),
-      }),
-      '*'
-    );
-
-    // Should call callback with empty selections (not break control flow)
-    expect(mockCallback).toHaveBeenCalledWith([]);
-  });
-
-  it('does NOT emit warning when developer mode is ON', () => {
-    messaging.setDeveloperMode(true);
-
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-
-    // Should NOT show message bubble
-    const showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(0);
-
-    // Should send requestSelection message to parent
-    expect(mockPostMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        messageName: 'requestSelection',
-        entityTypeSpecifier: ['BODY'],
-      }),
-      '*'
-    );
-  });
-
-  it('emits only ONE warning per control when called multiple times with developer mode OFF', () => {
-    messaging.setDeveloperMode(false);
-
-    // First call
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-    // Second call with same controlId
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-    // Third call with same controlId
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-
-    // Should only show message bubble ONCE
-    const showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(1);
-  });
-
-  it('emits separate warnings for DIFFERENT controls when developer mode is OFF', () => {
-    messaging.setDeveloperMode(false);
-
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-A');
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-B');
-
-    // Should show message bubble TWICE (once per control)
-    const showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(2);
-  });
-
-  it('clears warning tracker when clearWarningTracker is called', () => {
-    messaging.setDeveloperMode(false);
-
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-    messaging.clearWarningTracker();
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
-
-    // Should show message bubble TWICE (tracker was cleared)
-    const showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(2);
-  });
-
-  it('uses "unknown-control" as fallback when no controlId provided', () => {
-    messaging.setDeveloperMode(false);
-
-    messaging.requestSelection(['BODY'], mockCallback, 1); // no controlId
-    messaging.requestSelection(['BODY'], mockCallback, 1); // no controlId
-
-    // Should show message bubble ONCE (same fallback key)
-    const showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(1);
-  });
-});
-
-describe('ClientMessaging developer mode toggle', () => {
-  it('respects developer mode changes at runtime', () => {
+describe('ClientMessaging.requestSelection (issue #29)', () => {
+  it('posts requestSelection with developer mode OFF (no DR-001 gate)', () => {
     const messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
     const mockCallback = vi.fn();
-
-    // Start in developer mode OFF
     messaging.setDeveloperMode(false);
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1');
-    let showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(1);
 
-    // Switch to developer mode ON
-    messaging.setDeveloperMode(true);
-    mockPostMessage.mockClear();
-    mockCallback.mockClear();
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1');
-    showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(0);
-    expect(mockPostMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ messageName: 'requestSelection' }),
-      '*'
-    );
+    messaging.requestSelection(['BODY'], mockCallback, 1, 'test-control-1');
 
-    // Switch back to developer mode OFF. The instance has already warned for
-    // this control, and DR-001's gate is "one warning per control per graph
-    // load" — re-warning requires clearing the tracker, which is what a graph
-    // load does. Without that this assertion contradicts the
-    // "emits only ONE warning per control" case above.
-    messaging.setDeveloperMode(false);
-    messaging.clearWarningTracker();
-    mockPostMessage.mockClear();
-    mockCallback.mockClear();
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1');
-    showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(1);
+    expect(postCalls('requestSelection')).toHaveLength(1);
+    expect(postCalls('showMessageBubble')).toHaveLength(0);
+    // Not fulfilled synchronously with []: only a SELECTION may fulfil it.
+    expect(mockCallback).not.toHaveBeenCalled();
+  });
 
-    // Without the clear, the same control is not warned twice.
-    mockPostMessage.mockClear();
-    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1');
-    showMessageBubbleCalls = mockPostMessage.mock.calls.filter(
-      (call: any) => call[0]?.messageName === 'showMessageBubble'
-    );
-    expect(showMessageBubbleCalls).toHaveLength(0);
+  it('send → pending → send-again → SELECTION → STOP: exactly one in flight, no double-send', () => {
+    const messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+    const firstError = vi.fn();
+    const secondError = vi.fn();
+    const selection1 = [{ selectionType: 'BODY', selectionId: 's1', entityType: 'BODY' }];
+    const selection2 = [{ selectionType: 'BODY', selectionId: 's2', entityType: 'BODY' }];
+
+    // Send: first request is dispatched.
+    messaging.requestSelection(['BODY'], firstCallback, 1, 'control-1', firstError);
+    expect(postCalls('requestSelection')).toHaveLength(1);
+    expect(postCalls('stopRequest')).toHaveLength(0);
+
+    // Send-again while pending: queued, not dispatched; one stopRequest sent.
+    messaging.requestSelection(['BODY'], secondCallback, 1, 'control-1', secondError);
+    expect(postCalls('requestSelection')).toHaveLength(1);
+    expect(postCalls('stopRequest')).toHaveLength(1);
+
+    // SELECTION for the superseded request: delivered to neither callback.
+    simulateMessage('SELECTION', { selections: selection1 });
+    expect(firstCallback).not.toHaveBeenCalled();
+    expect(secondCallback).not.toHaveBeenCalled();
+    expect(postCalls('requestSelection')).toHaveLength(1);
+
+    // STOP: first request aborts (reported, not callback([])), second dispatches.
+    simulateMessage('STOP');
+    expect(firstCallback).not.toHaveBeenCalled();
+    expect(firstError).toHaveBeenCalledTimes(1);
+    expect(firstError.mock.calls[0][0]).toMatch(/stopped before/i);
+    expect(postCalls('requestSelection')).toHaveLength(2);
+    expect(secondCallback).not.toHaveBeenCalled();
+
+    // SELECTION for the second request is delivered, then STOP ends it cleanly.
+    simulateMessage('SELECTION', { selections: selection2 });
+    expect(secondCallback).toHaveBeenCalledWith(selection2);
+    simulateMessage('STOP');
+    expect(secondError).not.toHaveBeenCalled();
+    expect(postCalls('requestSelection')).toHaveLength(2);
+    expect(postCalls('stopRequest')).toHaveLength(1);
+  });
+
+  it('reports a STOP before any SELECTION as a failure, not callback([])', () => {
+    const messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
+    const mockCallback = vi.fn();
+    const mockError = vi.fn();
+    const reporter = vi.fn();
+    messaging.setFailureReporter(reporter);
+
+    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1', mockError);
+    simulateMessage('STOP');
+
+    expect(mockCallback).not.toHaveBeenCalled();
+    expect(mockError).toHaveBeenCalledTimes(1);
+    expect(reporter).toHaveBeenCalledWith(mockError.mock.calls[0][0]);
+  });
+
+  it('reports a failed send through onError and is not left pending', () => {
+    const messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
+    const mockCallback = vi.fn();
+    const mockError = vi.fn();
+
+    mockPostMessage.mockImplementationOnce(() => {
+      throw new Error('no parent frame');
+    });
+    // constructor's applicationInit already used postMessage at construction;
+    // the first postMessage after this point is the requestSelection send.
+    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1', mockError);
+
+    expect(mockCallback).not.toHaveBeenCalled();
+    expect(mockError).toHaveBeenCalledTimes(1);
+    expect(mockError.mock.calls[0][0]).toMatch(/no parent frame/);
+
+    // Not stuck in-flight: a later request dispatches normally. (The failed
+    // attempt is also recorded by the mock, hence 2 calls in total.)
+    const laterCallback = vi.fn();
+    messaging.requestSelection(['BODY'], laterCallback, 1, 'control-1');
+    expect(postCalls('requestSelection')).toHaveLength(2);
+    simulateMessage('SELECTION', { selections: [{ selectionType: 'BODY', selectionId: 's9', entityType: 'BODY' }] });
+    expect(laterCallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('delivers an empty SELECTION to the callback (caller decides not to clear)', () => {
+    const messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
+    const mockCallback = vi.fn();
+    const mockError = vi.fn();
+
+    messaging.requestSelection(['BODY'], mockCallback, 1, 'control-1', mockError);
+    simulateMessage('SELECTION', { selections: [] });
+
+    // ClientMessaging does not swallow it and does not treat it as a
+    // failure; QueryListControl guards its existing value and reports.
+    expect(mockCallback).toHaveBeenCalledWith([]);
+    expect(mockError).not.toHaveBeenCalled();
+  });
+
+  it('clearWarningTracker is a retained no-op (compatibility)', () => {
+    const messaging = new ClientMessaging('doc-1', 'ws-1', 'elem-1');
+    expect(() => messaging.clearWarningTracker()).not.toThrow();
   });
 });

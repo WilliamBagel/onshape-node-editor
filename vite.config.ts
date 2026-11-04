@@ -7,20 +7,43 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
 import svgr from 'vite-plugin-svgr'
-import { createHtmlPlugin } from 'vite-plugin-html'
 import fs from 'node:fs'
 
 const repoRoot = path.resolve(__dirname)
 const appRoot = path.resolve(repoRoot, 'src', 'app')
 const distApp = path.resolve(repoRoot, 'dist', 'app')
 
-// Use Node's fs.readFileSync to get the raw string content
-// The file path is relative to the repoRoot (where vite.config.ts is located)
-const iconsSvgPath = path.resolve(appRoot, 'onshape', 'icons.svg');
-const iconDefs = fs.readFileSync(iconsSvgPath, 'utf-8');
 // Vite's build.outDir is interpreted relative to the `root` option when it's a relative path.
 // Use a path relative to the app root so output ends up at repoRoot/dist/app.
 const outDirRelativeToRoot = path.relative(appRoot, distApp)
+
+// #28: static Onshape resources are copied to dist as cacheable files instead
+// of being inlined into index.html (the old svgDefs injection) or fetched
+// from cad.onshape.com at runtime. index.html loads onshape/icons.svg with
+// fetch() and injects it (see src/app/index.html); baseapp.initDev() links
+// the three CSS files from ./onshape/ (already correct in dev, now in prod too).
+function copyOnshapeAssets() {
+  return {
+    name: 'copy-onshape-assets',
+    closeBundle() {
+      const onshapeSrc = path.resolve(appRoot, 'onshape')
+      const copy = (rel: string, destRel: string) => {
+        try {
+          fs.copyFileSync(path.join(onshapeSrc, rel), path.join(distApp, destRel))
+        } catch {
+          // src file missing; skip (e.g. a fresh checkout without scraped JSON)
+        }
+      }
+      fs.mkdirSync(path.join(distApp, 'onshape'), { recursive: true })
+      for (const css of ['onshape-design-tokens.min.css', 'vendor-bundle.css', 'woolsthorpe.css']) {
+        copy(css, path.join('onshape', css))
+      }
+      copy('icons.svg', path.join('onshape', 'icons.svg'))
+      copy('featurescript-library.json', 'featurescript-library.json')
+      copy('featurescript-library-organized.json', 'featurescript-library-organized.json')
+    },
+  }
+}
 
 export default defineConfig({
   root: appRoot,
@@ -35,13 +58,7 @@ export default defineConfig({
     }),
     vueDevTools(),
     svgr(),
-    createHtmlPlugin({
-      inject:{
-        data:{
-          svgDefs: iconDefs
-        }
-      }
-    })
+    copyOnshapeAssets(),
   ],
   build: {
     outDir: outDirRelativeToRoot, // will resolve to ../../dist/app when root=src/app

@@ -7,7 +7,7 @@ in code comments, reviews and issues.
 Status: DR-001 is enforced socially today and should be enforced in code
 (issue #18). The rest are conventions.
 
-## DR-001 — Interactive selection via client messaging is debug-only
+## DR-001 — Interactive selection via client messaging is an authoring gesture, never persisted
 
 `ClientMessaging.requestSelection()` posts a `requestSelection` message to the
 parent Onshape page and receives `SELECTION` events back. It exists so nodes can
@@ -28,23 +28,25 @@ It must never become a product dependency, because:
 4. **It freezes authorship-time state into generated code.** A feature should
    carry a query it can re-evaluate, not a captured selection.
 
-Allowed: developer/debug mode, while designing a node; behind an explicit debug
-marker on the node or control.
-Not allowed: production node behavior, anything persisted in a saved graph as a
-live selection, anything in generated FeatureScript that is not a reconstructible
-query.
+Allowed: an authoring gesture while designing a node — the selection is consumed
+to produce a reconstructible query and is never persisted. Behind an explicit
+marker on the node while it is unfinished.
+Not allowed: a live selection persisted in a saved graph, production node
+behavior that depends on one, anything in generated FeatureScript that is not a
+reconstructible query.
 
 Preferred production alternatives: explicit `Query` inputs, `qTransient` on a
 selection the node owns and re-validates, or `makeRobustQuery` when the query
 must survive topology changes.
 
-Enforcement (tracked in issue #18): warn visibly when `requestSelection` is used
-outside developer mode; mark debug-only nodes in the UI; flag saved graphs that
-contain live-selection dependencies on load; require justification in review.
+Enforcement (tracked in issue #18): flag saved graphs that contain
+live-selection dependencies on load (`onshape-utils/liveselectionguard.ts`); the
+unfinished-node marker moves to the design-check surface (#30), so DR-001 no
+longer requires a debug marker or gold border on the control.
 
-**Review checklist:** Every PR must confirm: no new `requestSelection` calls
-outside developer mode; any debug-only controls carry the DEBUG marker; graph
-load (when implemented) flags selection-dependent nodes.
+**Review checklist:** Every PR must confirm: no live selection is persisted in a
+saved graph; any selection is consumed to produce a reconstructible query; graph
+load flags selection-dependent nodes.
 
 ## DR-002 — Generated FeatureScript is generated
 
