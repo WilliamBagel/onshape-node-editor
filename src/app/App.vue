@@ -13,6 +13,7 @@ import ToolTip from './components/tooltip/ToolTip.vue';
 import { editorBase, EditorControls } from './rete/editorbase.js';
 import { formatTarget, type FeatureStudioTarget } from './onshape-utils/featurestudiotarget';
 import type { GraphIdentity } from './onshape-utils/graphidentity';
+import type { SpecResolver } from './rete/serialization/graph-schema-types';
 import type { FeatureInsertion } from './onshape-utils/partstudiofeature';
 import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 import { BuildLogStore, type LogSeverity } from './logging/buildlog';
@@ -46,8 +47,12 @@ interface FeatureStudioHost {
   uploadFeatureStudio(source: string | undefined): Promise<unknown>;
   /** #6: the editor's serialized graph, once the editor exists. */
   serializedGraphProvider?: (() => string | undefined) | undefined;
+  /** #6: replace the editor's contents with a stored graph. */
+  loadGraphProvider?: ((reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>) | undefined;
   /** #6: save the open graph to its element, verified by read-back. */
   saveGraph(graphName: string): Promise<unknown> | unknown;
+  /** #6: pick, confirm, and load a saved graph. */
+  openGraph(): Promise<unknown> | unknown;
 }
 
 /**
@@ -98,6 +103,7 @@ export default defineComponent({
     const host = this.featureStudioHost();
     if (host != null) {
       host.serializedGraphProvider = () => editorControls.serializeGraph();
+      host.loadGraphProvider = (reteJSON, resolveSpec) => editorControls.loadGraph(reteJSON, resolveSpec);
     }
   },
   beforeUnmount() {
@@ -277,8 +283,14 @@ export default defineComponent({
       if (host == null) return;
       await host.saveGraph(this.graphName);
     },
-    runOpen() {
-
+    /** #6: pick, confirm, and load a saved graph; adopt its name on success. */
+    async runOpen() {
+      const host = this.featureStudioHost();
+      if (host == null) return;
+      const outcome = (await host.openGraph()) as { status?: string; graphName?: string } | null;
+      if (outcome?.status === 'opened' && typeof outcome.graphName === 'string') {
+        this.graphName = outcome.graphName;
+      }
     },
     /** #36: open the settings dialog via the shared #34 dialog service. */
     async runSettings() {

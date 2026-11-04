@@ -77,3 +77,89 @@ export async function saveGraphVerified(deps: SaveGraphDeps): Promise<SaveOutcom
 
     return { status: 'saved', bytes: reteJSON.length };
 }
+
+/* ------------------------------------------------------------------ */
+/* Open                                                                */
+/* ------------------------------------------------------------------ */
+
+/** One saved graph, as listed for the user to pick. */
+export interface GraphListing {
+    /** Graph element id (the `NodeStore` element holding the graph). */
+    id: string;
+    /** Graph name (the element name without the ` graph` suffix). */
+    name: string;
+}
+
+export type OpenOutcome =
+    | { status: 'opened'; graphName: string; nodes: number; warnings: string[] }
+    | { status: 'cancelled' }
+    | { status: 'empty' }
+    | { status: 'failed'; stage: 'list' | 'read' | 'load'; message: string };
+
+export interface OpenGraphDeps {
+    /** Saved graphs in this document, in the order to offer them. */
+    list(): Promise<GraphListing[]>;
+    /** Let the user pick one; resolves with its id, or `null` on cancel. */
+    choose(list: GraphListing[]): Promise<string | null>;
+    /** Confirm replacing the current editor content; `false` cancels. */
+    confirmReplace(graphName: string): Promise<boolean>;
+    /** Read one saved graph's serialized form. */
+    read(id: string): Promise<string | undefined>;
+    /** Replace the editor's contents with a serialized graph. Throws on failure. */
+    apply(reteJSON: string): Promise<{ nodes: number; warnings: string[] }>;
+}
+
+/**
+ * List, let the user choose, confirm, read, and load — in that order.
+ * Cancelling at either prompt, or finding nothing to open, is a
+ * `cancelled`/`empty` outcome and never touches the editor. A graph that
+ * cannot be read or loaded is a `failed` outcome naming the stage; the
+ * editor is only replaced once the stored document has loaded.
+ */
+export async function openGraph(deps: OpenGraphDeps): Promise<OpenOutcome> {
+    let graphs: GraphListing[];
+    try {
+        graphs = await deps.list();
+    } catch (error) {
+        return { status: 'failed', stage: 'list', message: `Listing saved graphs failed: ${describeError(error)}` };
+    }
+    if (graphs.length === 0) {
+        return { status: 'empty' };
+    }
+
+    const chosenId = await deps.choose(graphs);
+    if (chosenId === null) {
+        return { status: 'cancelled' };
+    }
+    const chosen = graphs.find((graph) => graph.id === chosenId);
+    if (chosen === undefined) {
+        return { status: 'failed', stage: 'list', message: 'The selected graph is no longer in the list.' };
+    }
+
+    let confirmed = false;
+    try {
+        confirmed = await deps.confirmReplace(chosen.name);
+    } catch (error) {
+        return { status: 'failed', stage: 'load', message: `Confirming the replacement failed: ${describeError(error)}` };
+    }
+    if (!confirmed) {
+        return { status: 'cancelled' };
+    }
+
+    let reteJSON: string | undefined;
+    try {
+        reteJSON = await deps.read(chosen.id);
+    } catch (error) {
+        return { status: 'failed', stage: 'read', message: `Reading graph "${chosen.name}" failed: ${describeError(error)}` };
+    }
+    if (reteJSON === undefined || reteJSON === '') {
+        return { status: 'failed', stage: 'read', message: `Graph "${chosen.name}" has no saved content to open.` };
+    }
+
+    try {
+        const loaded = await deps.apply(reteJSON);
+        return { status: 'opened', graphName: chosen.name, nodes: loaded.nodes, warnings: loaded.warnings };
+    } catch (error) {
+        return { status: 'failed', stage: 'load', message: `Loading graph "${chosen.name}" failed: ${describeError(error)}` };
+    }
+}

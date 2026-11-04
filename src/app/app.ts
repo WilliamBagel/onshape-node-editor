@@ -36,6 +36,7 @@ import {
 import {
     GraphIdentity,
     GraphIdentityService,
+    createGraphIdentity,
     graphElementNameFor,
     type EnsureOutcome,
     type ResolveResult,
@@ -55,7 +56,10 @@ import {
     PartStudioTargetSettings,
 } from "./onshape-utils/partstudiofeature";
 import { resolveSinglePartStudio } from "./onshape-utils/partstudiotarget";
-import { saveGraphVerified, type SaveOutcome } from "./onshape-utils/graphsaveopen";
+import { saveGraphVerified, openGraph, type SaveOutcome, type OpenOutcome, type GraphListing } from "./onshape-utils/graphsaveopen";
+import { dialogService } from "./ui/dialog";
+import type { SpecResolver, FeatureSpecReference } from "./rete/serialization/graph-schema-types";
+import type { BTFeatureSpec129 } from "onshape-typescript-fetch";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
@@ -78,7 +82,14 @@ export class App extends BaseApp {
      * element is still created per graph and the write goes through
      * `NodeStore.setNodeData` once a provider exists.
      */
-    public serializedGraphProvider: (() => string | undefined) | undefined;
+    public serializedGraphProvider: (() => string | undefined) | undefined = undefined;
+
+    /**
+     * #6: replace the editor's contents with a stored graph. Assigned by
+     * App.vue once the editor exists. Resolves with the loaded node count
+     * and any non-fatal load warnings; rejects when the graph cannot load.
+     */
+    public loadGraphProvider: ((reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>) | undefined = undefined;
     /**
      * #2: the Part Studio the generated feature is inserted into. A separate
      * field (and a separate storage key) from the Feature Studio target: the
@@ -340,6 +351,159 @@ export class App extends BaseApp {
             );
         } else {
             this.reportMessage(`Save failed (${outcome.stage}): ${outcome.message}`, 'error', 'editor');
+        }
+        return outcome;
+    }
+
+    /**
+     * #6: list the saved graphs in the active document — the app elements
+     * named `<graph name> graph` that hold a serialized graph. Sorted by
+     * name so the picker is stable across sessions.
+     */
+    public async listSavedGraphs(): Promise<GraphListing[]> {
+        const api = this.onshape;
+        if (api == null || this.documentId === '' || this.workspaceId === '') {
+            throw new Error('No active Onshape document: the app must run inside an Onshape document to open a graph.');
+        }
+        const elements = await api.documentApi.getElementsInDocument({
+            did: this.documentId,
+            wvm: 'w',
+            wvmid: this.workspaceId,
+        });
+        const suffix = ' graph';
+        return (elements ?? [])
+            .filter((element) => element?.elementType === 'APPLICATION' && typeof element.name === 'string' && element.name.endsWith(suffix) && element.id != null)
+            .map((element) => ({ id: element.id as string, name: (element.name as string).slice(0, -suffix.length) }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    /** #6: read one saved graph's serialized form from its element. */
+    public async readSavedGraph(elementId: string): Promise<string | undefined> {
+        const api = this.onshape;
+        if (api == null) {
+            throw new Error('No active Onshape document: the app must run inside an Onshape document to open a graph.');
+        }
+        const store = new NodeStore(api);
+        await store.initFromExisting(this.documentId, elementId, undefined);
+        const data = await store.getNodeData();
+        return data?.reteJSON;
+    }
+
+    /**
+     * #6: resolve stored `CustomFeature` spec references against the
+     * active graph's defining Feature Studio. Spec bodies are ~1,000-line
+     * documents that belong to Onshape; the graph file only carries the
+     * reference (`featureType` + the `e<eid>::m<microversion>` namespace
+     * the spec was read at), so the spec is read back from that studio.
+     * Returns a resolver that refuses (`undefined`) anything it cannot
+     * resolve, which fails the load with the node named.
+     */
+    private async specResolverFor(reteJSON: string): Promise<SpecResolver> {
+        let refs: FeatureSpecReference[] = [];
+        try {
+            const parsed = JSON.parse(reteJSON) as { nodes?: Array<{ kind?: string; spec?: FeatureSpecReference }> };
+            refs = (parsed.nodes ?? [])
+                .filter((node) => node.kind === 'CustomFeature' && node.spec != null)
+                .map((node) => node.spec as FeatureSpecReference);
+        } catch {
+            // Not JSON: the deserializer will report that precisely.
+            return () => undefined;
+        }
+        if (refs.length === 0) {
+            return () => undefined;
+        }
+        const api = this.onshape;
+        const target = this.getFeatureStudioTarget();
+        if (api == null || target == null) {
+            return () => undefined;
+        }
+        let specs: BTFeatureSpec129[] = [];
+        try {
+            const response = await api.featureStudioApi.getFeatureStudioSpecs({
+                did: target.did,
+                wvm: target.wvm,
+                wvmid: target.wvmid,
+                eid: target.eid,
+            });
+            specs = response?.featureSpecs ?? [];
+        } catch {
+            // The resolver below refuses, and the load names the node.
+            return () => undefined;
+        }
+        const eidOf = (spec: BTFeatureSpec129): string | null => {
+            const namespace = typeof spec.namespace === 'string' ? spec.namespace : '';
+            const match = /^e([0-9a-f]+)::m/.exec(namespace);
+            return match?.[1] ?? null;
+        };
+        return (ref: FeatureSpecReference) => specs.find(
+            (spec) => spec.featureType === ref.featureType && (ref.eid == null || eidOf(spec) === ref.eid),
+        );
+    }
+
+    /**
+     * #6: open a saved graph into the editor — pick from the in-app
+     * dialog's list, confirm replacing the current content, then load.
+     * Every outcome (including cancellations) is reported through the log.
+     */
+    public async openGraph(): Promise<OpenOutcome> {
+        const outcome = await openGraph({
+            list: () => this.listSavedGraphs(),
+            choose: (graphs) => dialogService.chooseOption({
+                title: 'Open graph',
+                body: 'Choose a saved graph. The current editor content will be replaced.',
+                options: graphs.map((graph) => ({ value: graph.id, label: graph.name })),
+            }),
+            confirmReplace: (graphName) => dialogService.confirm({
+                title: `Open "${graphName}"?`,
+                body: 'This replaces the current editor content. Unsaved changes will be lost.',
+                confirmLabel: 'Open graph',
+                danger: true,
+            }),
+            read: (id) => this.readSavedGraph(id),
+            apply: async (reteJSON) => {
+                const load = this.loadGraphProvider;
+                if (load == null) {
+                    throw new Error('The editor is not ready yet; try opening the graph again in a moment.');
+                }
+                const resolveSpec = await this.specResolverFor(reteJSON);
+                return load(reteJSON, resolveSpec);
+            },
+        });
+
+        if (outcome.status === 'opened') {
+            // The opened element becomes the active graph, so the next
+            // Save writes back to it. Its Feature Studio (created with
+            // the graph's name) is looked up by name; when it cannot be
+            // found the identity is left unchanged rather than guessed.
+            const chosen = (await this.listSavedGraphs().catch(() => [] as GraphListing[]))
+                .find((graph) => graph.name === outcome.graphName);
+            if (chosen != null) {
+                const elements = await this.onshape?.documentApi.getElementsInDocument({
+                    did: this.documentId,
+                    wvm: 'w',
+                    wvmid: this.workspaceId,
+                }).catch(() => []);
+                const studio = (elements ?? []).find(
+                    (element) => element?.elementType === 'FEATURESTUDIO' && element.name === outcome.graphName && element.id != null,
+                );
+                if (studio?.id != null) {
+                    const identity = createGraphIdentity(outcome.graphName, studio.id, chosen.id);
+                    this.graphIdentities = [...this.graphIdentities.filter((item) => item.graphElementId !== chosen.id), identity];
+                    this.activeGraphIdentity = identity;
+                }
+            }
+            this.reportMessage(
+                `Opened graph "${outcome.graphName}" (${outcome.nodes} nodes).`,
+                'info',
+                'editor',
+            );
+            for (const warning of outcome.warnings) {
+                this.reportMessage(warning, 'warning', 'editor');
+            }
+        } else if (outcome.status === 'empty') {
+            this.reportMessage('No saved graphs in this document yet. Use Save to store the current graph first.', 'warning', 'editor');
+        } else if (outcome.status === 'failed') {
+            this.reportMessage(`Open failed (${outcome.stage}): ${outcome.message}`, 'error', 'editor');
         }
         return outcome;
     }
