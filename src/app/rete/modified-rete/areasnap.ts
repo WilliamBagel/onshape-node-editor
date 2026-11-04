@@ -33,8 +33,8 @@ import { BaseArea, BaseAreaPlugin } from 'rete-area-plugin'
  * Snap grid extension parameters
  */
 export type Params = {
-    /** The grid size */
-    size?: number
+    /** The grid size, or a getter so a live preference change applies without reinstalling. */
+    size?: number | (() => number)
     /** Whether to snap on node drag */
     dynamic?: boolean,
     /** Callback to check whether to snap */
@@ -50,9 +50,8 @@ export type Params = {
  */
 export function snapGrid<Schemes extends BaseSchemes, K>(base: BaseAreaPlugin<Schemes, K>, params?: Params) {
     const area = base as BaseAreaPlugin<Schemes, BaseArea<Schemes>>
-    const size = typeof params?.size === 'undefined'
-        ? 16
-        : params.size
+    const sizeParam = typeof params?.size === 'undefined' ? 16 : params.size
+    const size = () => typeof sizeParam === 'function' ? sizeParam() : sizeParam
     const dynamic = typeof params?.dynamic === 'undefined'
         ? true
         : params.dynamic
@@ -64,7 +63,8 @@ export function snapGrid<Schemes extends BaseSchemes, K>(base: BaseAreaPlugin<Sc
         if (allowedCallback() !== true) {
             return value;
         }
-        return Math.round(value / size) * size
+        const s = size()
+        return Math.round(value / s) * s
     }
 
     area.addPipe(context => {

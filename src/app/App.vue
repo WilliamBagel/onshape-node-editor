@@ -2,7 +2,8 @@
 import { defineComponent } from 'vue';
 import TopBar from './components/TopBar.vue'
 import AppDialog from './components/AppDialog.vue';
-import { promptText } from './ui/dialog';
+import { promptText, dialogService } from './ui/dialog';
+import { editorSettings, matchCommand } from './ui/editorSettings';
 import { createEditor, createEditorDev } from './rete';
 import BottomBar from './components/BottomBar.vue';
 import LogPanel from './components/LogPanel.vue';
@@ -74,6 +75,7 @@ export default defineComponent({
     }
   },
   async mounted() {
+    window.addEventListener('keydown', this.onShortcutKeydown);
     let editorControls: EditorControls;
     const dev = inject('developerMode');
 
@@ -83,6 +85,9 @@ export default defineComponent({
       editorControls = await createEditor(this.$refs.rete as HTMLElement);
     }
     this.controls = editorControls;
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.onShortcutKeydown);
   },
   methods: {
     /** The injected `App` instance (see the `inject: { app }` option above). */
@@ -245,8 +250,33 @@ export default defineComponent({
     runOpen() {
 
     },
-    runSettings() {
-
+    /** #36: open the settings dialog via the shared #34 dialog service. */
+    async runSettings() {
+      await dialogService.openSettings();
+    },
+    /**
+     * #36: dispatch a keydown through the shortcut registry. No-ops while a
+     * dialog is open or the user is typing (matchCommand enforces the latter).
+     */
+    async onShortcutKeydown(event: KeyboardEvent) {
+      if (dialogService.current != null) return;
+      const command = matchCommand(event, event.target, editorSettings.getBindings());
+      if (command == null) return;
+      event.preventDefault();
+      switch (command) {
+        case 'build': await this.runBuild(); break;
+        case 'run': await this.runRun(); break;
+        case 'upload': await this.runUpload(); break;
+        case 'settings': await this.runSettings(); break;
+        case 'fitView': await this.controls?.fitView(); break;
+        case 'deleteSelected': {
+          const removed = await this.controls?.deleteSelectedNodes();
+          if (removed != null && removed > 0) {
+            this.featureStudioHost()?.reportMessage(`Deleted ${removed} selected node${removed === 1 ? '' : 's'}.`);
+          }
+          break;
+        }
+      }
     },
     runSearch() {
 
