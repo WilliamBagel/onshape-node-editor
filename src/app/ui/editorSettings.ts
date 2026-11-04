@@ -33,6 +33,13 @@ import {
 
 export const EDITOR_SETTINGS_KEY = 'onshape-node-editor:editor-settings';
 
+import type { DebugGridPreferences } from './debuggrid';
+import {
+    DEFAULT_DEBUG_GRID_PREFERENCES,
+    sanitiseDebugGridPreferences,
+    validateDebugGridPreference,
+} from './debuggrid';
+
 /** Hold-keys the canvas can listen for. `checkKey` names are mapped in editorbase. */
 export const MODIFIER_KEYS = ['Control', 'Meta', 'Alt', 'Shift'] as const;
 export type ModifierKey = (typeof MODIFIER_KEYS)[number];
@@ -48,6 +55,8 @@ export interface EditorPreferences {
     snapModifier: ModifierKey;
     /** Hold-key that accumulates node selection. Default: Shift. */
     accumulateModifier: ModifierKey;
+    /** #16: debug grid column visibility, error filter and sort. */
+    debugGrid: DebugGridPreferences;
 }
 
 export const DEFAULT_PREFERENCES: EditorPreferences = {
@@ -56,6 +65,7 @@ export const DEFAULT_PREFERENCES: EditorPreferences = {
     snapGridSize: 20,
     snapModifier: 'Control',
     accumulateModifier: 'Shift',
+    debugGrid: DEFAULT_DEBUG_GRID_PREFERENCES,
 };
 
 export const SNAP_GRID_SIZE_MIN = 4;
@@ -69,7 +79,7 @@ export function validateSnapGridSize(value: unknown): number | null {
 }
 
 /** A command the app actually honours, with its default binding. */
-export type CommandId = 'build' | 'run' | 'upload' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame' | 'addNode';
+export type CommandId = 'build' | 'run' | 'upload' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame' | 'addNode' | 'debugGrid';
 
 export interface CommandDefinition {
     id: CommandId;
@@ -87,6 +97,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
     { id: 'deleteSelected', label: 'Delete selected nodes', description: 'Remove the currently selected nodes from the canvas.', defaultCombo: 'Delete' },
     { id: 'createFrame', label: 'Frame selected nodes', description: 'Wrap the selected nodes in a grouping frame (#13).', defaultCombo: 'Ctrl+G' },
     { id: 'addNode', label: 'Add node', description: 'Open the catalog palette to add a node (#8).', defaultCombo: 'Ctrl+K' },
+    { id: 'debugGrid', label: 'Debug grid', description: 'Toggle the debug grid (node-wrangler view of live values).', defaultCombo: 'Ctrl+D' },
 ];
 
 /** Commands with no implementation yet — listed in the dialog so the omission is explicit, never bound. */
@@ -107,6 +118,7 @@ export const DEFAULT_BINDINGS: ShortcutBindings = {
     deleteSelected: 'Delete',
     createFrame: 'Ctrl+G',
     addNode: 'Ctrl+K',
+    debugGrid: 'Ctrl+D',
 };
 
 const MODIFIER_ORDER = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const;
@@ -169,6 +181,7 @@ function sanitisePreferences(raw: unknown): EditorPreferences {
     if (MODIFIER_KEYS.includes(r.snapModifier as ModifierKey)) prefs.snapModifier = r.snapModifier as ModifierKey;
     if (MODIFIER_KEYS.includes(r.accumulateModifier as ModifierKey)) prefs.accumulateModifier = r.accumulateModifier as ModifierKey;
     if (prefs.snapModifier === prefs.accumulateModifier) prefs.accumulateModifier = DEFAULT_PREFERENCES.accumulateModifier;
+    prefs.debugGrid = sanitiseDebugGridPreferences(r.debugGrid);
     return prefs;
 }
 
@@ -229,7 +242,22 @@ export class EditorSettingsStore {
     }
 
     getPreferences(): EditorPreferences {
-        return { ...this.persisted.preferences };
+        return {
+            ...this.persisted.preferences,
+            debugGrid: { ...this.persisted.preferences.debugGrid, columns: [...this.persisted.preferences.debugGrid.columns] },
+        };
+    }
+
+    /** #16: update one debug-grid sub-preference, validating it. */
+    setDebugGridPreference<K extends keyof DebugGridPreferences>(key: K, value: DebugGridPreferences[K]): boolean {
+        const validated = validateDebugGridPreference(key, value);
+        if (validated == null) return false;
+        this.persisted.preferences.debugGrid = {
+            ...this.persisted.preferences.debugGrid,
+            [key]: validated,
+        };
+        this.save();
+        return true;
     }
 
     getBindings(): ShortcutBindings {

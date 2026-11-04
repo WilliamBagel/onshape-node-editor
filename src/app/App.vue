@@ -2,6 +2,7 @@
 import { defineComponent } from 'vue';
 import TopBar from './components/TopBar.vue'
 import AppDialog from './components/AppDialog.vue';
+import DebugGrid from './components/DebugGrid.vue';
 import { promptText, dialogService } from './ui/dialog';
 import { editorSettings, matchCommand } from './ui/editorSettings';
 import { createEditor, createEditorDev } from './rete';
@@ -20,6 +21,7 @@ import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 import NodePalette from './components/NodePalette.vue';
 import { defaultCatalog } from './onshape/catalog/spec-catalog';
 import type { CatalogEntry } from './onshape/catalog/types';
+import type { DebugNodeSource, DebugSelection, EvalFeatureScriptApiLike } from './onshape-utils/evalfeaturescript';
 
 /**
  * The slice of `App` the toolbar needs for the Feature Studio upload (#1) and
@@ -56,6 +58,8 @@ interface FeatureStudioHost {
   saveGraph(graphName: string): Promise<unknown> | unknown;
   /** #6: pick, confirm, and load a saved graph. */
   openGraph(): Promise<unknown> | unknown;
+  /** #16: the injected Part Studio API for the debug grid's eval call. */
+  onshape?: { partStudioApi: { evalFeatureScript: (request: Record<string, unknown>) => Promise<unknown> } } | undefined;
 }
 
 /**
@@ -68,6 +72,7 @@ export default defineComponent({
   components: {
     TopBar: TopBar,
     AppDialog: AppDialog,
+    DebugGrid: DebugGrid,
     BottomBar: BottomBar,
     LogPanel: LogPanel,
     ToolTip: ToolTip
@@ -85,6 +90,11 @@ export default defineComponent({
       graphName: 'My Graph',
       /** #8: catalog palette visibility. */
       paletteOpen: false,
+      /** #16: debug grid panel visibility plus a graph-change pulse the panel debounces. */
+      debugGridOpen: false,
+      debugGraphVersion: 0,
+      debugGraphTimer: null as ReturnType<typeof setInterval> | null,
+      debugGraphSignature: '',
       catalogEntries: defaultCatalog.entries
     }
   },
@@ -92,7 +102,52 @@ export default defineComponent({
     /** #4: the App-owned log, or a local one when there is no injected App. */
     logStore(): BuildLogStore {
       return this.featureStudioHost()?.log ?? fallbackLogStore;
-    }
+    },
+    /**
+     * #16: debug grid inputs. Nodes/selections are rebuilt from the canvas
+     * whenever the graph pulse fires; the target/microversion come from the
+     * stored Part Studio target (microversion known only for `m` targets —
+     * the panel's no-target state covers the rest).
+     */
+    debugSources(): { nodes: DebugNodeSource[]; selections: DebugSelection[] } {
+      void this.debugGraphVersion;
+      return this.controls?.debugSources?.() ?? { nodes: [], selections: [] };
+    },
+    debugNodes(): DebugNodeSource[] {
+      return this.debugSources.nodes;
+    },
+    debugSelections(): DebugSelection[] {
+      return this.debugSources.selections;
+    },
+    debugTarget(): FeatureStudioTarget | null {
+      return this.featureStudioHost()?.getPartStudioTarget() ?? null;
+    },
+    debugMicroversion(): string | null {
+      const target = this.debugTarget;
+      return target != null && target.wvm === 'm' ? target.wvmid : null;
+    },
+    debugApi(): EvalFeatureScriptApiLike | null {
+      const api = this.featureStudioHost()?.onshape?.partStudioApi;
+      return api != null ? (api as unknown as EvalFeatureScriptApiLike) : null;
+    },
+  },
+  watch: {
+    /** #16: while the grid is open, pulse on graph change (panel debounces it). */
+    debugGridOpen(open: boolean) {
+      if (this.debugGraphTimer != null) {
+        clearInterval(this.debugGraphTimer);
+        this.debugGraphTimer = null;
+      }
+      if (!open) return;
+      this.debugGraphSignature = this.controls?.serializeGraph() ?? '';
+      this.debugGraphTimer = setInterval(() => {
+        const signature = this.controls?.serializeGraph() ?? '';
+        if (signature !== this.debugGraphSignature) {
+          this.debugGraphSignature = signature;
+          this.debugGraphVersion += 1;
+        }
+      }, 1500);
+    },
   },
   async mounted() {
     window.addEventListener('keydown', this.onShortcutKeydown);
@@ -317,6 +372,7 @@ export default defineComponent({
         case 'upload': await this.runUpload(); break;
         case 'addNode': this.paletteOpen = true; break;
         case 'settings': await this.runSettings(); break;
+        case 'debugGrid': this.debugGridOpen = !this.debugGridOpen; break;
         case 'fitView': await this.controls?.fitView(); break;
         case 'deleteSelected': {
           const removed = await this.controls?.deleteSelectedNodes();
@@ -360,6 +416,18 @@ export default defineComponent({
   <ToolTip />
   <NodePalette :open="paletteOpen" :entries="catalogEntries" @select="onPaletteSelect" @close="paletteOpen = false" />
     <AppDialog />
+    <!-- #16: debug grid (node-wrangler view); row click focuses the node. -->
+    <DebugGrid
+      :open="debugGridOpen"
+      :nodes="debugNodes"
+      :selections="debugSelections"
+      :target="debugTarget"
+      :api="debugApi"
+      :microversion="debugMicroversion"
+      :graph-version="debugGraphVersion"
+      @close="debugGridOpen = false"
+      @select-node="runLocateNode"
+    />
 </template>
 
 <style scoped>
