@@ -15,6 +15,7 @@
 import libraryJson from '../featurescript-library.json';
 import classificationJson from './classification.json';
 import { mapScrapedType } from './typemap';
+import { UTILITY_OVERRIDES, instanceOnPointsEntry } from './utility-overrides';
 import type { CatalogEntry, CatalogKind, CatalogPort } from './types';
 
 interface RawParameter {
@@ -146,6 +147,31 @@ export function buildCatalog(library: RawLibrary, classification: RawClassificat
                 });
             }
         }
+    }
+
+    // #11: curated utility ports replace the scraped ports for the
+    // vector/matrix/transform family — the scrape collapsed overloads and
+    // left scraper junk as types, which made them not node-able. Overrides
+    // apply only to the real shipped library (identified by the presence of
+    // the `opPattern` entry), never to small hand-built fixtures.
+    // The instance-on-points node has no scraped entry (FeatureScript has
+    // no geometry-nodes instancing), so it is registered synthetically for
+    // the real library only.
+    const isRealLibrary = seen.has('opPattern::');
+    if (isRealLibrary) {
+        for (const entry of entries) {
+            const override = UTILITY_OVERRIDES[entry.key];
+            if (override != null) {
+                entry.inputs = override.inputs.map((p) => ({ ...p }));
+                entry.outputs = override.outputs.map((p) => ({ ...p }));
+                entry.kind = override.kind;
+                entry.nodeable = true;
+                entry.utilityId = override.utilityId;
+            }
+        }
+        const synthetic = instanceOnPointsEntry();
+        entries.push(synthetic);
+        categorySet.add(synthetic.category);
     }
 
     const byCategory = new Map<string, CatalogEntry[]>();

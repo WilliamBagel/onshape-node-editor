@@ -19,6 +19,9 @@ import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
 import { FunctionNode } from "../nodes/functionnode";
+import { UtilityStatementNode } from "../nodes/utilitystatementnode";
+import { resolveUtilityStatement, utilityMeta } from "../catalog-node-factory";
+import { UTILITY_BY_ID } from "../../onshape/catalog/utility-overrides";
 import { Connection, Schemes } from "../types";
 import { StyleSettings } from "../stylesettings";
 import { getConnectionIO } from "../utils";
@@ -62,7 +65,7 @@ export interface DeserializeOptions {
     styleSettings?: StyleSettings;
 }
 
-const SUPPORTED_KINDS: SerializedNodeKind[] = ["CustomFeature", "define-feature", "output-feature", "function"];
+const SUPPORTED_KINDS: SerializedNodeKind[] = ["CustomFeature", "define-feature", "output-feature", "function", "utility-statement"];
 
 /**
  * Serialize every node and connection in `editor`.
@@ -216,7 +219,13 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
                     node = OutputFeatureNode.fromJSON(serialized);
                     break;
                 case "function":
-                    node = FunctionNode.fromJSON(serialized);
+                    node = FunctionNode.fromJSON(serialized, undefined, (utilityId) => {
+                        const override = UTILITY_BY_ID[utilityId];
+                        return override != null ? utilityMeta(override) : undefined;
+                    });
+                    break;
+                case "utility-statement":
+                    node = UtilityStatementNode.fromJSON(serialized, resolveUtilityStatement);
                     break;
                 default:
                     return {

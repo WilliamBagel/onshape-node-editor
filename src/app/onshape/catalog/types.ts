@@ -42,6 +42,8 @@ export type CatalogValueType =
     | 'Matrix'
     | 'Transform'
     | 'Query'
+    /** `array` of an element the catalog does not further type (e.g. `array<Transform>`). */
+    | 'array'
     | 'Unknown';
 
 export interface CatalogPort {
@@ -53,6 +55,12 @@ export interface CatalogPort {
     /** Enum name when `valueType` is `Enum`. */
     enumName?: string;
     description: string;
+    /**
+     * Curated FeatureScript literal emitted for this input when it is not
+     * connected (issue #11 utility nodes). `undefined` means the input has no
+     * default, so codegen falls back to the port name.
+     */
+    defaultLiteral?: string;
 }
 
 export interface CatalogEntry {
@@ -67,6 +75,8 @@ export interface CatalogEntry {
     kind: CatalogKind;
     /** True only for statement/value entries whose ports are all typed. */
     nodeable: boolean;
+    /** Curated utility identity (issue #11), e.g. `vector`, `opTransform`. */
+    utilityId?: string;
     inputs: CatalogPort[];
     outputs: CatalogPort[];
 }
