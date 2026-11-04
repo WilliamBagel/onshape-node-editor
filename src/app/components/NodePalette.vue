@@ -1,5 +1,9 @@
-<!-- NodePalette.vue — searchable, category-grouped catalog palette (#8).
-  Opened from the toolbar / Ctrl-K; keyboard placement lands at viewport centre.
+<!-- NodePalette.vue — searchable, category-grouped insertable catalog (#8, #73).
+  Opened from the action palette / Ctrl-K; keyboard placement lands at
+  viewport centre. Covers every insertable node: node-able catalog
+  entries (statement, value, function, utility), array nodes, the math
+  expression node and group instances — ranked search over name,
+  category and description.
   Styled per STYLE_GUIDE.md: white card, hairline, 14/13/12/11 scale, keycaps. -->
 <template>
   <div v-if="open" class="palette-backdrop" @click.self="close">
@@ -13,29 +17,30 @@
         v-model="term"
         class="palette-search"
         type="text"
-        placeholder="Search the catalog…"
-        aria-label="Search the catalog"
+        placeholder="Search every node…"
+        aria-label="Search every node"
         @keydown="onKeydown"
       />
-      <div class="palette-list" role="listbox" aria-label="Catalog entries">
+      <div class="palette-list" role="listbox" aria-label="Insertable nodes">
         <template v-for="group in groups" :key="group.category">
           <div class="palette-category">{{ group.category }}</div>
           <button
-            v-for="entry in group.entries"
-            :key="entry.key"
+            v-for="item in group.entries"
+            :key="item.key"
+            :ref="(el) => registerItem(item.key, el)"
             type="button"
             class="palette-item"
-            :class="{ 'palette-item--active': entry.key === activeKey }"
+            :class="{ 'palette-item--active': item.key === activeKey }"
             role="option"
-            :aria-selected="entry.key === activeKey"
-            @click="choose(entry)"
-            @mouseenter="activeKey = entry.key"
+            :aria-selected="item.key === activeKey"
+            @click="choose(item)"
+            @mouseenter="activeKey = item.key"
           >
-            <span class="palette-item-name">{{ entry.name }}</span>
-            <span class="palette-item-meta">{{ entry.kind }}</span>
+            <span class="palette-item-name">{{ item.name }}</span>
+            <span class="palette-item-meta">{{ item.meta }}</span>
           </button>
         </template>
-        <p v-if="flat.length === 0" class="palette-empty">No node-able entries match.</p>
+        <p v-if="flat.length === 0" class="palette-empty">No node matches.</p>
       </div>
     </div>
   </div>
@@ -43,26 +48,43 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { CatalogEntry } from '../onshape/catalog/types'
-import { filterCatalogEntries, groupByCategory, nodeableEntries } from '../rete/catalog-node-factory'
+import {
+  groupInsertablesByCategory,
+  searchPaletteInsertables,
+  type PaletteInsertable,
+} from '../rete/catalog-node-factory'
 
-const props = defineProps<{ open: boolean; entries: readonly CatalogEntry[] }>()
-const emit = defineEmits<{ (e: 'select', entry: CatalogEntry): void; (e: 'close'): void }>()
+const props = defineProps<{ open: boolean; insertables: readonly PaletteInsertable[] }>()
+const emit = defineEmits<{ (e: 'select', item: PaletteInsertable): void; (e: 'close'): void }>()
 
 const term = ref('')
 const activeKey = ref<string | null>(null)
 const search = ref<HTMLInputElement | null>(null)
+const itemRefs = new Map<string, unknown>()
 
-const flat = computed(() => filterCatalogEntries(nodeableEntries(props.entries), term.value))
-const groups = computed(() => groupByCategory(flat.value))
+function registerItem(key: string, el: unknown) {
+  if (el == null) itemRefs.delete(key)
+  else itemRefs.set(key, el)
+}
+
+const flat = computed(() => searchPaletteInsertables(props.insertables, term.value))
+const groups = computed(() => groupInsertablesByCategory(flat.value))
 
 watch(() => props.open, async (v) => {
   if (v) { term.value = ''; activeKey.value = flat.value[0]?.key ?? null; await nextTick(); search.value?.focus() }
 })
-watch(flat, () => { if (activeKey.value == null || !flat.value.some(e => e.key === activeKey.value)) activeKey.value = flat.value[0]?.key ?? null })
+watch(flat, () => {
+  if (activeKey.value == null || !flat.value.some(e => e.key === activeKey.value)) activeKey.value = flat.value[0]?.key ?? null
+  scrollActiveIntoView()
+})
+
+function scrollActiveIntoView() {
+  const el = activeKey.value != null ? itemRefs.get(activeKey.value) : null
+  if (el instanceof HTMLElement) el.scrollIntoView({ block: 'nearest' })
+}
 
 function close() { emit('close') }
-function choose(entry: CatalogEntry) { emit('select', entry) }
+function choose(item: PaletteInsertable) { emit('select', item) }
 function onKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') { close(); return }
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -70,26 +92,29 @@ function onKeydown(event: KeyboardEvent) {
     const idx = flat.value.findIndex(e => e.key === activeKey.value)
     const next = event.key === 'ArrowDown' ? Math.min(idx + 1, flat.value.length - 1) : Math.max(idx - 1, 0)
     activeKey.value = flat.value[next]?.key ?? null
+    scrollActiveIntoView()
   } else if (event.key === 'Enter') {
-    const entry = flat.value.find(e => e.key === activeKey.value)
-    if (entry) choose(entry)
+    const item = flat.value.find(e => e.key === activeKey.value)
+    if (item) choose(item)
   }
 }
 </script>
 
 <style scoped>
 .palette-backdrop { position: fixed; inset: 0; background: var(--backdrop-scrim); display: flex; justify-content: center; align-items: flex-start; padding-top: 10vh; z-index: 40; }
-.palette { width: 420px; max-width: 92vw; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-1); font-family: var(--font-sans); color: var(--text-primary); }
-.palette-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
+.palette { width: 460px; max-width: 92vw; max-height: min(80vh, 640px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-1); font-family: var(--font-sans); color: var(--ink); }
+.palette-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; flex: none; }
 .palette-title { font-size: var(--font-size-heading); font-weight: var(--font-weight-title); line-height: var(--line-height-title); margin: 0; }
-.palette-keycap { font-family: var(--font-mono); font-size: var(--font-size-keycap); border: 1px solid var(--hairline); border-radius: var(--radius-keycap); padding: 1px 4px; color: var(--text-primary); opacity: var(--opacity-secondary); }
-.palette-search { width: calc(100% - 24px); margin: 0 12px 8px; padding: 6px 8px; font-size: var(--font-size-value); font-family: var(--font-sans); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-sunken); color: var(--text-primary); box-sizing: border-box; }
+.palette-keycap { font-family: var(--font-mono); font-size: var(--font-size-keycap); border: 1px solid var(--hairline); border-radius: var(--radius-keycap); padding: 1px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
+.palette-search { flex: none; width: calc(100% - 24px); margin: 0 12px 8px; padding: 6px 8px; font-size: var(--font-size-value); font-family: var(--font-sans); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-sunken); color: var(--ink); box-sizing: border-box; }
 .palette-search:focus { outline: 1px solid var(--accent-steel); border-color: var(--accent-steel); }
-.palette-list { max-height: 320px; overflow-y: auto; padding: 0 8px 8px; }
-.palette-category { font-size: var(--font-size-section); font-weight: var(--font-weight-section); padding: 8px 4px 4px; color: var(--text-primary); opacity: var(--opacity-secondary); }
+/* #73: the list owns the remaining height and scrolls inside the dialog
+   (flex + min-height: 0), so long catalogs stay reachable. */
+.palette-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
+.palette-category { font-size: var(--font-size-section); font-weight: var(--font-weight-section); padding: 8px 4px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
 .palette-item { display: flex; justify-content: space-between; width: 100%; padding: 6px 4px; border: none; background: transparent; cursor: pointer; font-family: var(--font-sans); text-align: left; }
 .palette-item--active { background: var(--surface-sunken); }
-.palette-item-name { font-size: var(--font-size-value); color: var(--text-primary); }
-.palette-item-meta { font-size: var(--font-size-meta); color: var(--text-primary); opacity: var(--opacity-faint); }
-.palette-empty { font-size: var(--font-size-label); padding: 8px 4px; color: var(--text-primary); opacity: var(--opacity-secondary); }
+.palette-item-name { font-size: var(--font-size-value); color: var(--ink); }
+.palette-item-meta { font-size: var(--font-size-meta); color: var(--ink); opacity: var(--opacity-faint); }
+.palette-empty { font-size: var(--font-size-label); padding: 8px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
 </style>

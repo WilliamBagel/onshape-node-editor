@@ -15,9 +15,11 @@
  *   Upload (`runUpload`). Fit view and delete-selected are implemented by
  *   this issue in `editorbase.ts` (`AreaExtensions.zoomAt` over all nodes,
  *   `editor.removeNode` for the selected nodes) so they can be bound honestly.
- * - Save (`runSave`), Open (`runOpen`) and Search (`runSearch`) in `App.vue`
- *   are still empty no-ops, so they are deliberately NOT listed as shortcuts
- *   (see `OMITTED_COMMANDS`); showing a binding for them would be fake.
+ * - Save (`runSave`) and Open (`runOpen`) in `App.vue` are real, so they
+ *   are listed like every other command. Search is the action palette
+ *   (`actionPalette`, F3 — Blender's search-menu key); the old no-op
+ *   `runSearch()` now opens it. `OMITTED_COMMANDS` is empty for the same
+ *   reason: nothing is left unimplemented.
  *
  * Persistence uses the same storage layer as the deploy targets
  * (`browserStorage()` from `onshape-utils/featurestudiotarget.ts`, with a
@@ -79,7 +81,7 @@ export function validateSnapGridSize(value: unknown): number | null {
 }
 
 /** A command the app actually honours, with its default binding. */
-export type CommandId = 'build' | 'run' | 'upload' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame' | 'addNode' | 'debugGrid';
+export type CommandId = 'build' | 'run' | 'upload' | 'save' | 'open' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame' | 'addNode' | 'debugGrid' | 'actionPalette';
 
 export interface CommandDefinition {
     id: CommandId;
@@ -92,20 +94,19 @@ export const COMMANDS: readonly CommandDefinition[] = [
     { id: 'build', label: 'Build', description: 'Compile and validate the current node graph.', defaultCombo: 'Ctrl+B' },
     { id: 'run', label: 'Run', description: 'Insert the generated feature into the Run target Part Studio.', defaultCombo: 'Ctrl+Enter' },
     { id: 'upload', label: 'Upload', description: 'Build the graph and write it to the Feature Studio target.', defaultCombo: 'Ctrl+Shift+U' },
+    { id: 'save', label: 'Save', description: 'Save the open graph to its element.', defaultCombo: 'Ctrl+S' },
+    { id: 'open', label: 'Open', description: 'Pick and load a saved graph.', defaultCombo: 'Ctrl+O' },
     { id: 'settings', label: 'Settings', description: 'Open this settings dialog.', defaultCombo: 'Ctrl+,' },
     { id: 'fitView', label: 'Fit view', description: 'Zoom the canvas to fit all nodes.', defaultCombo: 'Ctrl+0' },
     { id: 'deleteSelected', label: 'Delete selected nodes', description: 'Remove the currently selected nodes from the canvas.', defaultCombo: 'Delete' },
     { id: 'createFrame', label: 'Frame selected nodes', description: 'Wrap the selected nodes in a grouping frame (#13).', defaultCombo: 'Ctrl+G' },
     { id: 'addNode', label: 'Add node', description: 'Open the catalog palette to add a node (#8).', defaultCombo: 'Ctrl+K' },
     { id: 'debugGrid', label: 'Debug grid', description: 'Toggle the debug grid (node-wrangler view of live values).', defaultCombo: 'Ctrl+D' },
+    { id: 'actionPalette', label: 'Search actions', description: 'Open the action palette (Blender-style search menu).', defaultCombo: 'F3' },
 ];
 
 /** Commands with no implementation yet — listed in the dialog so the omission is explicit, never bound. */
-export const OMITTED_COMMANDS: readonly { label: string; reason: string }[] = [
-    { label: 'Save file', reason: 'runSave() in App.vue is still an empty no-op.' },
-    { label: 'Open file', reason: 'runOpen() in App.vue is still an empty no-op.' },
-    { label: 'Search', reason: 'runSearch() in App.vue is still an empty no-op.' },
-];
+export const OMITTED_COMMANDS: readonly { label: string; reason: string }[] = [];
 
 export type ShortcutBindings = Record<CommandId, string>;
 
@@ -119,6 +120,9 @@ export const DEFAULT_BINDINGS: ShortcutBindings = {
     createFrame: 'Ctrl+G',
     addNode: 'Ctrl+K',
     debugGrid: 'Ctrl+D',
+    save: 'Ctrl+S',
+    open: 'Ctrl+O',
+    actionPalette: 'F3',
 };
 
 const MODIFIER_ORDER = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const;

@@ -187,14 +187,153 @@ export function nodeableEntries(entries: readonly CatalogEntry[]): CatalogEntry[
   return entries.filter(e => e.nodeable && (e.kind === "statement" || e.kind === "value"));
 }
 
-/** Case-insensitive substring search over name, category and description. */
+/**
+ * #73: one ranked scorer shared by the catalog filter and the palette
+ * search. Every whitespace-separated token must match somewhere (AND);
+ * name matches outrank category matches, which outrank description
+ * matches, so the best node sinks to the top.
+ */
+interface SearchableFields { name: string; category: string; description: string }
+
+function isSubsequence(needle: string, haystack: string): boolean {
+  let i = 0;
+  for (const ch of haystack) { if (ch === needle[i]) i++; if (i >= needle.length) return true; }
+  return needle.length === 0;
+}
+
+function scoreFields(fields: SearchableFields, tokens: readonly string[]): number | null {
+  const name = fields.name.toLowerCase();
+  const category = fields.category.toLowerCase();
+  const description = (fields.description ?? "").toLowerCase();
+  let total = 0;
+  for (const token of tokens) {
+    if (name.startsWith(token)) total += 100;
+    else if (name.includes(token)) total += 60;
+    else if (category.includes(token)) total += 40;
+    else if (description.includes(token)) total += 20;
+    else if (isSubsequence(token, name)) total += 10;
+    else return null;
+  }
+  return total;
+}
+
+function ranked<T extends SearchableFields>(items: readonly T[], term: string): T[] {
+  const tokens = term.trim().toLowerCase().split(/\s+/).filter(t => t !== "");
+  if (tokens.length === 0) return [...items];
+  return items
+    .map(item => ({ item, score: scoreFields(item, tokens) }))
+    .filter((r): r is { item: T; score: number } => r.score != null)
+    .sort((a, b) => b.score - a.score)
+    .map(r => r.item);
+}
+
+/** Ranked case-insensitive search over name, category and description. */
 export function filterCatalogEntries(entries: readonly CatalogEntry[], term: string): CatalogEntry[] {
-  const t = term.trim().toLowerCase();
-  if (t === "") return [...entries];
-  return entries.filter(e =>
-    e.name.toLowerCase().includes(t) ||
-    e.category.toLowerCase().includes(t) ||
-    (e.description ?? "").toLowerCase().includes(t));
+  return ranked(entries, term);
+}
+
+/**
+ * #73: every insertable node the palette may offer, as one flat list.
+ * `nodeableEntries` alone excludes the non-catalog insertables (array,
+ * math, utility-by-id, group instances); this is the full catalog.
+ */
+export interface PaletteInsertable {
+  /** Stable unique key for list rendering and keyboard navigation. */
+  key: string;
+  name: string;
+  category: string;
+  description: string;
+  /** Short meta label shown beside the name (kind / origin). */
+  meta: string;
+  entry?: CatalogEntry;
+  arrayVariant?: ArrayNodeVariant;
+  utilityId?: string;
+  groupDefinitionId?: string;
+  isMathExpression?: boolean;
+}
+
+const ARRAY_VARIANT_META: Readonly<Record<ArrayNodeVariant, { name: string; description: string }>> = {
+  "array-literal": { name: "Array literal", description: "Build an array from element nodes." },
+  "array-concat": { name: "Concatenate arrays", description: "Join two arrays into one." },
+  "array-index": { name: "Array index", description: "Read the element at an index." },
+  "array-size": { name: "Array size", description: "The number of elements in an array." },
+  "map-array": { name: "Map array", description: "Apply a body to every element." },
+  "for-each": { name: "For each", description: "Iterate over an array with a body." },
+  "bounded-for": { name: "Bounded for", description: "A counted loop with a fixed bound." },
+};
+
+export interface PaletteGroupDefinitionLike { id: string; name: string }
+
+/** Build the full insertable catalog: node-able catalog entries plus array, math, utility and group-instance nodes. */
+export function buildPaletteInsertables(
+  entries: readonly CatalogEntry[],
+  groupDefinitions: readonly PaletteGroupDefinitionLike[] = [],
+): PaletteInsertable[] {
+  const items: PaletteInsertable[] = nodeableEntries(entries).map(entry => ({
+    key: entry.key,
+    name: entry.name,
+    category: entry.category,
+    description: entry.description ?? "",
+    meta: entry.utilityId != null ? "utility" : entry.kind,
+    entry,
+  }));
+  const coveredUtilityIds = new Set(items.map(i => i.utilityId ?? i.entry?.utilityId).filter((id): id is string => id != null));
+  for (const utilityId of listUtilityIds()) {
+    if (coveredUtilityIds.has(utilityId)) continue;
+    const override = UTILITY_BY_ID[utilityId];
+    items.push({
+      key: `utility::${utilityId}`,
+      name: override.displayName,
+      category: "Utility",
+      description: override.tooltip,
+      meta: "utility",
+      utilityId,
+    });
+  }
+  for (const variant of ARRAY_NODE_VARIANTS) {
+    const meta = ARRAY_VARIANT_META[variant];
+    items.push({
+      key: `array::${variant}`,
+      name: meta.name,
+      category: "Array",
+      description: meta.description,
+      meta: "array",
+      arrayVariant: variant,
+    });
+  }
+  items.push({
+    key: "math::expression",
+    name: "Math expression",
+    category: "Math",
+    description: "Free-form FeatureScript expression.",
+    meta: "math",
+    isMathExpression: true,
+  });
+  for (const def of groupDefinitions) {
+    items.push({
+      key: `group::${def.id}`,
+      name: def.name,
+      category: "Group instance",
+      description: "Place another instance of this group.",
+      meta: "group",
+      groupDefinitionId: def.id,
+    });
+  }
+  return items;
+}
+
+/** Ranked search over the full insertable catalog. */
+export function searchPaletteInsertables(items: readonly PaletteInsertable[], term: string): PaletteInsertable[] {
+  return ranked(items, term);
+}
+
+/** Group insertables by category, sorted by category then name. */
+export function groupInsertablesByCategory(items: readonly PaletteInsertable[]): { category: string; entries: PaletteInsertable[] }[] {
+  const map = new Map<string, PaletteInsertable[]>();
+  for (const i of items) map.set(i.category, [...(map.get(i.category) ?? []), i]);
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([category, list]) => ({ category, entries: [...list].sort((a, b) => a.name.localeCompare(b.name)) }));
 }
 
 export interface CategoryGroup { category: string; entries: CatalogEntry[] }
