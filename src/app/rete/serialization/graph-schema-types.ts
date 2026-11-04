@@ -67,7 +67,8 @@ export type SerializedNodeKind =
     | "array-size"
     | "map-array"
     | "for-each"
-    | "bounded-for";
+    | "bounded-for"
+    | "group-instance";
 
 export interface Vec2 {
     x: number;
@@ -176,7 +177,41 @@ export type SerializedNode =
     | SerializedArraySizeNode
     | SerializedMapArrayNode
     | SerializedForEachNode
-    | SerializedBoundedForNode;
+    | SerializedBoundedForNode
+    | SerializedGroupInstanceNode;
+
+/** A placed group instance (#14): references a definition stored once per graph. */
+export interface SerializedGroupInstanceNode extends SerializedNodeBase {
+    kind: "group-instance";
+    definitionId: string;
+    muted?: boolean;
+}
+
+/** One declared boundary socket of a group definition (#14). */
+export interface SerializedGroupSocket {
+    id: string;
+    label: string;
+    direction: "input" | "output";
+    nodeId: string;
+    socketKey: string;
+    valueType?: string;
+    defaultLiteral?: string;
+}
+
+/**
+ * One group definition (#14): the subgraph, stored once per graph. Member
+ * nodes appear here and not in the top-level `nodes` array; instances
+ * reference the definition by `id`. Member nodes may themselves be group
+ * instances (nesting), referencing other definitions in the same array.
+ */
+export interface SerializedGroupDefinition {
+    id: string;
+    name: string;
+    nodes: SerializedNode[];
+    connections: SerializedConnection[];
+    inputs: SerializedGroupSocket[];
+    outputs: SerializedGroupSocket[];
+}
 
 /**
  * Issue #12: array and iteration nodes. Value types are stored whole (not
@@ -263,6 +298,10 @@ export interface SerializedGraph {
      * frames, so pre-#13 documents and graphs keep their exact shape.
      */
     frames?: SerializedFrame[];
+    /**
+     * Group definitions (#14), stored once per graph. Omitted when empty.
+     */
+    groupDefinitions?: SerializedGroupDefinition[];
 }
 
 /**
