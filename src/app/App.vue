@@ -90,6 +90,8 @@ export default defineComponent({
       graphName: 'My Graph',
       /** #8: catalog palette visibility. */
       paletteOpen: false,
+      /** #14: group editing breadcrumb, from the toolbar down to the open group. */
+      groupBreadcrumb: [] as string[],
       /** #16: debug grid panel visibility plus a graph-change pulse the panel debounces. */
       debugGridOpen: false,
       debugGraphVersion: 0,
@@ -363,6 +365,22 @@ export default defineComponent({
      */
     async onShortcutKeydown(event: KeyboardEvent) {
       if (dialogService.current != null) return;
+      // #14: Tab enters/exits a group, M mutes the selection. Neither is a
+      // registered command, and neither may fire while typing.
+      const target = event.target as HTMLElement | null;
+      const typing = target != null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (!typing && event.key === 'Tab') {
+        event.preventDefault();
+        this.groupBreadcrumb = await this.controls?.toggleGroupEdit() ?? [];
+        return;
+      }
+      if (!typing && (event.key === 'm' || event.key === 'M')) {
+        const muted = await this.controls?.toggleMuteSelected();
+        if (muted != null && muted > 0) {
+          this.featureStudioHost()?.reportMessage(`Muted ${muted} selected node${muted === 1 ? '' : 's'} (M toggles).`);
+        }
+        return;
+      }
       const command = matchCommand(event, event.target, editorSettings.getBindings());
       if (command == null) return;
       event.preventDefault();
@@ -407,7 +425,7 @@ export default defineComponent({
 </script>
 
 <template>
-  <TopBar :project-name="graphName" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
+  <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
     @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" />
   <main class="rete" ref="rete"></main>

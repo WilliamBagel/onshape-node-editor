@@ -64,6 +64,9 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
    */
   public group: string | null = null;
 
+  /** #14: muted nodes emit nothing in codegen (toggled with M). Not serialized for ordinary nodes. */
+  public muted = false;
+
   /**
    * #13: rete-scopes-plugin reads/writes `node.parent` to parent nodes into
    * frames (drag-to-frame, drag-frame-with-children, auto-resize). `group`
