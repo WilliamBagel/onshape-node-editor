@@ -1,6 +1,6 @@
 <template>
     <div class="socket-container">
-        <div class="socket" :class="classObject" :title="data.name" :style="{ 'background-color': color }"></div>
+        <div class="socket" :class="classObject" :title="label" :style="{ 'background-color': color }"></div>
         <SnappingSocket :data="data"></SnappingSocket>
     </div>
 </template>
@@ -10,6 +10,7 @@ import { defineComponent } from 'vue';
 import SnappingSocket from '../rete/connection-snapping/SnappingSocket.vue';
 import { OnshapeSocket } from '../rete/onshapesockets';
 import { OnshapeOutput } from '../rete/inputoutput/onshapeoutput.js';
+import { valueTypeLabel, valueTypeColorKey } from '../onshape-utils/valuetypes';
 import { OnshapeInput } from '../rete/inputoutput/onshapeinput.js';
 
 export default defineComponent({
@@ -29,8 +30,21 @@ export default defineComponent({
         color() {
             const data = this.data as OnshapeInput<any> | OnshapeOutput;
             const socket = data.socket as OnshapeSocket;
+            // Colour is driven by the socket's value type (issue #9);
+            // fall back to the input/output type string for legacy sockets.
+            if (socket.valueType != null && socket.valueType.name !== 'unknown') {
+                return socket.styleSettings.getStyle(valueTypeColorKey(socket.valueType));
+            }
             const color = socket.styleSettings.getStyle(data.type);
             return color;
+        },
+        label() {
+            const data = this.data as OnshapeInput<any> | OnshapeOutput;
+            const socket = data.socket as unknown as OnshapeSocket | undefined;
+            if (socket?.valueType != null && socket.valueType.name !== 'unknown') {
+                return valueTypeLabel(socket.valueType);
+            }
+            return socket?.name ?? '';
         },
     }
 })
@@ -56,7 +70,7 @@ export default defineComponent({
 }
 
 .socket {
-    border: 0.5px solid rgb(0, 0, 0);
+    border: 0.5px solid var(--ink);
     width: $socket-size;
     height: $socket-size * 2;
 }

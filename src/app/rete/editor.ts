@@ -14,7 +14,7 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, applyPreferences, serializeGraph, loadGraph } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, applyPreferences, serializeGraph, loadGraph } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -82,6 +82,8 @@ export async function createEditor(container: HTMLElement) {
     getNodeOrder: () => nodeOrder.getOrder(),
     fitView,
     deleteSelectedNodes,
+    createFrameFromSelection,
+    toggleFrameCollapsed,
     applyPreferences,
     destroy: () => area.destroy(),
     selectNode: async (nodeId: string) => {

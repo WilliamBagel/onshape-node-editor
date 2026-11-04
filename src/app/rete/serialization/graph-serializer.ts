@@ -14,6 +14,7 @@
  */
 import type { NodeEditor } from "rete";
 import { OnshapeNode } from "../nodes/onshapenode";
+import { FrameNode } from "../nodes/framenode";
 import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
@@ -25,6 +26,7 @@ import {
     GRAPH_SCHEMA_VERSION,
     LOADABLE_SCHEMA_VERSIONS,
     SerializedConnection,
+    SerializedFrame,
     SerializedGraph,
     SerializedNode,
     SerializedNodeBase,
@@ -35,6 +37,7 @@ import {
 } from "./graph-schema-types";
 
 export interface LoadedGraph {
+    /** Every node, frames first (the scopes plugin needs parents added before children). */
     nodes: OnshapeNode[];
     connections: Connection<OnshapeNode, OnshapeNode>[];
     /** Node id -> canvas position, for `area.translate` on load. */
@@ -77,7 +80,21 @@ export function serializeGraph(
     positions: Record<string, Vec2 | null> = {},
     nodeOrder: readonly string[] = []
 ): SerializedGraph {
-    const nodes = editor.getNodes().map((node) => {
+    // #13: frames serialize apart from codegen nodes — "frame" is not in
+    // SUPPORTED_KINDS and must not hit the unknown-kind refusal below. They
+    // also stay out of `nodeOrder`: the canvas pins frame elements behind
+    // their children instead of stacking them with the nodes.
+    const frames: SerializedFrame[] = [];
+    const nodes = editor.getNodes().filter((node) => {
+        if (node instanceof FrameNode) {
+            frames.push({
+                ...node.toFrameJSON(),
+                position: positions[node.id] ?? null,
+            });
+            return false;
+        }
+        return true;
+    }).map((node) => {
         const serialized = node.toJSON() as SerializedNode;
         if (!SUPPORTED_KINDS.includes(serialized.kind)) {
             throw new Error(
@@ -102,7 +119,9 @@ export function serializeGraph(
         schemaVersion: GRAPH_SCHEMA_VERSION,
         nodes,
         connections,
-        nodeOrder: reconcileOrder(nodeOrder, editor.getNodes().map((node) => node.id)),
+        nodeOrder: reconcileOrder(nodeOrder, nodes.map((node) => node.id)),
+        // Omitted when empty so pre-#13 documents keep their exact shape.
+        ...(frames.length > 0 ? { frames } : {}),
     };
 }
 
@@ -144,6 +163,39 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
         return { ok: false, error: "Graph could not be loaded: \"nodes\" must be an array." };
     }
 
+    // #13: rebuild frames first — a child's `group` (the scopes plugin's
+    // `parent`) points at a frame id, and the plugin refuses a node whose
+    // parent does not exist yet. Frame ids also bound `group` validation:
+    // a dangling group is repaired to null with a warning, like `nodeOrder`.
+    const frameIds = new Set<string>();
+    if (document.frames !== undefined) {
+        if (!Array.isArray(document.frames)) {
+            return { ok: false, error: "Graph could not be loaded: \"frames\" must be an array." };
+        }
+        for (const [index, serialized] of document.frames.entries()) {
+            if (serialized == null || typeof serialized !== "object" || typeof serialized.id !== "string") {
+                return { ok: false, error: `Graph could not be loaded: frame ${index} is malformed.` };
+            }
+            const frame = FrameNode.fromJSON(serialized as SerializedFrame);
+            if (byId.has(frame.id)) {
+                return { ok: false, error: `Graph could not be loaded: duplicate node id "${frame.id}".` };
+            }
+            nodes.push(frame);
+            byId.set(frame.id, frame);
+            frameIds.add(frame.id);
+            positions[frame.id] = serialized.position ?? null;
+        }
+        // A frame's own group must name another frame in the document.
+        for (const frame of nodes) {
+            if (frame instanceof FrameNode && frame.group != null && !frameIds.has(frame.group)) {
+                warnings.push(
+                    `Frame "${frame.id}" referenced missing parent frame "${frame.group}"; the frame was loaded unnested.`
+                );
+                frame.group = null;
+            }
+        }
+    }
+
     for (const [index, serialized] of document.nodes.entries()) {
         const problem = validateNodeBase(serialized, index);
         if (problem != null) {
@@ -182,10 +234,20 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
         nodes.push(node);
         byId.set(node.id, node);
         positions[node.id] = serialized.position ?? null;
+
+        // A grouped node whose frame is missing from the document loads
+        // ungrouped (the scopes plugin would otherwise refuse it), with a
+        // warning naming the dangling reference.
+        if (node.group != null && !frameIds.has(node.group)) {
+            warnings.push(
+                `Node "${node.id}" referenced missing frame "${node.group}"; the node was loaded ungrouped.`
+            );
+            node.group = null;
+        }
     }
 
-    const nodeIds = nodes.map((node) => node.id);
-    const orderResult = readNodeOrder(document, version, nodeIds, warnings);
+    const orderIds = nodes.filter((node) => !(node instanceof FrameNode)).map((node) => node.id);
+    const orderResult = readNodeOrder(document, version, orderIds, warnings);
     if (orderResult.ok === false) {
         return { ok: false, error: orderResult.error };
     }

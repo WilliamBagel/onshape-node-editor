@@ -62,6 +62,9 @@ jobs:
       - name: "Type-check"
         run: pnpm run type-check
 
+      - name: Style guide gate (#33)
+        run: pnpm run style-check
+
       - name: Unit tests
         run: pnpm test
 

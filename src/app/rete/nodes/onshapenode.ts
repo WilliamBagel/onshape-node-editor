@@ -48,6 +48,20 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
    */
   public group: string | null = null;
 
+  /**
+   * #13: rete-scopes-plugin reads/writes `node.parent` to parent nodes into
+   * frames (drag-to-frame, drag-frame-with-children, auto-resize). `group`
+   * is the serialized name for the same id, so `parent` is an alias over it
+   * — one source of truth, no sync to forget.
+   */
+  public get parent(): string | undefined {
+    return this.group ?? undefined;
+  }
+
+  public set parent(value: string | undefined) {
+    this.group = value ?? null;
+  }
+
   public nodeUpdateCounter: number = 0;
 
   public updateCallback: () => void = () => { };

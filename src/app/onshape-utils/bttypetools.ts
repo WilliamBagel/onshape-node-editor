@@ -1,5 +1,6 @@
 import { BTParameterSpec6, BTParameterSpecEnum171, BTParameterSpecQuantity173, BTParameterVisibilityCondition177, BTParameterVisibilityLogical178, BTParameterVisibilityOnEqual180, BTMParameterQuantity147, BTParameterSpecQuery174, BTMParameterQueryList148 } from 'onshape-typescript-fetch';
 import { BooleanType, EnumType, OnshapeType, QueryListType, ValueWithUnitsType } from './featurescripttypes';
+import { valueTypeFromBTParameterSpec } from './valuetypes';
 
 export function evaluateVisibilityCondition(
     condition: BTParameterVisibilityCondition177,
@@ -116,14 +117,12 @@ export function getSpecFromFeatureSpec(parameterSpec: BTParameterSpec6): Onshape
 }
 
 export function btTypeToFeaturescriptType(btType: string): string {
-    if (btType === 'BTParameterSpecQuantity-173') {
-        return "ValueWithUnits";
-    } else if (btType === 'BTParameterSpecEnum-171') {
-        return "enum";
-    } else if (btType === 'BTParameterSpecBoolean-170') {
-        return "boolean";
-    } else if (btType === 'BTParameterSpecQuery-174') {
-        return "Query";
-    }
+    // Delegates to the typed value model (issue #9) so the BT mapping lives
+    // in exactly one place; outputs are unchanged from the previous table.
+    const name = valueTypeFromBTParameterSpec({ btType }).name;
+    if (name === 'ValueWithUnits') return "ValueWithUnits";
+    if (name === 'Enum') return "enum";
+    if (name === 'boolean') return "boolean";
+    if (name === 'Query') return "Query";
     return "string";
 }
