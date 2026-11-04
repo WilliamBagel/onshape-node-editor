@@ -214,29 +214,63 @@ export default defineComponent({
 // Card per STYLE_GUIDE.md: white, 1px hairline, 4–6px radius, flat (no shadow
 // heavier than 0 1px 3px rgba(0,0,0,.08)). The vendored woolsthorpe.css gives
 // `.ns-dialog-frame` a 0 5px 10px drop shadow; the rules below replace it.
-// Tokens live once, in src/app/common.css.
+//
+// Node type/palette (#35), deliberate for a populated graph at 100% zoom —
+// NOT the rejected #32 page tokens (12px/600 title + 11px muted labels/values)
+// and NOT the accidental pre-#32 defaults (17px/15px pure black):
+//  - Title 14px/600 in warm ink: one step above values, weight + size carry
+//    the header; 17px made every node shout over its neighbours when many
+//    nodes are on screen, 12px made the header indistinguishable from rows.
+//  - Labels 12px/400 in the SAME warm ink at 60% opacity; values 13px/400
+//    in warm ink at 100% (mono 12px for literal input text). Hierarchy is
+//    opacity + size/mono, never a second grey hue, so values stay legible
+//    (11px at secondary opacity was the rejected failure mode) while labels
+//    recede. Warm ink is #1a1a1a, not pure black, so dense rows are quieter.
+//  - Palette follows the amended guide (d6fb185): hairline #d9d9d4,
+//    hover-sharpened hairline #8c8c86, steel-blue #2f5f8f for selection/focus
+//    only. The slate/blue page tokens in common.css are not used here.
+// Tokens are node-local (under `.node`) by design: the global token layer in
+// src/app/common.css is owned by another change, so no hex lives outside
+// this scoped stylesheet's own definitions.
 .node {
+  --node-ink: #1a1a1a;
+  --node-hairline: #d9d9d4;
+  --node-hairline-strong: #8c8c86;
+  --node-accent: #2f5f8f;
+  --node-font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --node-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --node-title-size: 14px;
+  --node-title-weight: 600;
+  --node-title-line-height: 1.2;
+  --node-label-size: 12px;
+  --node-label-weight: 400;
+  --node-label-line-height: 1.35;
+  --node-label-opacity: 0.6;
+  --node-value-size: 13px;
+  --node-value-weight: 400;
+  --node-value-line-height: 1.35;
+  --node-value-mono-size: 12px;
+
   .ns-dialog-frame {
     background: var(--surface);
-    border: 1px solid var(--border-hairline);
+    border: 1px solid var(--node-hairline);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-1);
   }
 
   &:hover .ns-dialog-frame {
-    border-color: var(--border-strong);
+    border-color: var(--node-hairline-strong);
   }
 
   &.selected .ns-dialog-frame {
-    border-color: var(--accent);
+    border-color: var(--node-accent);
     box-shadow: var(--shadow-1);
   }
 
-  // Header strip: keep the card's structural hairline; typography and colour
-  // intentionally left as they were before #32 (see issue: node type/palette).
+  // Header strip: structural hairline only; header type is set below.
   .ns-dialog-header {
     background: var(--surface);
-    border-bottom: 1px solid var(--border-hairline);
+    border-bottom: 1px solid var(--node-hairline);
     border-radius: var(--radius-card) var(--radius-card) 0 0;
   }
 }
@@ -265,31 +299,89 @@ export default defineComponent({
   margin-right: - round($socket-overflow, 1px);
 }
 
-// Node typography/colour are unchanged from before #32; a deliberate pass is
-// tracked in its own issue rather than being folded into the style retrofit.
+// Node title (#35): 14px/600 warm ink at 100% opacity, 1.2 line-height.
+// `!important` retained only to beat the vendored woolsthorpe.css title size.
 .ns-dialog-title,
 .os-dialog-header-rename-textbox {
-  color: black !important;
-  font-size: 17px !important;
+  color: var(--node-ink) !important;
+  font-family: var(--node-font-sans);
+  font-size: var(--node-title-size) !important;
+  font-weight: var(--node-title-weight) !important;
+  line-height: var(--node-title-line-height) !important;
+  opacity: 1;
   outline: none;
+}
+
+// Steel-blue accent is reserved for focus (and selection, above).
+.os-dialog-header-rename-textbox:focus {
+  outline: 1px solid var(--node-accent);
+  outline-offset: 1px;
 }
 
 .os-param-wrapper {
   flex-wrap: nowrap;
   overflow: visible;
 
-  // 11px fields/values; secondary text is the guide's muted grey.
+  // Parameter labels (#35): 12px/400 warm ink at 60% opacity — secondary by
+  // opacity, not by a second grey hue.
   .output-title,
   .os-param-label {
     vertical-align: middle;
     display: inline-block;
     margin: $socket-margin;
     user-select: none;
-    color: black;
+    color: var(--node-ink);
+    opacity: var(--node-label-opacity);
+    font-family: var(--node-font-sans);
+    font-weight: var(--node-label-weight);
+    line-height: var(--node-label-line-height);
     padding-top: 0px;
-    font-size: 15px;
+    font-size: var(--node-label-size);
     overflow: visible;
     align-self: center;
+  }
+}
+
+// Values inside child components (OnshapeInput / controls) still carry their
+// own scoped 15px/black label rules; `:deep` from this node is the single
+// place the #35 scale is applied, without editing those files.
+// Labels in children get the same 12px/400/60%-opacity treatment.
+.node {
+  :deep(.input-title),
+  :deep(.os-param-label) {
+    color: var(--node-ink) !important;
+    opacity: var(--node-label-opacity) !important;
+    font-family: var(--node-font-sans) !important;
+    font-size: var(--node-label-size) !important;
+    font-weight: var(--node-label-weight) !important;
+    line-height: var(--node-label-line-height) !important;
+  }
+
+  // Literal values: text/number inputs and textareas are mono 12px/400 at
+  // 100% opacity (guide: monospace 12px for literal values) — one step
+  // below the 13px sans value size, but legible and digit-aligned.
+  :deep(input[type='text']),
+  :deep(input[type='number']),
+  :deep(input:not([type])),
+  :deep(textarea) {
+    color: var(--node-ink) !important;
+    opacity: 1;
+    font-family: var(--node-font-mono) !important;
+    font-size: var(--node-value-mono-size) !important;
+    font-weight: var(--node-value-weight) !important;
+    line-height: var(--node-value-line-height) !important;
+  }
+
+  // Non-literal values (enum/select surfaces): 13px/400 sans at 100%.
+  :deep(select),
+  :deep(.os-select-container),
+  :deep(.select-input) {
+    color: var(--node-ink) !important;
+    opacity: 1;
+    font-family: var(--node-font-sans) !important;
+    font-size: var(--node-value-size) !important;
+    font-weight: var(--node-value-weight) !important;
+    line-height: var(--node-value-line-height) !important;
   }
 }
 
