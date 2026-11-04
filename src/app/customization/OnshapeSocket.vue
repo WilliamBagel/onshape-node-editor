@@ -55,7 +55,12 @@ export default defineComponent({
 
 
 .socket-container {
-    z-index: 1;
+    // Port boxes must paint ABOVE the node's selection ring/border at every
+    // edge (issue #37). This z-index lives INSIDE the node's own stacking
+    // context (.feature-dialog-main uses `isolation: isolate`), so it can
+    // never affect inter-node paint order: NodeOrderKeeper (DR-007) remains
+    // the sole owner of node stacking. Never add a per-node z-index here.
+    z-index: 2;
     position: relative;
 }
 

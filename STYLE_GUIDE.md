@@ -10,6 +10,25 @@ Choose the palette deliberately; do not inherit a framework default. The stock "
 - Text: warm ink `#1a1a1a` primary. Hierarchy comes from opacity (100/60/40%), not from swapping in a second grey hue; if a solid secondary is unavoidable use `#5a5a55`.
 - Accents (desaturated, chosen): selection/focus steel blue `#2f5f8f` (sparingly — border, checkbox); ports/wires carry a muted teal `#2a8f82` for flow/data; error `#b4443c`. Greyscale carries ~95% of the UI. No purple/indigo, no neon cyan.
 
+## Port colours: data-encoding exception
+Port fills are **data encoding, not chrome**: each value type must be tellable apart at 100% zoom, so ports may be brighter and more saturated than the page palette. The muted tokens collapse easily-confused types into near-identical colours (regression #33), so the socket style table in `src/app/rete/stylesettings.ts` maps each family to one bright `--socket-*` token defined in `src/app/common.css` (the one palette file; hues informed by the pre-#33 values `#4EC9B0`, `#B2DDF6`, `#4FC1FF`, `#B5CEA8`, `#4e94ce`, `#CE9178`, tuned to read on the white node surface). The chrome bans above (muted greys, no saturated fills) do **not** apply to these data encodings. Chosen hues (one per family):
+| Value family | Fill (token) | Hue family |
+|---|---|---|
+| Query (`Query`, `QueryList`) | `#4ec9b0` (`--socket-query`) | teal-green |
+| Id | `#4e94ce` (`--socket-id`) | steel blue |
+| ValueWithUnits (`BTParameterSpecQuantity-*`) | `#e5a93d` (`--socket-quantity`) | amber |
+| Enum | `#ce9178` (`--socket-enum`) | salmon orange |
+| Boolean | `#7fb069` (`--socket-boolean`) | clear green |
+| String | `#e8799b` (`--socket-string`) | pink |
+| Vector | `#4fc1ff` (`--socket-vector`) | cyan |
+| Matrix | `#8e7cc3` (`--socket-matrix`) | light violet |
+| Transform | `#d95763` (`--socket-transform`) | rose-red |
+| CoordSystem | `#a3d977` (`--socket-coordsystem`) | lime |
+| number | `#f2d06b` (`--socket-number`) | warm yellow |
+| map | `#6fa8dc` (`--socket-map`) | sky blue |
+| Context | `#26a69a` (`--socket-context`) | deep teal |
+Selection of a node is a ring **behind** the ports (outer `box-shadow` on `.ns-dialog-frame`, #37): ports paint above the outline at every edge. Intra-node z-index is scoped by `isolation: isolate` on `.feature-dialog-main`; node paint order stays owned by `NodeOrderKeeper` (DR-007) — never add a per-node z-index.
+
 ## Shape & spacing
 - Node cards: 4–6px radius. Header strip slightly differentiated: white with a heavier bottom hairline.
 - Ports: small rects (~8px) hugging the node edge, teal when connected, hollow when not; wires 1–2px gentle bezier, grey or low-sat port color.
