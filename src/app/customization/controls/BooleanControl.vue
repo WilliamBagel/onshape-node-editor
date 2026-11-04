@@ -36,8 +36,8 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@use "sass:math";
-
+/* Checkbox per STYLE_GUIDE.md: hairline square, accent only when checked
+   (the guide allows the accent on a checkbox). Tokens live in common.css. */
 .os-param-checkbox {
     margin-left: 2px;
     margin-right: -4px;
@@ -51,5 +51,22 @@ export default {
     order: initial;
     margin-right: 3px;
     flex-direction: row-reverse;
+}
+
+.os-checkbox-indicator {
+    width: 12px;
+    height: 12px;
+    background-color: var(--surface);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-keycap);
+}
+
+label.os-param-checkbox input.os-param-checkbox-input:checked ~ .os-checkbox-indicator {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+
+label.os-param-checkbox input.os-param-checkbox-input:focus-visible ~ .os-checkbox-indicator {
+    box-shadow: 0 0 0 1px var(--accent);
 }
 </style>

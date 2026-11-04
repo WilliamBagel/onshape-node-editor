@@ -1,3 +1,53 @@
 body {
     user-select: none;
 }
+
+/*
+ * Style-guide tokens (STYLE_GUIDE.md) — the one palette.
+ *
+ * Every UI file consumes these names instead of literal hex values. Colours,
+ * radii and shadows are declared here only; text hierarchy is carried by
+ * opacity, not by extra hues. `common.css` is linked from `index.html`, so the
+ * block is global; component styles stay scoped.
+ */
+:root {
+    /* Surfaces: white cards on a near-white canvas. */
+    --canvas-bg: #fafafa;
+    --canvas-grid: #eeeeee;
+    --surface: #ffffff;
+    --surface-sunken: #f5f5f5;
+
+    /* Hairlines. */
+    --border-hairline: #d4d4d4;
+    --border-strong: #9ca3af;
+    --border-subtle: #eeeeee;
+
+    /* Text: hierarchy via opacity, not hue. */
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+
+    /* Accents, desaturated and used sparingly. */
+    --accent: #3b82f6;
+    --accent-flow: #14b8a6;
+    --danger: #e06c75;
+    /* The guide names no warning hue; this matches #30's design-check tab. */
+    --warning: #b45309;
+    --on-accent: #ffffff;
+
+    /* Shape. */
+    --radius-card: 5px;
+    --radius-control: 4px;
+    --radius-keycap: 3px;
+    --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --hover-tint: rgba(31, 41, 55, 0.06);
+    --active-tint: rgba(31, 41, 55, 0.12);
+
+    /* Type. */
+    --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    --font-size-title: 12px;
+    --font-size-field: 11px;
+    --font-size-keycap: 10px;
+    --opacity-secondary: 0.6;
+    --opacity-faint: 0.4;
+}

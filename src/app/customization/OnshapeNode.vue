@@ -210,11 +210,36 @@ export default defineComponent({
 // Paint order is DOM order, owned by the canvas (#27, DR-007): nodes are
 // reordered by `NodeOrderKeeper`, so there is no z-index here to fight it.
 // `z-index: -1` used to paint every node behind the canvas background.
+//
+// Card per STYLE_GUIDE.md: white, 1px hairline, 4–6px radius, flat (no shadow
+// heavier than 0 1px 3px rgba(0,0,0,.08)). The vendored woolsthorpe.css gives
+// `.ns-dialog-frame` a 0 5px 10px drop shadow; the rules below replace it.
+// Tokens live once, in src/app/common.css.
 .node {
-  &.selected {
-    .ns-dialog-frame {
-      box-shadow: 0 5px 10px #393939;
-    }
+  .ns-dialog-frame {
+    background: var(--surface);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1);
+  }
+
+  &:hover .ns-dialog-frame {
+    border-color: var(--border-strong);
+  }
+
+  &.selected .ns-dialog-frame {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-1);
+  }
+
+  // Header strip: white with a heavier bottom hairline.
+  .ns-dialog-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-hairline);
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    color: var(--text-primary);
+    font-size: var(--font-size-title);
+    font-weight: 600;
   }
 }
 
@@ -242,10 +267,12 @@ export default defineComponent({
   margin-right: - round($socket-overflow, 1px);
 }
 
+// 12px node titles, 600 weight (the guide's node-title size).
 .ns-dialog-title,
 .os-dialog-header-rename-textbox {
-  color: black !important;
-  font-size: 17px !important;
+  color: var(--text-primary) !important;
+  font-size: var(--font-size-title) !important;
+  font-weight: 600 !important;
   outline: none;
 }
 
@@ -253,15 +280,16 @@ export default defineComponent({
   flex-wrap: nowrap;
   overflow: visible;
 
+  // 11px fields/values; secondary text is the guide's muted grey.
   .output-title,
   .os-param-label {
     vertical-align: middle;
     display: inline-block;
     margin: $socket-margin;
     user-select: none;
-    color: black;
+    color: var(--text-secondary);
     padding-top: 0px;
-    font-size: 15px;
+    font-size: var(--font-size-field);
     overflow: visible;
     align-self: center;
   }

@@ -20,6 +20,7 @@ import {
 } from '../logging/buildlog'
 import { BuildLogStore } from '../logging/buildlog'
 import { copyTextToClipboard } from '../logging/clipboard'
+import SvgIcon from './SvgIcon.vue'
 
 const props = defineProps<{ store: BuildLogStore }>()
 
@@ -114,7 +115,8 @@ function severityClass(severity: LogSeverity): string {
       <button class="icon-btn" :aria-expanded="!collapsed" aria-label="Toggle build log"
         v-tooltip="{ label: collapsed ? 'Show log' : 'Hide log', description: 'Show or hide the build, upload and run log.' }"
         @click="collapsed = !collapsed">
-        <span class="chevron" :class="{ 'chevron--collapsed': collapsed }" aria-hidden="true">▾</span>
+        <SvgIcon class="chevron" :class="{ 'chevron--collapsed': collapsed }" href="#svg-icon-arrow-down" :size="12"
+          aria-hidden="true" />
       </button>
       <span class="log-title">Build Log</span>
 
@@ -133,9 +135,13 @@ function severityClass(severity: LogSeverity): string {
       <button class="text-btn" :disabled="entries.length === 0" aria-label="Copy log to clipboard"
         v-tooltip="{ label: 'Copy log', description: 'Copy every entry, including generated source, to the clipboard.' }"
         @click="copyAll">
+        <SvgIcon href="#svg-icon-copy-button" :size="12" aria-hidden="true" />
         {{ copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy' }}
       </button>
-      <button class="text-btn" :disabled="entries.length === 0" aria-label="Clear log" @click="clearLog">Clear</button>
+      <button class="text-btn" :disabled="entries.length === 0" aria-label="Clear log" @click="clearLog">
+        <SvgIcon href="#svg-icon-trash" :size="12" aria-hidden="true" />
+        Clear
+      </button>
     </header>
 
     <div v-show="!collapsed" ref="listElement" class="log-body">
@@ -171,6 +177,9 @@ function severityClass(severity: LogSeverity): string {
 </template>
 
 <style scoped>
+/* The palette lives once, in src/app/common.css (STYLE_GUIDE.md): white
+   surface, hairline border, one 1px-3px shadow, 12/11px type, monospace for
+   literal values, severity carried by the accent rule rather than by fills. */
 .log-panel {
   position: fixed;
   right: 12px;
@@ -180,12 +189,13 @@ function severityClass(severity: LogSeverity): string {
   flex-direction: column;
   width: 520px;
   max-width: calc(100vw - 24px);
-  background: #ffffff;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-  color: #3a3a3a;
+  background: var(--surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-1);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  font-size: var(--font-size-field);
   overflow: hidden;
 }
 
@@ -195,8 +205,8 @@ function severityClass(severity: LogSeverity): string {
   gap: 6px;
   height: 28px;
   padding: 0 6px;
-  border-bottom: 1px solid #e0e0e0;
-  background: #fafafa;
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--surface-sunken);
   user-select: none;
 }
 
@@ -212,20 +222,18 @@ function severityClass(severity: LogSeverity): string {
   height: 18px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
   background: transparent;
-  color: #3a3a3a;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .icon-btn:hover {
-  background: #ebebeb;
+  background: var(--hover-tint);
+  color: var(--text-primary);
 }
 
 .chevron {
-  display: inline-block;
-  font-size: 10px;
-  line-height: 1;
   transition: transform 0.1s ease;
 }
 
@@ -234,9 +242,9 @@ function severityClass(severity: LogSeverity): string {
 }
 
 .log-title {
-  font-size: 11px;
+  font-size: var(--font-size-title);
   font-weight: 600;
-  letter-spacing: 0.03em;
+  color: var(--text-primary);
 }
 
 .log-counts {
@@ -245,61 +253,64 @@ function severityClass(severity: LogSeverity): string {
   margin-left: 4px;
 }
 
+/* Neutral chips; only the severity word carries the accent. */
 .count {
   min-width: 16px;
   padding: 0 4px;
-  border-radius: 8px;
-  font-size: 10px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-keycap);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--font-size-keycap);
   line-height: 14px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
-.count--info {
-  background: #eef2f7;
-  color: #52606d;
-}
-
 .count--warning {
-  background: #fdf1dc;
-  color: #8a5a00;
+  color: var(--warning);
 }
 
 .count--error {
-  background: #fbe4e4;
-  color: #a32626;
+  color: var(--danger);
 }
 
 .log-filter {
   margin-left: auto;
   height: 20px;
-  border: 1px solid #dcdcdc;
-  border-radius: 4px;
-  background: #ffffff;
-  font-size: 10px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--font-size-field);
   font-family: inherit;
-  color: inherit;
+  color: var(--text-primary);
 }
 
+/* Ghost buttons: no fill until hover, one icon each. */
 .text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   height: 20px;
   padding: 0 6px;
-  border: 1px solid #dcdcdc;
-  border-radius: 4px;
-  background: #ffffff;
-  font-size: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-size: var(--font-size-field);
   font-family: inherit;
   font-weight: 500;
-  color: inherit;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .text-btn:hover:not(:disabled) {
-  background: #ebebeb;
+  background: var(--hover-tint);
+  border-color: var(--border-hairline);
+  color: var(--text-primary);
 }
 
 .text-btn:disabled {
-  opacity: 0.45;
+  opacity: var(--opacity-faint);
   cursor: default;
 }
 
@@ -307,13 +318,13 @@ function severityClass(severity: LogSeverity): string {
   max-height: 45vh;
   overflow-y: auto;
   padding: 4px 0;
-  background: #ffffff;
+  background: var(--surface);
 }
 
 .log-empty {
   margin: 8px 10px;
-  font-size: 11px;
-  color: #8a8a8a;
+  font-size: var(--font-size-field);
+  color: var(--text-secondary);
 }
 
 .log-entries {
@@ -324,27 +335,25 @@ function severityClass(severity: LogSeverity): string {
 
 .entry {
   padding: 3px 10px 3px 8px;
-  border-left: 3px solid transparent;
-  font-size: 11px;
+  border-left: 2px solid transparent;
+  font-size: var(--font-size-field);
   line-height: 1.45;
 }
 
 .entry + .entry {
-  border-top: 1px solid #f1f1f1;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .entry--info {
-  border-left-color: #b6c2ce;
+  border-left-color: var(--border-hairline);
 }
 
 .entry--warning {
-  border-left-color: #d99a1b;
-  background: #fffbf2;
+  border-left-color: var(--warning);
 }
 
 .entry--error {
-  border-left-color: #c33b3b;
-  background: #fdf5f5;
+  border-left-color: var(--danger);
 }
 
 .entry-line {
@@ -355,41 +364,42 @@ function severityClass(severity: LogSeverity): string {
 }
 
 .entry-time {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 10px;
-  color: #8a8a8a;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field);
+  color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 .entry-severity {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--font-size-field);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .entry--info .entry-severity {
-  color: #5b6b7c;
+  color: var(--text-secondary);
 }
 
 .entry--warning .entry-severity {
-  color: #8a5a00;
+  color: var(--warning);
 }
 
 .entry--error .entry-severity {
-  color: #a32626;
+  color: var(--danger);
 }
 
 .entry-source {
-  font-size: 10px;
+  font-size: var(--font-size-field);
   font-weight: 600;
-  color: #4a4a4a;
+  color: var(--text-primary);
+  opacity: var(--opacity-secondary);
 }
 
 .entry-node {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 10px;
-  color: #6b6b6b;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field);
+  color: var(--text-secondary);
 }
 
 .entry-message {
@@ -410,8 +420,8 @@ function severityClass(severity: LogSeverity): string {
   padding: 0;
   border: none;
   background: transparent;
-  color: #2f6fbe;
-  font-size: 10px;
+  color: var(--accent);
+  font-size: var(--font-size-field);
   font-family: inherit;
   text-decoration: underline;
   cursor: pointer;
@@ -422,15 +432,15 @@ function severityClass(severity: LogSeverity): string {
   padding: 0;
   border: none;
   background: transparent;
-  color: #6b6b6b;
-  font-size: 10px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-field);
   font-family: inherit;
   text-decoration: none;
   cursor: pointer;
 }
 
 .detail-copy:hover {
-  color: #2f6fbe;
+  color: var(--accent);
 }
 
 .entry-detail {
@@ -438,11 +448,11 @@ function severityClass(severity: LogSeverity): string {
   padding: 6px 8px;
   max-height: 160px;
   overflow: auto;
-  background: #f6f8fa;
-  border: 1px solid #e4e8ec;
-  border-radius: 4px;
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  font-size: 10px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field);
   line-height: 1.4;
   white-space: pre;
 }
