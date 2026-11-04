@@ -89,8 +89,8 @@ export default defineComponent({
 
 <style scoped>
 .frame-node {
-  background: #ffffff;
-  border: 1px solid #d9d9d4;
+  background: var(--surface);
+  border: 1px solid var(--border-hairline);
   border-radius: 5px;
   box-sizing: border-box;
   overflow: hidden;
@@ -101,7 +101,7 @@ export default defineComponent({
   align-items: center;
   gap: 6px;
   padding: 6px 8px;
-  border-bottom: 1px solid #e8e8e3;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .frame-accent {
@@ -115,7 +115,7 @@ export default defineComponent({
 .frame-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1f1f1c;
+  color: var(--text-primary);
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -126,16 +126,16 @@ export default defineComponent({
 .frame-title-edit {
   font-size: 14px;
   font-weight: 600;
-  color: #1f1f1c;
+  color: var(--text-primary);
   flex: 1 1 auto;
   min-width: 0;
-  border: 1px solid #b6b6b0;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 1px 4px;
 }
 
 .frame-title-edit:focus {
-  outline: 1px solid #2f5f8f;
+  outline: 1px solid var(--accent);
 }
 
 .frame-actions {
@@ -149,7 +149,7 @@ export default defineComponent({
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1px solid #d9d9d4;
+  border: 1px solid var(--border-hairline);
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
@@ -158,7 +158,7 @@ export default defineComponent({
 .frame-toggle {
   font-size: 12px;
   line-height: 1;
-  color: #4a4a45;
+  color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -167,8 +167,8 @@ export default defineComponent({
 }
 
 .frame-toggle:hover {
-  border-color: #d9d9d4;
-  color: #2f5f8f;
+  border-color: var(--border-hairline);
+  color: var(--accent);
 }
 
 .frame-body {
@@ -177,10 +177,10 @@ export default defineComponent({
 
 .frame-meta {
   font-size: 11px;
-  color: #6b6b66;
+  color: var(--text-secondary); opacity: var(--opacity-secondary);
 }
 
 .frame-node.selected {
-  border-color: #2f5f8f;
+  border-color: var(--accent);
 }
 </style>

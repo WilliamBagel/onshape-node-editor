@@ -40,6 +40,11 @@ const DEFERRED_PREFIX = ['src/app/rete/inputoutput/', 'src/app/customization/con
 // file+rule exceptions: { file, rule, reason }
 const EXCEPTIONS = [
   {
+    file: 'src/app/rete/nodes/framenode.ts',
+    rule: 'literal-hex',
+    reason: 'DEFAULT_FRAME_COLOR is serialized frame data consumed by <input type=color>, not a CSS style; it holds the canonical accent #2f5f8f',
+  },
+  {
     file: 'src/app/customization/background.css',
     rule: 'gradient',
     reason: 'linear-gradient is the canvas grid technique named in STYLE_GUIDE.md (faint #e6e6e3 grid on #f7f7f5); not a decorative colour gradient',
