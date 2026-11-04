@@ -24,6 +24,9 @@
           @value-change="onItemValueChange(itemIndex, memberIndex, $event)" />
         <QueryListControl v-else-if="element.type === 'QueryList'" :control="itemControl(itemIndex, memberIndex)"
           @value-change="onItemValueChange(itemIndex, memberIndex, $event)" />
+        <MapValueControl v-else-if="element.type === 'map'" :spec="element"
+          :model-value="mapValue(itemIndex, memberIndex)"
+          @update:model-value="onItemValueChange(itemIndex, memberIndex, $event)" />
       </div>
     </div>
     <button type="button" class="parameter-array-add" :disabled="!canAdd" @click="add">Add item</button>
@@ -37,6 +40,7 @@ import { OnshapeType, ParameterArrayItem, ParameterArrayType } from '../../onsha
 import {
   arrayItemLabel,
   canAddArrayItem,
+  defaultMapValue,
   moveArrayItem,
   removeArrayItem,
 } from '../../onshape-utils/parameterarray';
@@ -45,6 +49,12 @@ import EnumControl from './EnumControl.vue';
 import BooleanControl from './BooleanControl.vue';
 import StringControl from './StringControl.vue';
 import QueryListControl from './QueryListControl.vue';
+import MapValueControl from './MapValueControl.vue';
+
+/** Control values can be Vue reactive proxies; structuredClone rejects those. */
+function clonePlain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
 
 type ArrayControl = OnshapeInputControl<ParameterArrayType>;
 
@@ -61,11 +71,12 @@ export default {
     EnumControl,
     BooleanControl,
     StringControl,
-    QueryListControl
+    QueryListControl,
+    MapValueControl
   },
   data() {
     return {
-      items: structuredClone(this.control.getCurrentValue() ?? []) as ParameterArrayItem[],
+      items: clonePlain((this.control.getCurrentValue() ?? []) as ParameterArrayItem[]),
       // Shim controls, one per (item, member), cached so child controls
       // keep their internal state across re-renders.
       itemControls: {} as Record<string, OnshapeInputControl<any>>
@@ -100,6 +111,10 @@ export default {
       });
       return arrayItemLabel(this.spec, itemIndex, memberSpecs);
     },
+    mapValue(itemIndex: number, memberIndex: number): Record<string, unknown> {
+      const value = this.items[itemIndex]?.[this.memberId(memberIndex)];
+      return (value as Record<string, unknown>) ?? {};
+    },
     itemControl(itemIndex: number, memberIndex: number): OnshapeInputControl<any> {
       const key = `${itemIndex}:${memberIndex}`;
       let shim = this.itemControls[key];
@@ -114,16 +129,18 @@ export default {
       return shim;
     },
     emitChange() {
-      this.control.setValue(structuredClone(this.items));
-      this.$emit('value-change', structuredClone(this.items));
+      const copy = clonePlain(this.items);
+      this.control.setValue(copy);
+      this.$emit('value-change', clonePlain(copy));
     },
     add() {
       if (!this.canAdd) return;
       // New items start from each element spec's default value.
       const item: ParameterArrayItem = {};
       this.elements.forEach((element, memberIndex) => {
-        item[this.memberId(memberIndex)] =
-          element.type === 'QueryList' ? [] : structuredClone(element.value);
+        item[this.memberId(memberIndex)] = element.type === 'map'
+          ? defaultMapValue(element)
+          : element.type === 'QueryList' ? [] : structuredClone(element.value);
       });
       this.items = [...this.items, item];
       this.itemControls = {};

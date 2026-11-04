@@ -60,7 +60,6 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
                 paramInput.showLabel = false;
             }
         }
-        console.log(this);
     }
 
     public setUpdateCallback(callback: () => void): void {

@@ -122,7 +122,7 @@ body {
  * guide-maximum shadow. Doubled attribute keeps specificity above the
  * preset's scoped styles.
  */
-.menu[rete-context-menu] {
+.menu[rete-context-menu][rete-context-menu] {
     padding: 4px;
     width: 260px;
     max-width: min(380px, 80vw);
@@ -137,7 +137,7 @@ body {
     font-family: var(--font-sans);
 }
 
-.menu[rete-context-menu] .block {
+.menu[rete-context-menu][rete-context-menu] .block {
     color: var(--text-primary);
     background-color: var(--surface);
     border-bottom: 1px solid var(--hairline);
@@ -148,22 +148,22 @@ body {
     overflow-wrap: anywhere;
 }
 
-.menu[rete-context-menu] .block:hover {
+.menu[rete-context-menu][rete-context-menu] .block:hover {
     background-color: var(--surface-sunken);
 }
 
-.menu[rete-context-menu] .block:first-child {
+.menu[rete-context-menu][rete-context-menu] .block:first-child {
     border-top-left-radius: var(--radius-card);
     border-top-right-radius: var(--radius-card);
 }
 
-.menu[rete-context-menu] .block:last-child {
+.menu[rete-context-menu][rete-context-menu] .block:last-child {
     border-bottom-left-radius: var(--radius-card);
     border-bottom-right-radius: var(--radius-card);
     border-bottom: none;
 }
 
-.menu[rete-context-menu] .search {
+.menu[rete-context-menu][rete-context-menu] .search {
     color: var(--text-primary);
     background: var(--surface-sunken);
     border: 1px solid var(--hairline);
@@ -173,7 +173,33 @@ body {
     padding: 6px 8px;
 }
 
-.menu[rete-context-menu] .search:focus {
+.menu[rete-context-menu][rete-context-menu] .search:focus {
     outline: 1px solid var(--accent-steel);
     border-color: var(--accent-steel);
+}
+
+/* Submenus are positioned by the preset; give them the same surface/width
+ * instead of the preset's 120px default, and replace the "►" glyph (the
+ * "weird bracket" in the old menu) with a quiet CSS chevron. */
+.menu[rete-context-menu][rete-context-menu] .subitems {
+    width: 260px;
+    max-width: min(380px, 80vw);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1);
+    padding: 4px;
+}
+
+.menu[rete-context-menu][rete-context-menu] .hasSubitems:after {
+    content: "";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    border: solid var(--text-secondary);
+    border-width: 0 1.5px 1.5px 0;
+    transform: translateY(-50%) rotate(-45deg);
+    opacity: 1;
 }

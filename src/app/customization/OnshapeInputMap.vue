@@ -1,6 +1,8 @@
 <template>
     <div class="map-input-container os-param-fill-first-column">
-            <div class="map-input-header os-param-array-item-title os-parameter-array-item-expander node-expander"
+            <button type="button" class="map-input-header os-param-array-item-title os-parameter-array-item-expander node-expander"
+                :aria-expanded="isExpanded ? 'true' : 'false'"
+                @pointerdown.stop
                 @click="toggleExpanded">
                 <div class="map-header-content os-center-content">
                     <svg class=" map-dropdown-icon os-svg-icon osc-svg-vertical-align"
@@ -9,7 +11,7 @@
                     </svg>
                     <span class="map-header-title  os-param-label">{{ input.label }}</span>
                 </div>
-            </div>
+            </button>
         <!-- Map Parameters -->
         <div v-if="isExpanded" class="map-parameters">
             <template v-for="param in visibleParameters">
@@ -109,6 +111,15 @@ export default OnshapeInputMap
 }
 
 .map-input-header {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    color: inherit;
     cursor: pointer;
     user-select: none;
     pointer-events: auto;

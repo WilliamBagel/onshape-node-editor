@@ -127,9 +127,18 @@ export class BaseApp {
                 headElement.appendChild(cssLink);
 
                 promises.push(new Promise<void>((resolve) => {
-                    cssLink.onload = () => {
+                    let settled = false;
+                    const done = () => {
+                        if (settled) return;
+                        settled = true;
                         resolve();
-                    }
+                    };
+                    cssLink.onload = done;
+                    cssLink.onerror = done;
+                    // A warm HTTP cache can dispatch `load` before this handler
+                    // is attached, and a 404 must not leave the dev app blank.
+                    // The dev-only CSS is cosmetic, so never block mount on it.
+                    setTimeout(done, 2000);
                 }));
             }
 

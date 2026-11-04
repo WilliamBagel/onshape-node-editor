@@ -4,7 +4,7 @@ import { App } from './app'
 
 const app = new App();
 
-window.onload = () => {
+function start(): void {
     if (process.env.NODE_ENV === 'development') {
         console.log("Development mode; for UI only");
 
@@ -17,6 +17,12 @@ window.onload = () => {
 
     app.init();
 }
+
+// A cached/fast module can execute after the window `load` event has already
+// fired (headless Chrome, warm cache), in which case assigning onload would
+// never run and the app would render an empty page.
+if (document.readyState === 'complete') start();
+else window.addEventListener('load', start, { once: true });
 
 /**
  * Startup steps:

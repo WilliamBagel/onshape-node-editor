@@ -33,6 +33,46 @@ export function getArrayElementSpecs(spec: ParameterArrayType): OnshapeType<any>
     return spec.elements ?? (spec.element != null ? [spec.element] : []);
 }
 
+/** Converted member specs of a map element (used for arrays of maps). */
+export function getMapElementSpecs(element: OnshapeType<any>): OnshapeType<any>[] {
+    const raw = (element as { parameters?: BTParameterSpec6[] }).parameters;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((member, index) => {
+        const converted = getSpecFromFeatureSpec(member) as OnshapeType<any>;
+        const record = converted as Record<string, any>;
+        record.parameterId = (member as Record<string, any>).parameterId ?? `member${index}`;
+        record.label = (member as Record<string, any>).parameterName ?? record.label;
+        return converted;
+    });
+}
+
+function defaultValueOf(spec: OnshapeType<any>): unknown {
+    if (spec.type === "QueryList") return [];
+    if (spec.type === "map") return defaultMapValue(spec);
+    if (spec.type === "ParameterArray") return [];
+    return structuredClone(spec.value);
+}
+
+/** A fresh map value with every member at its spec default. */
+export function defaultMapValue(element: OnshapeType<any>): Record<string, unknown> {
+    const value: Record<string, unknown> = {};
+    for (const member of getMapElementSpecs(element)) {
+        const id = (member as { parameterId?: string }).parameterId ?? "member";
+        value[id] = defaultValueOf(member);
+    }
+    return value;
+}
+
+/** FeatureScript map literal for a map member value (`{ "key" : value }`). */
+export function mapValueToFeaturescript(element: OnshapeType<any>, value: unknown): string {
+    const record = (value ?? {}) as Record<string, unknown>;
+    const entries = getMapElementSpecs(element).map((member) => {
+        const id = (member as { parameterId?: string }).parameterId ?? "member";
+        return `"${id}": ${arrayMemberValueToFeaturescript(member, record[id])}`;
+    });
+    return `{ ${entries.join(", ")} }`;
+}
+
 /**
  * Member `parameterId`s in order. The converted element specs do not carry
  * ids, so ids come from the raw member specs when available.
@@ -50,8 +90,9 @@ export function defaultArrayItem(memberSpecs: BTParameterSpec6[]): ParameterArra
     const ids = getArrayMemberIds(memberSpecs);
     memberSpecs.forEach((member, index) => {
         const element = getSpecFromFeatureSpec(member);
-        // Query members are edited as transient-selection lists.
-        item[ids[index]] = element.type === "QueryList" ? [] : structuredClone(element.value);
+        // Query members are edited as transient-selection lists, maps as nested
+        // records with their own defaults (arrays of maps are allowed).
+        item[ids[index]] = defaultValueOf(element);
     });
     return item;
 }
@@ -140,6 +181,8 @@ export function arrayMemberValueToFeaturescript(element: OnshapeType<any>, value
             if (!Array.isArray(value)) return "[]";
             return arrayValueToFeaturescript({ ...nested, value: value as ParameterArrayItem[] });
         }
+        case "map":
+            return mapValueToFeaturescript(element, value);
         case "String":
         case "Id":
         case "Context":
@@ -200,13 +243,30 @@ export function stripTransientSelections(
         const next: ParameterArrayItem = { ...item };
         elements.forEach((element, index) => {
             const id = Object.keys(item)[index];
-            if (id != null && (element.type === "QueryList" || element.type === "ParameterArray")) {
-                next[id] =
-                    element.type === "QueryList"
-                        ? []
-                        : stripTransientSelections(element as ParameterArrayType, (item[id] as ParameterArrayItem[]) ?? []);
+            if (id == null) return;
+            if (element.type === "QueryList") {
+                next[id] = [];
+            } else if (element.type === "ParameterArray") {
+                next[id] = stripTransientSelections(element as ParameterArrayType, (item[id] as ParameterArrayItem[]) ?? []);
+            } else if (element.type === "map") {
+                next[id] = stripMapTransientSelections(element, (item[id] as Record<string, unknown>) ?? {});
             }
         });
         return next;
     });
+}
+
+/** DR-001 for maps (including maps nested in array items). */
+export function stripMapTransientSelections(
+    element: OnshapeType<any>,
+    value: Record<string, unknown>
+): Record<string, unknown> {
+    const next: Record<string, unknown> = { ...value };
+    for (const member of getMapElementSpecs(element)) {
+        const id = (member as { parameterId?: string }).parameterId ?? "member";
+        if (member.type === "QueryList") next[id] = [];
+        else if (member.type === "ParameterArray") next[id] = stripTransientSelections(member as ParameterArrayType, (value[id] as ParameterArrayItem[]) ?? []);
+        else if (member.type === "map") next[id] = stripMapTransientSelections(member, (value[id] as Record<string, unknown>) ?? {});
+    }
+    return next;
 }
