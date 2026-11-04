@@ -15,7 +15,7 @@ export default {
 .snap-target {
   // pointer-events: none;
   border-radius: 20%;
-  background-color: rgba(0, 0, 0, 0);
+  background-color: transparent;
 
   width: 40px;
   height: 30px;
