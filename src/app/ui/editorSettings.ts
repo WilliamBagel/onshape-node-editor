@@ -100,7 +100,7 @@ export const COMMANDS: readonly CommandDefinition[] = [
     { id: 'fitView', label: 'Fit view', description: 'Zoom the canvas to fit all nodes.', defaultCombo: 'Ctrl+0' },
     { id: 'deleteSelected', label: 'Delete selected nodes', description: 'Remove the currently selected nodes from the canvas.', defaultCombo: 'Delete' },
     { id: 'createFrame', label: 'Frame selected nodes', description: 'Wrap the selected nodes in a grouping frame (#13).', defaultCombo: 'Ctrl+G' },
-    { id: 'addNode', label: 'Add node', description: 'Open the catalog palette to add a node (#8).', defaultCombo: 'Ctrl+K' },
+    { id: 'addNode', label: 'Add node', description: 'Open the catalog palette to add a node (#8).', defaultCombo: 'Shift+A' },
     { id: 'debugGrid', label: 'Debug grid', description: 'Toggle the debug grid (node-wrangler view of live values).', defaultCombo: 'Ctrl+D' },
     { id: 'actionPalette', label: 'Search actions', description: 'Open the action palette (Blender-style search menu).', defaultCombo: 'F3' },
 ];
@@ -118,7 +118,7 @@ export const DEFAULT_BINDINGS: ShortcutBindings = {
     fitView: 'Ctrl+0',
     deleteSelected: 'Delete',
     createFrame: 'Ctrl+G',
-    addNode: 'Ctrl+K',
+    addNode: 'Shift+A',
     debugGrid: 'Ctrl+D',
     save: 'Ctrl+S',
     open: 'Ctrl+O',
