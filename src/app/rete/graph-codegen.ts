@@ -25,6 +25,7 @@ import {
     planExpressionBindings,
     ValueExpression,
 } from "../onshape-utils/expressioncodegen";
+import { validateGraphNodes } from "./graph-validation";
 
 /**
  * Generate the Feature Studio source for `editor`'s graph.
@@ -172,6 +173,23 @@ export async function generateFeatureStudioSource(
         }
         return { variableMapping, inputProducers, valueDependencies };
     };
+
+    // Build-time validation (issue #12): iteration over a Query and
+    // unbounded loops are refused before any code is generated. Throws an
+    // error naming every offending node.
+    validateGraphNodes(
+        nodeArray.map((nodeId) => {
+            const producers: Record<string, { nodeId: string; outputKey: string }> = {};
+            for (const [key, pointers] of Object.entries(nodeDataMap[nodeId] ?? {})) {
+                const pointer = pointers?.[0];
+                if (pointer != null) {
+                    producers[key] = { nodeId: pointer.id, outputKey: pointer.name };
+                }
+            }
+            return { node: editor.getNode(nodeId) as OnshapeNode, producers };
+        }),
+        (id) => editor.getNode(id) as OnshapeNode | undefined,
+    );
 
     // Expression pre-pass (issue #10): collect the IR from any value nodes
     // and plan their hoisted bindings, so statement consumers below can

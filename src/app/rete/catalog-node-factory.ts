@@ -14,7 +14,26 @@ import type { CatalogEntry } from "../onshape/catalog/types";
 import type { FeatureSpecReference } from "./serialization/graph-schema-types";
 import { CustomFeatureNode } from "./nodes/customfeaturenode";
 import { FunctionNode } from "./nodes/functionnode";
+import { createArrayNode as createArrayNodeImpl, ARRAY_NODE_VARIANTS } from "./nodes/arraynodes";
+import type { ArrayNodeVariant } from "./nodes/arraynodes";
+import type { ValueType } from "../onshape-utils/valuetypes";
 import { OnshapeNode } from "./nodes/onshapenode";
+
+export { ARRAY_NODE_VARIANTS };
+export type { ArrayNodeVariant };
+
+/**
+ * #12: create an array/iteration node by variant — the array counterpart
+ * of {@link createNodeFromCatalogEntry} for nodes that are not catalog
+ * entries. Palette/UIs offer `ARRAY_NODE_VARIANTS` and call this; no
+ * `App.vue` changes are needed to construct the nodes.
+ */
+export function createArrayNode(
+  variant: ArrayNodeVariant,
+  options?: { elementType?: ValueType; resultElementType?: ValueType; bound?: number; body?: string },
+): OnshapeNode {
+  return createArrayNodeImpl(variant, options);
+}
 
 const VALUE_TYPE_TO_BT: Record<string, string> = {
   Boolean: "BTParameterSpecBoolean-170",
