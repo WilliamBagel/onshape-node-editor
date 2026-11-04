@@ -177,9 +177,7 @@ export class MathExpressionNode extends OnshapeNode {
     }
 
     public getVariableSymbols(): string[] {
-        // An empty expression defines nothing (issue #48): its `return`
-        // symbol must not be registered before validation rejects it.
-        return this.source.trim() === '' ? [] : ['return'];
+        return ['return'];
     }
 
     public getExpressionInfo(context: {
