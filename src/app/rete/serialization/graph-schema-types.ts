@@ -138,6 +138,25 @@ export type SerializedNode =
     | SerializedDefineFeatureNode
     | SerializedOutputFeatureNode;
 
+/**
+ * A grouping frame (#13). Frames are presentation only: they are not nodes in
+ * the codegen sense (no inputs/outputs, never reached by the flattening walk)
+ * and they do not appear in `nodeOrder` (the canvas keeps them behind their
+ * children). A child node's `group` holds the frame's id; a frame's own
+ * `group` is its parent frame's id, so frames nest the same way.
+ */
+export interface SerializedFrame {
+    id: string;
+    label: string;
+    color: string;
+    /** When true, the frame's descendants are hidden on the canvas. */
+    collapsed: boolean;
+    position: Vec2 | null;
+    size: NodeSize;
+    /** Parent frame id, or null. */
+    group: string | null;
+}
+
 export interface SerializedConnection {
     source: string;
     sourceOutput: string;
@@ -155,6 +174,11 @@ export interface SerializedGraph {
      * this build; absent in version-1 documents.
      */
     nodeOrder: string[];
+    /**
+     * Grouping frames (#13), in creation order. Omitted when the graph has no
+     * frames, so pre-#13 documents and graphs keep their exact shape.
+     */
+    frames?: SerializedFrame[];
 }
 
 /**

@@ -102,6 +102,13 @@ function sameOrder(a: readonly string[], b: readonly string[]): boolean {
 export interface NodeOrderHooks {
     /** Node ids that are selected right now, in selection order. */
     getSelectedIds: () => string[];
+    /**
+     * #13: nodes the keeper must not own — frames. A frame element must stay
+     * behind its children, so it is never stacked by selection order (the
+     * canvas pins frame elements to the front of the holder instead). The
+     * keeper refuses to record such a node even if asked.
+     */
+    isExcluded?: (id: string) => boolean;
 }
 
 /**
@@ -113,9 +120,11 @@ export interface NodeOrderHooks {
 export class NodeOrderKeeper<Schemes extends BaseSchemes, Signals> {
     private order: NodeOrder = [];
     private readonly area: BaseAreaPlugin<Schemes, Signals>;
+    private readonly isExcluded: (id: string) => boolean;
 
-    constructor(area: BaseAreaPlugin<Schemes, Signals>) {
+    constructor(area: BaseAreaPlugin<Schemes, Signals>, isExcluded: (id: string) => boolean = () => false) {
         this.area = area;
+        this.isExcluded = isExcluded;
     }
 
     /** The order to persist, bottom-most first. */
@@ -125,13 +134,13 @@ export class NodeOrderKeeper<Schemes extends BaseSchemes, Signals> {
 
     /** Adopt a saved order (a graph load) and paint the canvas with it. */
     async setOrder(order: readonly string[]): Promise<void> {
-        this.order = [...order];
+        this.order = order.filter((id) => !this.isExcluded(id));
         await this.apply();
     }
 
     /** Raise `ids` above everything else, keeping their relative order. */
     async raise(ids: readonly string[]): Promise<void> {
-        const next = raiseNodes(this.order, ids);
+        const next = raiseNodes(this.order, ids.filter((id) => !this.isExcluded(id)));
         if (sameOrder(this.order, next)) {
             return;
         }
@@ -141,6 +150,9 @@ export class NodeOrderKeeper<Schemes extends BaseSchemes, Signals> {
 
     /** A node appeared on the canvas: it paints on top. */
     async addNode(id: string): Promise<void> {
+        if (this.isExcluded(id)) {
+            return;
+        }
         this.order = addNodeToOrder(this.order, id);
         await this.apply();
     }
@@ -160,7 +172,8 @@ export class NodeOrderKeeper<Schemes extends BaseSchemes, Signals> {
      * selection, dragging, panning, zooming and `area.resize()` free of churn.
      */
     async apply(): Promise<void> {
-        this.order = appendMissingNodes(this.order, [...this.area.nodeViews.keys()]);
+        const viewIds = [...this.area.nodeViews.keys()].filter((id) => !this.isExcluded(id));
+        this.order = appendMissingNodes(this.order, viewIds);
 
         const desired = this.order.filter((id) => this.area.nodeViews.has(id));
         if (this.isApplied(desired)) {
@@ -188,6 +201,9 @@ export class NodeOrderKeeper<Schemes extends BaseSchemes, Signals> {
         const holder = this.area.area.content.holder;
         const idByElement = new Map<HTMLElement, string>();
         for (const [id, view] of this.area.nodeViews) {
+            if (this.isExcluded(id)) {
+                continue;
+            }
             idByElement.set(view.element, id);
         }
 
@@ -233,7 +249,7 @@ export function installNodeOrder<Schemes extends BaseSchemes, Signals>(
     area: BaseAreaPlugin<Schemes, Signals>,
     hooks: NodeOrderHooks
 ): NodeOrderKeeper<Schemes, Signals> {
-    const keeper = new NodeOrderKeeper(area);
+    const keeper = new NodeOrderKeeper(area, hooks.isExcluded);
 
     area.addPipe((context) => {
         const signal = context as { type?: string; data?: { id?: string } };

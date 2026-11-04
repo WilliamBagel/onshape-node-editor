@@ -318,6 +318,13 @@ export default defineComponent({
           }
           break;
         }
+        case 'createFrame': {
+          const frame = await this.controls?.createFrameFromSelection();
+          if (frame != null) {
+            this.featureStudioHost()?.reportMessage(`Grouped selection into frame “${frame.label}”.`);
+          }
+          break;
+        }
       }
     },
     runSearch() {
