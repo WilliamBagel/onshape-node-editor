@@ -166,6 +166,8 @@ export interface SerializedMathExpressionNode extends SerializedNodeBase {
     kind: "math-expression";
     source: string;
     bindings?: Record<string, import("../../onshape-utils/valuetypes").ValueType>;
+    /** FeatureScript literals for unconnected variables, keyed by variable name. */
+    literals?: Record<string, string>;
     collapsed?: boolean;
 }
 
