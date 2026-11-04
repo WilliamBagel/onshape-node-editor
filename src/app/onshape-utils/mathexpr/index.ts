@@ -27,6 +27,7 @@ export * from './typecheck';
 export * from './emitter';
 export * from './units';
 export * from './functions';
+export { toLatex } from './latex';
 
 export type CompileResult =
     | {

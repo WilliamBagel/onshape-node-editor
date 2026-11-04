@@ -67,7 +67,8 @@ export type SerializedNodeKind =
     | "array-size"
     | "map-array"
     | "for-each"
-    | "bounded-for";
+    | "bounded-for"
+    | "math-expression";
 
 export interface Vec2 {
     x: number;
@@ -156,6 +157,15 @@ export interface SerializedFunctionNode extends SerializedNodeBase {
     literals?: Record<string, string>;
 }
 
+/** #20: a math expression node. Only source + type bindings persist (DR-006);
+ * typeset markup and diagnostics are re-derived on load. */
+export interface SerializedMathExpressionNode extends SerializedNodeBase {
+    kind: "math-expression";
+    source: string;
+    bindings?: Record<string, import("../../onshape-utils/valuetypes").ValueType>;
+    collapsed?: boolean;
+}
+
 /** #11: a curated statement utility (opTransform, instanceOnPoints). */
 export interface SerializedUtilityStatementNode extends SerializedNodeBase {
     kind: "utility-statement";
@@ -170,6 +180,7 @@ export type SerializedNode =
     | SerializedOutputFeatureNode
     | SerializedFunctionNode
     | SerializedUtilityStatementNode
+    | SerializedMathExpressionNode
     | SerializedArrayLiteralNode
     | SerializedArrayConcatNode
     | SerializedArrayIndexNode

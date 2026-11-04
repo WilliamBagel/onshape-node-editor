@@ -20,6 +20,7 @@ import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
 import { FunctionNode } from "../nodes/functionnode";
 import { UtilityStatementNode } from "../nodes/utilitystatementnode";
+import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { resolveUtilityStatement, utilityMeta } from "../catalog-node-factory";
 import { UTILITY_BY_ID } from "../../onshape/catalog/utility-overrides";
 import {
@@ -87,6 +88,7 @@ const SUPPORTED_KINDS: SerializedNodeKind[] = [
     "map-array",
     "for-each",
     "bounded-for",
+    "math-expression",
 ];
 
 /**
@@ -245,6 +247,9 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
                         const override = UTILITY_BY_ID[utilityId];
                         return override != null ? utilityMeta(override) : undefined;
                     });
+                    break;
+                case "math-expression":
+                    node = MathExpressionNode.fromJSON(serialized);
                     break;
                 case "utility-statement":
                     node = UtilityStatementNode.fromJSON(serialized, resolveUtilityStatement);
