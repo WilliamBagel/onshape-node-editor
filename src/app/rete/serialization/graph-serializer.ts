@@ -18,6 +18,7 @@ import { FrameNode } from "../nodes/framenode";
 import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
+import { FunctionNode } from "../nodes/functionnode";
 import { Connection, Schemes } from "../types";
 import { StyleSettings } from "../stylesettings";
 import { getConnectionIO } from "../utils";
@@ -61,7 +62,7 @@ export interface DeserializeOptions {
     styleSettings?: StyleSettings;
 }
 
-const SUPPORTED_KINDS: SerializedNodeKind[] = ["CustomFeature", "define-feature", "output-feature"];
+const SUPPORTED_KINDS: SerializedNodeKind[] = ["CustomFeature", "define-feature", "output-feature", "function"];
 
 /**
  * Serialize every node and connection in `editor`.
@@ -213,6 +214,9 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
                     break;
                 case "output-feature":
                     node = OutputFeatureNode.fromJSON(serialized);
+                    break;
+                case "function":
+                    node = FunctionNode.fromJSON(serialized);
                     break;
                 default:
                     return {
