@@ -74,6 +74,44 @@ export async function generateFeatureStudioSource(
     // map of consumer node id to map of input key and assigned identifier
     const topLevelVariablesMap: Record<string, Record<string, TopLevelVariableDefintion>> = {};
 
+    // Muted head-of-chain (#78): a muted node whose pass-through input
+    // (an output key that is also an input key, e.g. `context`) has no
+    // producer has nothing to flow through. Its `data()` would omit the
+    // pass-through output and the dataflow engine would die with an
+    // internal error when a consumer fetches it, so refuse it here with
+    // a clean validation error naming the node and the missing producer.
+    // Runs before fetchInputs, which is what would otherwise throw.
+    {
+        const incoming = new Set<string>();
+        for (const connection of editor.getConnections()) {
+            incoming.add(`${connection.target}:${connection.targetInput}`);
+        }
+        const problems: string[] = [];
+        for (const nodeId of nodeArray) {
+            const node = editor.getNode(nodeId) as OnshapeNode | undefined;
+            if (node == null || node.muted !== true) continue;
+            for (const key of Object.keys(node.outputs ?? {})) {
+                if (!(key in (node.inputs ?? {}))) continue;
+                if (incoming.has(`${nodeId}:${key}`)) continue;
+                // Only invalid when something actually consumes the
+                // pass-through output (a disconnected muted node is
+                // pruned from nodeArray and emits nothing anyway).
+                const consumed = editor.getConnections().some(
+                    (connection) => connection.source === nodeId && connection.sourceOutput === key,
+                );
+                if (!consumed) continue;
+                problems.push(
+                    `Node "${node.type}" (title "${node.getTitle()}", id "${node.id}"): muted ` +
+                        `pass-through input "${key}" has no producer; a muted pass-through node ` +
+                        `must have its "${key}" input wired to a producer, or be unmuted/removed.`,
+                );
+            }
+        }
+        if (problems.length > 0) {
+            throw new Error(`Graph validation failed:\n${problems.join("\n")}`);
+        }
+    }
+
     // First pass A: fetch data for all nodes (no symbol registration yet —
     // validation must run, and may refuse the graph, before any node
     // registers an output symbol; issues #43/#48).

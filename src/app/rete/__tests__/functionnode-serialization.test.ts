@@ -5,6 +5,7 @@ import { FunctionNode } from "../nodes/functionnode";
 import type { OnshapeSocket } from "../onshapesockets";
 import type { CatalogEntry } from "../../onshape/catalog/types";
 import { deserializeGraph, serializeGraph } from "../serialization/graph-serializer";
+import { defaultCatalog } from "../../onshape/catalog/spec-catalog";
 import { NodeEditor } from "rete";
 import { DataflowEngine } from "rete-engine";
 import type { Schemes } from "../types";
@@ -58,6 +59,26 @@ describe("FunctionNode output persistence (#44)", () => {
         delete data["outputs"];
         const restored = FunctionNode.fromJSON(data as never, (name) => (name === "cross" ? crossEntry : undefined));
         expect(returnTypeName(restored)).toBe("Vector");
+    });
+
+    it("deserializeGraph resolves an outputs-less legacy catalog node via the shipped catalog (#77)", async () => {
+        const sinEntry = defaultCatalog.entries.find((e) => e.name === "sin" && e.kind === "value" && e.nodeable && e.utilityId == null);
+        expect(sinEntry).toBeDefined();
+        const created = createNodeFromCatalogEntry(sinEntry!) as unknown as FunctionNode;
+        expect(created.utilityId).toBeUndefined();
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+        await editor.addNode(created);
+        const document = serializeGraph(editor, {}, [created.id]) as unknown as { nodes: Record<string, unknown>[] };
+        delete document.nodes[0]["outputs"];
+        const loaded = deserializeGraph(document, { resolveSpec: () => undefined });
+        if (!loaded.ok) {
+            throw new Error(loaded.error);
+        }
+        const restored = loaded.graph.nodes[0] as unknown as FunctionNode;
+        expect(returnTypeName(restored)).toBe(sinEntry!.outputs[0].valueType);
+        expect(returnTypeName(restored)).not.toBe("Unknown");
     });
 
     it("serializeGraph/deserializeGraph round-trip keeps the return valueType", async () => {

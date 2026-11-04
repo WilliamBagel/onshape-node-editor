@@ -29,6 +29,9 @@ export interface GraphValidationEntry {
  * muted node to the node feeding it. A muted node's *value* outputs
  * (`return`, ...) have no pass-through, so consuming one is an error
  * naming both nodes rather than a silent read of an undefined variable.
+ * A muted pass-through input with no producer is invalid: there is
+ * nothing for the pass-through to flow on, so the graph driver refuses
+ * it with a validation error rather than an engine-internal failure.
  */
 export function validateGraphNodes(
     entries: readonly GraphValidationEntry[],
