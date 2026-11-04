@@ -70,7 +70,7 @@ export default defineComponent({
 }
 
 .socket {
-    border: 0.5px solid rgb(0, 0, 0);
+    border: 0.5px solid var(--ink);
     width: $socket-size;
     height: $socket-size * 2;
 }

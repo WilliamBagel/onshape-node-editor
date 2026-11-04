@@ -11,20 +11,20 @@
   margin: 0 auto;
   font-weight: normal;
   border-left: 1px solid;
-  border-color: var(--os-tree-outline, #d7d7d7);
+  border-color: var(--os-tree-outline, var(--hairline));
 }
 
 a,
 .green {
   text-decoration: none;
-  color: hsla(160, 100%, 37%, 1);
+  color: var(--flow-teal);
   transition: 0.4s;
   padding: 3px;
 }
 
 @media (hover: hover) {
   a:hover {
-    background-color: hsla(160, 100%, 37%, 0.2);
+    background-color: var(--hover-tint);
   }
 }
 
