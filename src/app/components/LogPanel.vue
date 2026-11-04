@@ -29,6 +29,8 @@ const filter = ref<LogSeverity>('info')
 /** Index (within the filtered list) of the entry whose detail is open. */
 const openDetail = ref<number | null>(null)
 const copyState = ref<'idle' | 'copied' | 'failed'>('idle')
+/** Per-entry copy feedback for the detail block, keyed like the list item key. */
+const detailCopy = ref<{ key: string | null; state: 'idle' | 'copied' | 'failed' }>({ key: null, state: 'idle' })
 const listElement = ref<HTMLElement | null>(null)
 
 const counts = computed(() => countBySeverity(entries.value))
@@ -36,6 +38,7 @@ const visible = computed(() => entries.value.filter((entry) => isAtLeastSeverity
 
 let unsubscribe: (() => void) | null = null
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+let detailCopyResetTimer: ReturnType<typeof setTimeout> | null = null
 
 function scrollToNewest(): void {
   const element = listElement.value
@@ -53,6 +56,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unsubscribe?.()
   if (copyResetTimer !== null) clearTimeout(copyResetTimer)
+  if (detailCopyResetTimer !== null) clearTimeout(detailCopyResetTimer)
 })
 
 async function copyAll(): Promise<void> {
@@ -61,6 +65,32 @@ async function copyAll(): Promise<void> {
   if (copyResetTimer !== null) clearTimeout(copyResetTimer)
   copyResetTimer = setTimeout(() => {
     copyState.value = 'idle'
+  }, 1500)
+}
+
+/** Same key expression the list uses for its `:key`, so feedback sticks to the row. */
+function entryKey(entry: LogEntry, index: number): string {
+  return `${entry.timestamp}-${index}`
+}
+
+function copyDetailStateFor(index: number): string {
+  const entry = visible.value[index]
+  if (entry === undefined) return 'Copy'
+  if (detailCopy.value.key !== entryKey(entry, index)) return 'Copy'
+  if (detailCopy.value.state === 'copied') return 'Copied'
+  if (detailCopy.value.state === 'failed') return 'Copy failed'
+  return 'Copy'
+}
+
+async function copyDetail(index: number): Promise<void> {
+  const entry = visible.value[index]
+  if (entry?.detail === undefined) return
+  const key = entryKey(entry, index)
+  const ok = await copyTextToClipboard(entry.detail)
+  detailCopy.value = { key, state: ok ? 'copied' : 'failed' }
+  if (detailCopyResetTimer !== null) clearTimeout(detailCopyResetTimer)
+  detailCopyResetTimer = setTimeout(() => {
+    detailCopy.value = { key: null, state: 'idle' }
   }, 1500)
 }
 
@@ -123,9 +153,16 @@ function severityClass(severity: LogSeverity): string {
             <span v-if="entry.nodeId" class="entry-node">node {{ entry.nodeId }}</span>
             <span class="entry-message">{{ entry.message }}</span>
           </div>
-          <button v-if="entry.detail !== undefined" class="detail-toggle" @click="toggleDetail(index)">
-            {{ openDetail === index ? 'Hide' : 'Show' }} {{ entry.detailLabel ?? 'details' }}
-          </button>
+          <div v-if="entry.detail !== undefined" class="detail-actions">
+            <button class="detail-toggle" @click="toggleDetail(index)">
+              {{ openDetail === index ? 'Hide' : 'Show' }} {{ entry.detailLabel ?? 'details' }}
+            </button>
+            <button class="detail-copy" :aria-label="`Copy ${entry.detailLabel ?? 'details'} to clipboard`"
+              v-tooltip="{ label: 'Copy', description: 'Copy this entry only — the generated source — to the clipboard.' }"
+              @click="copyDetail(index)">
+              {{ copyDetailStateFor(index) }}
+            </button>
+          </div>
           <pre v-if="entry.detail !== undefined && openDetail === index" class="entry-detail">{{ entry.detail }}</pre>
         </li>
       </ol>
@@ -361,6 +398,13 @@ function severityClass(severity: LogSeverity): string {
   overflow-wrap: anywhere;
 }
 
+.detail-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 .detail-toggle {
   margin-top: 2px;
   padding: 0;
@@ -371,6 +415,22 @@ function severityClass(severity: LogSeverity): string {
   font-family: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Sits beside the Show/Hide toggle; deliberately the same quiet weight, no underline. */
+.detail-copy {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #6b6b6b;
+  font-size: 10px;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.detail-copy:hover {
+  color: #2f6fbe;
 }
 
 .entry-detail {
