@@ -25,6 +25,7 @@
     <div
       ref="dialog"
       class="app-dialog"
+      :class="{ 'app-dialog--wide': current.kind === 'settings' }"
       role="dialog"
       aria-modal="true"
       :aria-label="current.title"
@@ -51,6 +52,9 @@
           </label>
           <p v-if="error" class="app-dialog-error" role="alert">{{ error }}</p>
         </template>
+        <!-- #36: settings content lives in its own component; the modal
+             chrome (backdrop, focus trap, Esc, actions) is shared here. -->
+        <SettingsDialog v-if="current.kind === 'settings'" />
       </div>
 
       <div class="app-dialog-actions">
@@ -77,6 +81,7 @@
 
 <script lang="ts">
 import { defineComponent, nextTick } from 'vue';
+import SettingsDialog from './SettingsDialog.vue';
 import {
   dialogService,
   validatePromptInput,
@@ -90,6 +95,7 @@ const FOCUSABLE_SELECTOR =
 
 export default defineComponent({
   name: 'AppDialog',
+  components: { SettingsDialog },
   data() {
     return {
       /** Mirror of the service's current request; `null` when idle. */
@@ -158,6 +164,10 @@ export default defineComponent({
     onSubmit() {
       const request = this.current;
       if (request == null) return;
+      if (request.kind === 'settings') {
+        dialogService.closeSettings();
+        return;
+      }
       if (request.kind === 'confirm') {
         dialogService.submitConfirm(true);
         return;
@@ -264,8 +274,15 @@ export default defineComponent({
   padding: 8px 20px 4px;
 }
 
+.app-dialog--wide {
+  width: min(560px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border-radius: 6px;
+}
+
 .app-dialog-text {
-  margin: 4px 0 8px;
+  margin: 0 0 8px;
   font-size: var(--font-size-value);
   font-weight: 400;
   line-height: var(--line-height-body);

@@ -18,7 +18,7 @@
  * preserves the old `name == null || name.trim() === ''` rejection exactly.
  */
 
-export type DialogKind = 'prompt' | 'confirm';
+export type DialogKind = 'prompt' | 'confirm' | 'settings';
 
 export interface PromptTextOptions {
   /** Dialog heading, 14px/600. */
@@ -157,6 +157,32 @@ export class DialogService {
         settle: (result) => resolve(result === true),
       });
     });
+  }
+
+  /** Open the #36 settings dialog (AppDialog renders it as the wide variant). Resolves when closed. */
+  openSettings(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.enqueue({
+        id: this.nextId++,
+        kind: 'settings',
+        title: 'Settings',
+        initialValue: '',
+        submitLabel: 'Done',
+        cancelLabel: 'Cancel',
+        danger: false,
+        allowEmpty: true,
+        mono: false,
+        settle: () => resolve(),
+      });
+    });
+  }
+
+  /** Close the settings dialog (the host's Done/Cancel buttons). */
+  closeSettings(): boolean {
+    const request = this.current;
+    if (request == null || request.kind !== 'settings') return false;
+    this.dismiss(null);
+    return true;
   }
 
   /**

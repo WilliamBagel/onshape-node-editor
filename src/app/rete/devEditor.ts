@@ -10,7 +10,7 @@ const socket = new ClassicPreset.Socket('socket');
 
 export async function createEditor(container: HTMLElement): Promise<EditorControls> {
 
-  const { editor, area, studioEvents, nodeOrder } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, applyPreferences } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -71,6 +71,9 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
   return {
     studioEvents,
     getNodeOrder: () => nodeOrder.getOrder(),
+    fitView,
+    deleteSelectedNodes,
+    applyPreferences,
     destroy: () => area.destroy(),
     selectNode: async (nodeId: string) => {
       // The dev editor's sample graph has no design-check surface to locate

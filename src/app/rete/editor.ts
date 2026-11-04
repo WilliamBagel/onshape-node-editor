@@ -14,7 +14,7 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, studioEvents, nodeOrder } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, applyPreferences } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -78,6 +78,9 @@ export async function createEditor(container: HTMLElement) {
   return {
     studioEvents,
     getNodeOrder: () => nodeOrder.getOrder(),
+    fitView,
+    deleteSelectedNodes,
+    applyPreferences,
     destroy: () => area.destroy(),
     selectNode: async (nodeId: string) => {
       // #30: the standard editor's sample graph does not expose a selection API

@@ -32,6 +32,18 @@ import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
+import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "../ui/editorSettings";
+
+/** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
+export function modifierCheckKey(modifier: string): string {
+    switch (modifier) {
+        case 'Control': return 'control';
+        case 'Shift': return 'Shift';
+        case 'Meta': return 'meta';
+        case 'Alt': return 'alt';
+        default: return modifier;
+    }
+}
 
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
@@ -57,6 +69,12 @@ export type EditorControls = {
      * design-check surface's "Locate" action; a no-op for an unknown id.
      */
     selectNode: (nodeId: string) => Promise<void>
+    /** #36: zoom the canvas to fit all nodes (the Fit view shortcut). */
+    fitView: () => Promise<void>
+    /** #36: remove the selected nodes; returns how many were removed. */
+    deleteSelectedNodes: () => Promise<number>
+    /** #36: apply live canvas preferences (grid visibility) without a reload. */
+    applyPreferences: (prefs: EditorPreferences) => void
     destroy: () => void
 }
 
@@ -67,6 +85,16 @@ type EditorBaseInfo = {
     studioEvents: StudioEvents,
     /** Owner of the node paint order (#27); the save path reads `getOrder()`. */
     nodeOrder: NodeOrderKeeper<Schemes, Area2D<Schemes> | AreaExtra>,
+    /** #36: snap modifier — prefer the settings store so rebinding is live. */
+    snapModifier: () => string,
+    /** #36: accumulate modifier — prefer the settings store so rebinding is live. */
+    accumulateModifier: () => string,
+    /** #36: fit all nodes in view. */
+    fitView: () => Promise<void>
+    /** #36: remove selected nodes, returning the count. */
+    deleteSelectedNodes: () => Promise<number>
+    /** #36: apply live canvas preferences (grid visibility). */
+    applyPreferences: (prefs: EditorPreferences) => void
     /** #30: select a node by id; used by the design-check surface's Locate. */
     selectNode: (nodeId: string) => Promise<void>
 }
@@ -204,10 +232,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         }
     });
     snapGrid(area, {
-        size: 20,
+        size: () => editorSettings.getPreferences().snapGridSize,
         dynamic: true,
         allowed: () => {
-            return checkKey('control');
+            const prefs = editorSettings.getPreferences();
+            return prefs.snapEnabled && checkKey(modifierCheckKey(prefs.snapModifier));
         }
     });
 
@@ -271,7 +300,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
             active: () => {
-                return checkKey('Shift');
+                return checkKey(modifierCheckKey(editorSettings.getPreferences().accumulateModifier));
             }
         }
     });
@@ -311,11 +340,38 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         await selector.add(node as unknown as Parameters<typeof selector.add>[0], false);
     };
 
+    const fitView = async (): Promise<void> => {
+        const nodes = editor.getNodes();
+        if (nodes.length === 0) return;
+        await AreaExtensions.zoomAt(area, nodes);
+    };
+
+    const deleteSelectedNodes = async (): Promise<number> => {
+        const ids = Array.from(selector.entities.values())
+            .filter((entity) => entity.label === 'node')
+            .map((entity) => entity.id);
+        let removed = 0;
+        for (const id of ids) {
+            if (editor.getNode(id) != null && await editor.removeNode(id)) removed++;
+        }
+        return removed;
+    };
+
+    const applyPreferences = (prefs: EditorPreferences): void => {
+        applyCanvasPreferences(document, prefs);
+    };
+    applyPreferences(editorSettings.getPreferences());
+
     return {
         editor,
         area,
         connection,
         nodeOrder,
+        snapModifier: () => editorSettings.getPreferences().snapModifier,
+        accumulateModifier: () => editorSettings.getPreferences().accumulateModifier,
+        fitView,
+        deleteSelectedNodes,
+        applyPreferences,
         studioEvents: { build: buildStudio, describe: describeStudio },
         selectNode
     }
