@@ -121,7 +121,7 @@ function cloneMember(node: OnshapeNode, newId: string): OnshapeNode {
     } else {
         throw new Error(
             `Group expansion cannot clone node "${node.id}" of kind "${node.type}"; ` +
-            `only function, utility, array, and group nodes can be grouped.`,
+            `only function, utility, array, math-expression, and group nodes can be grouped.`,
         );
     }
     clone.id = newId;
@@ -168,6 +168,20 @@ export async function expandGroupInstances(
     };
 
     const boundaryByInstance = new Map<string, ExpandedInstance>();
+    // Every expanded instance (top-level and nested), outermost first, so
+    // boundary defaults apply recursively with outer defaults winning:
+    // an outer default marks its leaf target, and the inner default for
+    // the same leaf is then skipped.
+    const instanceRecords: { instance: GroupNode; boundary: ExpandedInstance }[] = [];
+    // Leaf inputs that received a real connection (internal definition
+    // connections and external rewiring). A boundary default must not
+    // override a leaf that is already connected.
+    const connectedLeafInputs = new Set<string>();
+    const leafKey = (nodeId: string, socketKey: string) => `${nodeId}:${socketKey}`;
+    // External connections dropped because their source is a muted
+    // instance (which expands to nothing). Treated as unconnected: the
+    // boundary default applies when present, otherwise expansion fails.
+    const droppedMutedInputs: { instanceId: string; socketId: string; sourceId: string }[] = [];
 
     // Non-instance nodes are shared with the original editor.
     for (const node of editor.getNodes()) {
@@ -185,6 +199,7 @@ export async function expandGroupInstances(
         if (instance.muted) {
             return result;
         }
+        instanceRecords.push({ instance, boundary: result });
 
         const clones = new Map<string, OnshapeNode>();
         const nestedBoundaries = new Map<string, ExpandedInstance>();
@@ -221,6 +236,7 @@ export async function expandGroupInstances(
             const source = resolveMember(connection.source, connection.sourceOutput, "output");
             const target = resolveMember(connection.target, connection.targetInput, "input");
             await addConnection(source.node, source.socketKey, target.node, target.socketKey);
+            connectedLeafInputs.add(leafKey(target.node.id, target.socketKey));
         }
 
         for (const socket of definition.inputs) {
@@ -252,47 +268,85 @@ export async function expandGroupInstances(
     };
 
     // Rewire every external connection through the instances' boundaries.
-    // A muted instance has no boundary targets, so its connections drop —
-    // consumers fall back to their own literals/defaults, as for an
-    // unconnected input.
-    const connectedInputsByInstance = new Map<string, Set<string>>();
+    // A muted instance has no boundary targets, so its connections drop.
+    // A connection is only "connected" when both ends resolve: a dropped
+    // (muted-sourced) connection is treated as unconnected, so a boundary
+    // default can apply — or, without one, expansion fails below rather
+    // than emitting an undeclared variable. Connections *to* a muted
+    // instance drop silently (the muted target emits nothing).
     for (const connection of editor.getConnections()) {
         const source = resolveEndpoint(connection.source, connection.sourceOutput, "output");
         const target = resolveEndpoint(connection.target, connection.targetInput, "input");
-        const instanceTarget = instances.find((candidate) => candidate.id === connection.target);
-        if (instanceTarget != null) {
-            const connected = connectedInputsByInstance.get(instanceTarget.id) ?? new Set<string>();
-            connected.add(connection.targetInput);
-            connectedInputsByInstance.set(instanceTarget.id, connected);
-        }
         if (source == null || target == null) {
+            const sourceNode = editor.getNode(connection.source);
+            const targetNode = editor.getNode(connection.target);
+            const targetIsMutedInstance = targetNode instanceof GroupNode && targetNode.muted;
+            if (source == null && target != null && !targetIsMutedInstance) {
+                const sourceMuted = sourceNode?.muted === true;
+                if (sourceMuted && targetNode instanceof GroupNode && !targetNode.muted) {
+                    droppedMutedInputs.push({
+                        instanceId: connection.target,
+                        socketId: connection.targetInput,
+                        sourceId: connection.source,
+                    });
+                }
+                // A muted instance feeding an ordinary (non-instance)
+                // node drops silently: that consumer falls back to its
+                // own literals, as for an unconnected input.
+            }
             continue;
         }
         await addConnection(source.node, source.socketKey, target.node, target.socketKey);
+        connectedLeafInputs.add(leafKey(target.node.id, target.socketKey));
     }
 
-    // #47: a boundary input whose group socket carries a defaultLiteral,
+    // #47/#76: a boundary input whose group socket carries a defaultLiteral,
     // and which this instance left unconnected, feeds that literal to the
-    // cloned member (where the member supports literals).
-    for (const instance of instances) {
-        if (instance.muted) {
-            continue;
-        }
-        const boundary = boundaryByInstance.get(instance.id);
-        if (boundary == null) {
-            continue;
-        }
-        const connected = connectedInputsByInstance.get(instance.id) ?? new Set<string>();
-        for (const socket of instance.getDefinition().inputs) {
-            if (socket.defaultLiteral == null || connected.has(socket.id)) {
+    // cloned member (where the member supports literals). Applied to every
+    // expanded instance — top-level and nested — outermost first. A leaf
+    // already connected (internally or externally) or already defaulted by
+    // an outer boundary keeps that value, so outer defaults win over inner
+    // ones and wiring wins over defaults.
+    const defaultedLeafInputs = new Set<string>();
+    for (const record of instanceRecords) {
+        for (const socket of record.instance.getDefinition().inputs) {
+            if (socket.defaultLiteral == null) {
                 continue;
             }
-            const target = boundary.inputs.get(socket.id);
+            const target = record.boundary.inputs.get(socket.id);
             if (target == null) {
                 continue;
             }
-            asLiteralCarrier(target.node)?.setLiteral(target.socketKey, socket.defaultLiteral);
+            const key = leafKey(target.node.id, target.socketKey);
+            if (connectedLeafInputs.has(key) || defaultedLeafInputs.has(key)) {
+                continue;
+            }
+            const carrier = asLiteralCarrier(target.node);
+            if (carrier != null) {
+                carrier.setLiteral(target.socketKey, socket.defaultLiteral);
+                defaultedLeafInputs.add(key);
+            }
         }
+    }
+
+    // A boundary input wired from a muted instance that got no default
+    // must not silently become an undeclared variable: fail before emitting.
+    for (const dropped of droppedMutedInputs) {
+        const boundary = boundaryByInstance.get(dropped.instanceId);
+        const target = boundary?.inputs.get(dropped.socketId);
+        if (target != null && defaultedLeafInputs.has(leafKey(target.node.id, target.socketKey))) {
+            continue; // the boundary default supplied the value
+        }
+        const targetInstance = instances.find((candidate) => candidate.id === dropped.instanceId);
+        const sourceNode = editor.getNode(dropped.sourceId);
+        throw new Error(
+            `Group expansion refused: group instance ` +
+                `"${targetInstance?.getTitle() ?? dropped.instanceId}" (id "${dropped.instanceId}") ` +
+                `input "${dropped.socketId}" is wired to a muted node ` +
+                `"${sourceNode?.getTitle() ?? dropped.sourceId}" (id "${dropped.sourceId}"), ` +
+                `which emits nothing, and the boundary input has no defaultLiteral; ` +
+                `unmute that node, remove the connection, or set a default literal.`,
+        );
     }
 
     return { editor: expanded, engine };

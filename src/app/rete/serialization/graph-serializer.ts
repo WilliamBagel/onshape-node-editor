@@ -24,6 +24,8 @@ import { createGroupDefinition, validateGroupDefinition, type GroupDefinition } 
 import { UtilityStatementNode } from "../nodes/utilitystatementnode";
 import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { resolveUtilityStatement, utilityMeta } from "../catalog-node-factory";
+import { defaultCatalog } from "../../onshape/catalog/spec-catalog";
+import type { CatalogEntry } from "../../onshape/catalog/types";
 import { UTILITY_BY_ID } from "../../onshape/catalog/utility-overrides";
 import {
     ArrayConcatNode,
@@ -78,6 +80,20 @@ export interface DeserializeOptions {
     /** Resolves a stored spec reference to a spec body. Required for graphs with CustomFeature nodes. */
     resolveSpec: SpecResolver;
     styleSettings?: StyleSettings;
+    /**
+     * Resolves a catalog function name to its catalog entry, so legacy
+     * FunctionNode documents without persisted `outputs` recover their
+     * output value types. Defaults to a lookup in the shipped catalog
+     * (`defaultCatalog`), which is what the app loads.
+     */
+    resolveCatalogEntry?: (functionName: string) => CatalogEntry | undefined;
+}
+
+/** Default catalog lookup by bare function name (first nodeable value entry). */
+function defaultCatalogEntry(functionName: string): CatalogEntry | undefined {
+    return defaultCatalog.entries.find(
+        (entry) => entry.name === functionName && entry.kind === "value" && entry.nodeable,
+    );
 }
 
 const SUPPORTED_KINDS: SerializedNodeKind[] = [
@@ -210,7 +226,7 @@ function buildNode(
         case "output-feature":
             return OutputFeatureNode.fromJSON(serialized);
         case "function":
-            return FunctionNode.fromJSON(serialized, undefined, (utilityId) => {
+            return FunctionNode.fromJSON(serialized, options.resolveCatalogEntry ?? defaultCatalogEntry, (utilityId) => {
                 const override = UTILITY_BY_ID[utilityId];
                 return override != null ? utilityMeta(override) : undefined;
             });

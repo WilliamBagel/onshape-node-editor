@@ -75,6 +75,8 @@ export class MathExpressionNode extends OnshapeNode {
     public collapsed = false;
     private compiled: CompileResult | undefined;
     private outputType: ValueType = UNKNOWN;
+    /** Per-variable FeatureScript literals for unconnected inputs (group defaults). */
+    private literals: Record<string, string> = {};
 
     constructor(source = '') {
         super('math-expression', source);
@@ -157,6 +159,24 @@ export class MathExpressionNode extends OnshapeNode {
         this.setSource(this.source);
     }
 
+    /** Set the literal emitted for an unconnected variable (or cleared with `undefined`). */
+    public setLiteral(key: string, literal: string | undefined): void {
+        if (literal == null) {
+            delete this.literals[key];
+        } else {
+            this.literals[key] = literal;
+        }
+    }
+
+    public getLiteral(key: string): string | undefined {
+        return this.literals[key];
+    }
+
+    /** Current literals, for serialization / cloning. */
+    public getLiterals(): Record<string, string> {
+        return { ...this.literals };
+    }
+
     private syncSockets(free: string[]): void {
         for (const key of Object.keys(this.inputs)) {
             if (!free.includes(key)) this.removeInput(key);
@@ -191,6 +211,14 @@ export class MathExpressionNode extends OnshapeNode {
         for (const [key, producer] of Object.entries(context.inputProducers)) {
             if (key in value.inputs) value.inputs[key] = producer;
         }
+        // Unconnected variables fall back to a literal when one was set
+        // (e.g. a group boundary default), rather than staying an
+        // undeclared external identifier.
+        for (const key of Object.keys(value.inputs)) {
+            if (!(key in context.inputProducers) && this.literals[key] != null) {
+                value.inputs[key] = this.literals[key];
+            }
+        }
         return value;
     }
 
@@ -221,6 +249,7 @@ export class MathExpressionNode extends OnshapeNode {
             kind: 'math-expression',
             source: this.source,
             ...(Object.keys(this.bindings).length > 0 ? { bindings: { ...this.bindings } } : {}),
+            ...(Object.keys(this.literals).length > 0 ? { literals: { ...this.literals } } : {}),
             ...(this.collapsed ? { collapsed: true } : {}),
         } as SerializedMathExpressionNode;
     }
@@ -228,6 +257,9 @@ export class MathExpressionNode extends OnshapeNode {
     public static fromJSON(data: SerializedMathExpressionNode): MathExpressionNode {
         const node = new MathExpressionNode();
         node.bindings = { ...(data.bindings ?? {}) };
+        if (data.literals != null) {
+            for (const [key, literal] of Object.entries(data.literals)) node.setLiteral(key, literal);
+        }
         node.setSource(data.source ?? '');
         node.setCollapsed(data.collapsed ?? false);
         node.applySerializedBase(data);
