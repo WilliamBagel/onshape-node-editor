@@ -87,7 +87,7 @@ export async function renameTitle(wrapper: VueWrapper, title: string): Promise<v
   await wrapper.vm.$nextTick();
   const input = wrapper.find('input.os-dialog-header-rename-textbox');
   await input.setValue(title);
-  await input.trigger('keydown.enter');
+  await input.trigger('keydown', { key: 'Enter' });
   await wrapper.vm.$nextTick();
 }
 
