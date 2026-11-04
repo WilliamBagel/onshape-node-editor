@@ -64,7 +64,7 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
    */
   public group: string | null = null;
 
-  /** #14: muted nodes emit nothing in codegen (toggled with M). Not serialized for ordinary nodes. */
+  /** #14/#43: muted nodes emit nothing in codegen (toggled with M). Not serialized for ordinary nodes. A consumer of a muted node's value output fails validation naming both nodes; pass-through sockets (e.g. `context`) resolve through the muted node. See `graph-validation.ts`. */
   public muted = false;
 
   /**

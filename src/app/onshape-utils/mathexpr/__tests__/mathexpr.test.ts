@@ -246,7 +246,7 @@ describe('expression IR bridge (#10)', () => {
         expect(result.ok).toBe(true);
         if (!result.ok) return;
         const value = toValueExpression(result, { nodeId: 'n1', producer: 'hypotenuse' });
-        expect(value.expression).toBe('sqrt(x ^ 2 + y ^ 2)');
+        expect(value.expression).toBe('sqrt({x} ^ 2 + {y} ^ 2)');
         expect(value.inputs).toEqual({ x: 'x', y: 'y' });
         expect(value.valueType.name).toBe('ValueWithUnits');
         expect(value.pure).toBe(true);

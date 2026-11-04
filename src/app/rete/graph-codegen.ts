@@ -22,6 +22,7 @@ import {
 } from "../onshape-utils/partstudiofeature";
 import type { OnshapeNode } from "./nodes/onshapenode";
 import {
+    createStableNameAllocator,
     planExpressionBindings,
     ValueExpression,
 } from "../onshape-utils/expressioncodegen";
@@ -57,35 +58,15 @@ export async function generateFeatureStudioSource(
         return;
     }
 
-    // Track local variables: {variableName: {nodeId: actualVariableName}}
-    const localVariableIdentifiers: Record<string, Record<string, string>> = {};
+    // Local-variable naming (issue #42): one global allocator with a single
+    // taken-set across every desired name, so a node asking for `x` and a
+    // node asking for `x0` can never receive the same identifier. Reuses
+    // the #10 allocator (`desired`, then `desired0`, `desired1`, ...).
+    const localVariableAllocator = createStableNameAllocator();
 
     // Helper function to populate a unique variable name
-    const createLocalVariableIndentifier = (desired: string, nodeId: string): string => {
-        let identifier = desired;
-        let counter = 0;
-
-        // Check if this name already exists
-        if (!localVariableIdentifiers[desired]) {
-            localVariableIdentifiers[desired] = {};
-        }
-
-        // Check if identifier already exists
-        if (localVariableIdentifiers[desired][nodeId]) {
-            return localVariableIdentifiers[desired][nodeId]
-        }
-
-        // If the preferred name is taken, append a counter
-        while (Object.values(localVariableIdentifiers[desired]).includes(identifier)) {
-            identifier = `${desired}${counter}`;
-            counter++;
-        }
-
-        // Store the mapping
-        localVariableIdentifiers[desired][nodeId] = identifier;
-
-        return identifier;
-    };
+    const createLocalVariableIndentifier = (desired: string, nodeId: string): string =>
+        localVariableAllocator.allocate(desired, nodeId);
 
     // map of consumer node id to map of input key and pointer to producer
     const nodeDataMap: Record<string, Record<string, VariablePointer>[]> = {};
@@ -93,45 +74,104 @@ export async function generateFeatureStudioSource(
     // map of consumer node id to map of input key and assigned identifier
     const topLevelVariablesMap: Record<string, Record<string, TopLevelVariableDefintion>> = {};
 
-    // First pass: fetch data for all nodes and assign variable names to their outputs
+    // First pass A: fetch data for all nodes (no symbol registration yet —
+    // validation must run, and may refuse the graph, before any node
+    // registers an output symbol; issues #43/#48).
     for (const nodeId of nodeArray) {
         const node = editor.getNode(nodeId);
         if (node == null) {
             console.warn(`Could not find node with id ${nodeId}`);
             continue;
         }
-
-        // Fetch the node's inputs
-        // Returns a Record<string, VariablePointer> for inputs to the node
         const nodeInputs = await engine.fetchInputs(nodeId);
         if (!(nodeInputs && typeof nodeInputs === 'object')) {
             console.warn(`Node ${nodeId} did not return valid data`);
             continue;
         }
         nodeDataMap[nodeId] = nodeInputs as Record<string, VariablePointer>[];
+    }
 
-        // handle any top level variables the node declares and defines
+    const producersOf = (nodeId: string): Record<string, { nodeId: string; outputKey: string }> => {
+        const producers: Record<string, { nodeId: string; outputKey: string }> = {};
+        for (const [key, pointers] of Object.entries(nodeDataMap[nodeId] ?? {})) {
+            const pointer = pointers?.[0];
+            if (pointer != null) {
+                producers[key] = { nodeId: pointer.id, outputKey: pointer.name };
+            }
+        }
+        return producers;
+    };
+
+    // Build-time validation (issue #12, plus muted/empty rules for
+    // #43/#48): iteration over a Query, unbounded loops, empty math
+    // expressions, and consumers of muted value producers are refused
+    // before any code — or any output symbol — is generated. Muted nodes
+    // themselves are excluded (they emit nothing and are not validated);
+    // `validateGraphNodes` checks their consumers separately.
+    // Throws an error naming every offending node.
+    const activeNodeArray = nodeArray.filter((nodeId) => {
+        const node = editor.getNode(nodeId) as OnshapeNode | undefined;
+        return node?.muted !== true;
+    });
+    validateGraphNodes(
+        activeNodeArray.map((nodeId) => ({
+            node: editor.getNode(nodeId) as OnshapeNode,
+            producers: producersOf(nodeId),
+        })),
+        (id) => editor.getNode(id) as OnshapeNode | undefined,
+    );
+
+    // Muted-node pass-through (#43): a consumer wired to a muted node's
+    // pass-through socket (output key also an input key, e.g. `context`)
+    // resolves through the muted node to the node feeding it — the muted
+    // statement emits nothing and its context flows on. Consumers of a
+    // muted node's value outputs already failed validation above.
+    for (const nodeId of activeNodeArray) {
+        const data = nodeDataMap[nodeId];
+        if (data == null) continue;
+        for (const key of Object.keys(data)) {
+            let pointer = data[key]?.[0];
+            const seen = new Set<string>();
+            while (pointer != null) {
+                const producerNode = editor.getNode(pointer.id) as OnshapeNode | undefined;
+                if (
+                    producerNode?.muted !== true ||
+                    !(pointer.name in (producerNode.inputs ?? {})) ||
+                    seen.has(pointer.id)
+                ) {
+                    break;
+                }
+                seen.add(pointer.id);
+                const through = nodeDataMap[pointer.id]?.[pointer.name]?.[0];
+                if (through == null) break;
+                pointer = through;
+                data[key] = [pointer];
+            }
+        }
+    }
+
+    // First pass B: assign variable names to the outputs of non-muted
+    // nodes only, so a muted node's output is never registered.
+    for (const nodeId of activeNodeArray) {
+        const node = editor.getNode(nodeId);
+        if (node == null || nodeDataMap[nodeId] == null) {
+            continue;
+        }
         const topLevelVariables = node.getTopLevelVariables();
         const tLVEntries = Object.entries(topLevelVariables);
         if (tLVEntries.length > 0) {
             const tLVDefinitions: Record<string, TopLevelVariableDefintion> = {};
-
             for (const [symbol, featurescript] of tLVEntries) {
                 const identifier = createLocalVariableIndentifier(symbol, nodeId);
                 tLVDefinitions[symbol] = { identifier, featurescript };
             }
             topLevelVariablesMap[nodeId] = tLVDefinitions;
         }
-
-
-        // Iterate over each output that defines a variable
         const nodeVariables = node.getVariableSymbols();
         for (const key of nodeVariables) {
-            // Assign a unique variable name for this output
             const actualName = createLocalVariableIndentifier(key, nodeId);
             console.log(`Node ${nodeId} output '${key}' assigned variable name: ${actualName}`);
         }
-
     }
 
     // Build the variable mapping for a node's inputs, plus the producing
@@ -163,12 +203,12 @@ export async function generateFeatureStudioSource(
                 continue;
             }
             // Look up the variable name from the source node's output
-            const localVariableUsages = localVariableIdentifiers[variablePointer.name];
-            if (localVariableUsages && localVariableUsages[variablePointer.id]) {
+            const allocated = localVariableAllocator.lookup(variablePointer.name, variablePointer.id);
+            if (allocated != null) {
                 // set variable name to unique identifier
-                variableMapping[key] = localVariableUsages[variablePointer.id];
+                variableMapping[key] = allocated;
             } else {
-                console.warn(`Could not find ${variablePointer.name} and ${variablePointer.id} in indentifiers:`, localVariableIdentifiers);
+                console.warn(`Could not find ${variablePointer.name} and ${variablePointer.id} in indentifiers`);
             }
         }
 
@@ -182,29 +222,12 @@ export async function generateFeatureStudioSource(
         return { variableMapping, inputProducers, valueDependencies };
     };
 
-    // Build-time validation (issue #12): iteration over a Query and
-    // unbounded loops are refused before any code is generated. Throws an
-    // error naming every offending node.
-    validateGraphNodes(
-        nodeArray.map((nodeId) => {
-            const producers: Record<string, { nodeId: string; outputKey: string }> = {};
-            for (const [key, pointers] of Object.entries(nodeDataMap[nodeId] ?? {})) {
-                const pointer = pointers?.[0];
-                if (pointer != null) {
-                    producers[key] = { nodeId: pointer.id, outputKey: pointer.name };
-                }
-            }
-            return { node: editor.getNode(nodeId) as OnshapeNode, producers };
-        }),
-        (id) => editor.getNode(id) as OnshapeNode | undefined,
-    );
-
     // Expression pre-pass (issue #10): collect the IR from any value nodes
     // and plan their hoisted bindings, so statement consumers below can
     // reference the `let` names. `assembleFeatureScriptInfo` re-plans the
     // same expressions (a pure function of the list), so the names agree.
     const expressions = new Map<string, ValueExpression>();
-    for (const nodeId of nodeArray) {
+    for (const nodeId of activeNodeArray) {
         const node = editor.getNode(nodeId);
         if (node == null || nodeDataMap[nodeId] == null) {
             continue;
@@ -222,7 +245,7 @@ export async function generateFeatureStudioSource(
     // Second pass: build variable mappings for each node's inputs and generate featurescript representation
     const pipelineNodes: PipelineNodeInfo[] = [];
 
-    for (const nodeId of nodeArray) {
+    for (const nodeId of activeNodeArray) {
         const node = editor.getNode(nodeId);
         if (node == null) {
             continue;

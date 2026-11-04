@@ -55,11 +55,18 @@ export function formatNumber(value: number): string {
 }
 
 /** Emit FeatureScript source for an expression AST. */
-export function emitFeatureScript(node: MathExprNode): string {
-    return emit(node, 0);
+export function emitFeatureScript(
+    node: MathExprNode,
+    formatIdentifier?: (name: string) => string,
+): string {
+    return emit(node, 0, formatIdentifier);
 }
 
-function emit(node: MathExprNode, contextPrecedence: number): string {
+function emit(
+    node: MathExprNode,
+    contextPrecedence: number,
+    formatIdentifier?: (name: string) => string,
+): string {
     const precedence = precedenceOf(node);
     let text: string;
 
@@ -70,10 +77,10 @@ function emit(node: MathExprNode, contextPrecedence: number): string {
             break;
         }
         case 'identifier':
-            text = node.name;
+            text = formatIdentifier != null ? formatIdentifier(node.name) : node.name;
             break;
         case 'unary': {
-            const operand = emit(node.operand, UNARY_PRECEDENCE + 1);
+            const operand = emit(node.operand, UNARY_PRECEDENCE + 1, formatIdentifier);
             text = node.operator === '-' ? `-${operand}` : `+${operand}`;
             break;
         }
@@ -82,25 +89,25 @@ function emit(node: MathExprNode, contextPrecedence: number): string {
                 // Right-associative: left child at equal precedence needs
                 // parentheses, right child does not. The right child may be
                 // a unary expression (`2 ^ -3`), so its context is unary.
-                const left = emit(node.left, POWER_PRECEDENCE + 1);
-                const right = emit(node.right, UNARY_PRECEDENCE);
+                const left = emit(node.left, POWER_PRECEDENCE + 1, formatIdentifier);
+                const right = emit(node.right, UNARY_PRECEDENCE, formatIdentifier);
                 text = `${left} ^ ${right}`;
             } else {
-                const left = emit(node.left, precedence);
-                const right = emit(node.right, precedence + 1);
+                const left = emit(node.left, precedence, formatIdentifier);
+                const right = emit(node.right, precedence + 1, formatIdentifier);
                 text = `${left} ${node.operator} ${right}`;
             }
             break;
         }
         case 'call':
-            text = `${node.name}(${node.args.map((arg) => emit(arg, 0)).join(', ')})`;
+            text = `${node.name}(${node.args.map((arg) => emit(arg, 0, formatIdentifier)).join(', ')})`;
             break;
         case 'array':
-            text = `[${node.elements.map((el) => emit(el, 0)).join(', ')}]`;
+            text = `[${node.elements.map((el) => emit(el, 0, formatIdentifier)).join(', ')}]`;
             break;
         case 'index': {
-            const target = emit(node.target, POSTFIX_PRECEDENCE);
-            text = `${target}[${emit(node.index, 0)}]`;
+            const target = emit(node.target, POSTFIX_PRECEDENCE, formatIdentifier);
+            text = `${target}[${emit(node.index, 0, formatIdentifier)}]`;
             break;
         }
     }

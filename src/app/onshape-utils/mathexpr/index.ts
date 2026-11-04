@@ -15,6 +15,7 @@
  */
 import { MathDiagnostic, MathExprError, MathExprNode } from './ast';
 import { emitFeatureScript } from './emitter';
+import { BUILTIN_CONSTANTS } from './functions';
 import { inferType, TypeEnvironment } from './typecheck';
 import { parseMathExpression } from './parser';
 import { ValueType } from '../valuetypes';
@@ -74,9 +75,13 @@ export function compileMathExpression(
 
 /**
  * Adapt a compiled math expression to the #10 expression IR: one pure
- * {@link ValueExpression} whose `expression` is the emitted FeatureScript.
- * Identifiers are external inputs (they resolve to node bindings or
- * parameters at the graph level, per `expressioncodegen.ts`).
+ * {@link ValueExpression} whose `expression` is the emitted FeatureScript
+ * with every free identifier replaced by a `{name}` placeholder, so
+ * `substituteExpression` can substitute the hoisted binding of the wired
+ * producer (issue #41). Identifiers that are not free variables — builtin
+ * constants (`PI`), function names and unit names (the latter are not
+ * identifier nodes at all) — are emitted verbatim and never become
+ * placeholders.
  */
 export function toValueExpression(
     compiled: Extract<CompileResult, { ok: true }>,
@@ -87,7 +92,9 @@ export function toValueExpression(
     return {
         nodeId: options.nodeId ?? 'math',
         producer: options.producer ?? 'math-expression',
-        expression: compiled.code,
+        expression: emitFeatureScript(compiled.ast, (name) =>
+            name in BUILTIN_CONSTANTS ? name : `{${name}}`
+        ),
         inputs,
         valueType: compiled.valueType,
         pure: true,
@@ -97,7 +104,8 @@ export function toValueExpression(
 function collectIdentifiers(node: MathExprNode, out: Record<string, string>): void {
     switch (node.kind) {
         case 'identifier':
-            if (!(node.name in out)) out[node.name] = node.name;
+            // Builtin constants (PI) are not external inputs.
+            if (!(node.name in BUILTIN_CONSTANTS) && !(node.name in out)) out[node.name] = node.name;
             return;
         case 'unary':
             collectIdentifiers(node.operand, out);
