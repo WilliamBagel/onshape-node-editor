@@ -24,7 +24,7 @@ export type Schemes = GetSchemes<
     OnshapeNode,
     Connection<OnshapeNode, OnshapeNode>
 >;
-export type AreaExtra = VueArea2D<Schemes>;
+export type AreaExtra = VueArea2D<Schemes> | import("rete-context-menu-plugin").ContextMenuExtra;
 
 export interface OnshapeSocketData extends SocketData {
     btType: string;

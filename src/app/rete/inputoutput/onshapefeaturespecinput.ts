@@ -2,8 +2,9 @@ import { BTFeatureSpec129, BTMParameterQuantity147, BTParameterSpec6, BTParamete
 import { ClassicPreset } from 'rete';
 import { OnshapeInput } from './onshapeinput';
 import { OnshapeSocket } from '../onshapesockets';
-import { BooleanType, EnumType, TransientSelection, TransientSelectionType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
+import { BooleanType, EnumType, TransientSelection, TransientSelectionType, OnshapeType, ParameterArrayType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
 import { evaluateVisibilityCondition, getSpecFromFeatureSpec } from '../../onshape-utils/bttypetools';
+import { arrayValueToFeaturescriptWithSpecs, getArrayMemberSpecs } from '../../onshape-utils/parameterarray';
 import { valueTypeFromBTParameterSpec } from '../../onshape-utils/valuetypes';
 import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
 
@@ -136,7 +137,7 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
         return evaluateVisibilityCondition(visibilityCondition, this.configuredParameters, this.connectedParameters);
     }
 
-    private getSpecFeaturescript(spec: OnshapeType<any>): string {
+    private getSpecFeaturescript(spec: OnshapeType<any>, memberSpecs: BTParameterSpec6[] = []): string {
         if (spec.type === "ValueWithUnits") {
             const value = spec.value as ValueWithUnits;
             return `${value.value} * ${value.units}`;
@@ -145,6 +146,8 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             return `${enumSpec.enumName}.${enumSpec.value}`;
         } else if (spec.type === "Boolean") {
             return spec.value;
+        } else if (spec.type === "ParameterArray") {
+            return arrayValueToFeaturescriptWithSpecs(spec as ParameterArrayType, memberSpecs);
         } else if (spec.type === "QueryList") {
             const querySpec = spec as TransientSelectionType;
             console.log(spec);
@@ -200,7 +203,12 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
                     const value = control.getCurrentValue?.();
                     const parameterInfo = Object.assign({}, control.getSpec()) as OnshapeType<any>;
                     parameterInfo.value = value;
-                    parameterValues[paramId] = value != null ? this.getSpecFeaturescript(parameterInfo) : '';
+                    const memberSpecs = getArrayMemberSpecs(
+                        (this.featureSpec.parameters ?? []).find(
+                            (p) => p.parameterId === paramId
+                        ) as BTParameterSpec6
+                    );
+                    parameterValues[paramId] = value != null ? this.getSpecFeaturescript(parameterInfo, memberSpecs) : '';
                 }
             }
         }

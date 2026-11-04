@@ -74,6 +74,34 @@ export interface TransientSelectionType extends OnshapeType<TransientSelection[]
     value: TransientSelection[];
 }
 
+/**
+ * One item of a `BTParameterSpecArray-2600` parameter: a record keyed by the
+ * member spec's `parameterId`, each value in the member type's raw form
+ * (e.g. `{value, units}` for a quantity, a string for an enum, a
+ * `TransientSelection[]` for a query member). Plain JSON, so it round-trips
+ * through the graph schema unchanged.
+ */
+export type ParameterArrayItem = Record<string, unknown>;
+
+/**
+ * A list parameter (`BTParameterSpecArray-2600`, issue #26). This is the
+ * `featurescripttypes` counterpart of #9's `array<T>` value type: `elements`
+ * are the per-member specs (the array spec's `parameters` array, each
+ * converted by `getSpecFromFeatureSpec`), `element` is the first of them
+ * (or null), and `value` is the current list of items.
+ */
+export interface ParameterArrayType extends OnshapeType<ParameterArrayItem[]> {
+    type: "ParameterArray";
+    value: ParameterArrayItem[];
+    element: OnshapeType<any> | null;
+    elements: OnshapeType<any>[];
+    itemName?: string;
+    itemLabelTemplate?: string;
+    maxNumberOfPicks?: number;
+    showLabelsOnly?: boolean;
+    drivenQuery?: string;
+}
+
 const obj = {
     "btType": "BTParameterSpecQuery-174",
     "columnName": "",

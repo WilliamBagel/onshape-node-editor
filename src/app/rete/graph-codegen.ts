@@ -21,6 +21,10 @@ import {
     parameterTypeForSpec,
 } from "../onshape-utils/partstudiofeature";
 import type { OnshapeNode } from "./nodes/onshapenode";
+import {
+    planExpressionBindings,
+    ValueExpression,
+} from "../onshape-utils/expressioncodegen";
 
 /**
  * Generate the Feature Studio source for `editor`'s graph.
@@ -121,24 +125,34 @@ export async function generateFeatureStudioSource(
 
     }
 
-    // Second pass: build variable mappings for each node's inputs and generate featurescript representation
-    const pipelineNodes: PipelineNodeInfo[] = [];
-
-    for (const nodeId of nodeArray) {
-        const node = editor.getNode(nodeId);
-        if (node == null) {
-            continue;
-        }
-
-        // Build the variable mapping for this node's inputs
+    // Build the variable mapping for a node's inputs, plus the producing
+    // node id per input key (issue #10: the expression IR's dependency
+    // edges). Inputs from a value node resolve to its hoisted `let`
+    // binding once `expressionBindings` is known; before that (the
+    // expression pre-pass) they resolve to the first-pass identifier,
+    // which value-node implementers must not bake into their template —
+    // they reference inputs by placeholder + producer id instead.
+    let expressionBindings = new Map<string, string>();
+    const buildVariableMapping = (nodeId: string) => {
         const variableMapping: Record<string, string> = {};
+        const inputProducers: Record<string, string> = {};
+        const valueDependencies: string[] = [];
 
-        // node data is currently the input to the node
-        // need to check if node wants other variables like a default query
-        // so join this with that array
         const nodeData = nodeDataMap[nodeId];
         for (const key in nodeData) {
             const variablePointer = nodeData[key]?.[0];
+            if (variablePointer == null) {
+                continue;
+            }
+            inputProducers[key] = variablePointer.id;
+            if (!valueDependencies.includes(variablePointer.id)) {
+                valueDependencies.push(variablePointer.id);
+            }
+            const hoisted = expressionBindings.get(variablePointer.id);
+            if (hoisted != null) {
+                variableMapping[key] = hoisted;
+                continue;
+            }
             // Look up the variable name from the source node's output
             const localVariableUsages = localVariableIdentifiers[variablePointer.name];
             if (localVariableUsages && localVariableUsages[variablePointer.id]) {
@@ -156,12 +170,63 @@ export async function generateFeatureStudioSource(
                 variableMapping[key] = value.identifier;
             }
         }
+        return { variableMapping, inputProducers, valueDependencies };
+    };
+
+    // Expression pre-pass (issue #10): collect the IR from any value nodes
+    // and plan their hoisted bindings, so statement consumers below can
+    // reference the `let` names. `assembleFeatureScriptInfo` re-plans the
+    // same expressions (a pure function of the list), so the names agree.
+    const expressions = new Map<string, ValueExpression>();
+    for (const nodeId of nodeArray) {
+        const node = editor.getNode(nodeId);
+        if (node == null || nodeDataMap[nodeId] == null) {
+            continue;
+        }
+        const { variableMapping, inputProducers } = buildVariableMapping(nodeId);
+        const expression = node.getExpressionInfo({ variableMapping, inputProducers });
+        if (expression != null) {
+            expressions.set(nodeId, expression);
+        }
+    }
+    if (expressions.size > 0) {
+        expressionBindings = planExpressionBindings([...expressions.values()]).bindings;
+    }
+
+    // Second pass: build variable mappings for each node's inputs and generate featurescript representation
+    const pipelineNodes: PipelineNodeInfo[] = [];
+
+    for (const nodeId of nodeArray) {
+        const node = editor.getNode(nodeId);
+        if (node == null) {
+            continue;
+        }
+
+        const { variableMapping, valueDependencies } = buildVariableMapping(nodeId);
+
+        const expression = expressions.get(nodeId);
+        if (expression != null) {
+            // Value node: no statement lines; the expression is hoisted by
+            // `assembleFeatureScriptInfo`.
+            pipelineNodes.push({
+                id: nodeId,
+                type: node.type,
+                info: { line: '' },
+                expression,
+                valueDependencies,
+                topLevelVariables: topLevelVariablesMap[nodeId],
+            });
+            console.log(`Generated expression for node ${nodeId}:`, expression);
+            continue;
+        }
+
         // Get the feature script info with the variable mapping
         const info = node.getFeatureScriptInfo(variableMapping);
         pipelineNodes.push({
             id: nodeId,
             type: node.type,
             info,
+            valueDependencies,
             topLevelVariables: topLevelVariablesMap[nodeId],
         });
         console.log(`Generated feature script for node ${nodeId}:`, node);

@@ -1,4 +1,5 @@
 import { NodeFeaturescriptInfo } from '../onshape-utils/featurestudiogenerator';
+import { assembleExpressionCode, ValueExpression } from '../onshape-utils/expressioncodegen';
 import { TopLevelVariableDefintion } from './nodes/onshapenode';
 
 /**
@@ -17,6 +18,17 @@ export interface PipelineNodeInfo {
     info: NodeFeaturescriptInfo;
     /** Top-level variables this node declares, keyed by symbol. */
     topLevelVariables?: Record<string, TopLevelVariableDefintion>;
+    /**
+     * Issue #10: when present, this node is a value node. It contributes no
+     * statement lines (`info` is ignored); instead its expression is hoisted
+     * into a `let` binding before the first statement that consumes it.
+     */
+    expression?: ValueExpression;
+    /**
+     * Issue #10: value node ids this (statement) node consumes, so their
+     * hoisted bindings are emitted before it.
+     */
+    valueDependencies?: string[];
 }
 
 /** A top-level `var` may reference a query, so the import has to be there. */
@@ -32,8 +44,17 @@ export const TOP_LEVEL_VARIABLE_DEPENDENCIES = [
  * emitted right after a define-feature node -- once per generated Feature
  * Studio, not once per define-feature node: a graph with two define nodes used
  * to emit every top-level `var` twice.
+ *
+ * When any node carries an `expression` (issue #10), value nodes are
+ * topologically ordered and hoisted into `let` bindings interleaved with the
+ * statements (see `assembleExpressionCode`); statement nodes — including the
+ * top-level `var` insertion — keep their relative order.
  */
 export function assembleFeatureScriptInfo(nodes: PipelineNodeInfo[]): NodeFeaturescriptInfo[] {
+    if (nodes.some((node) => node.expression != null)) {
+        return assembleWithExpressions(nodes);
+    }
+
     const featureScriptInfo: NodeFeaturescriptInfo[] = [];
 
     // Flattened node order, so emission does not depend on which define node
@@ -56,4 +77,45 @@ export function assembleFeatureScriptInfo(nodes: PipelineNodeInfo[]): NodeFeatur
     }
 
     return featureScriptInfo;
+}
+
+function assembleWithExpressions(nodes: PipelineNodeInfo[]): NodeFeaturescriptInfo[] {
+    const valueNodes = nodes
+        .filter((node) => node.expression != null)
+        .map((node) => node.expression as ValueExpression);
+
+    // Top-level `var`s are statements of their own, emitted right after the
+    // define-feature statement, exactly as in the statement-only path. They
+    // are spliced into the statement list so `assembleExpressionCode` keeps
+    // them in place relative to the other statements.
+    const topLevelVariables = nodes.flatMap((node) => Object.values(node.topLevelVariables ?? {}));
+    let topLevelVariablesEmitted = false;
+
+    const statements = nodes
+        .filter((node) => node.expression == null)
+        .flatMap((node) => {
+            const list = [{
+                nodeId: node.id,
+                producer: node.type,
+                info: node.info,
+                consumes: node.valueDependencies ?? [],
+            }];
+            if (node.type === 'define-feature' && !topLevelVariablesEmitted) {
+                topLevelVariablesEmitted = true;
+                for (const value of topLevelVariables) {
+                    list.push({
+                        nodeId: `${node.id}:top-level:${value.identifier}`,
+                        producer: 'top-level-variable',
+                        info: {
+                            line: `var ${value.identifier} = ${value.featurescript};`,
+                            dependencies: TOP_LEVEL_VARIABLE_DEPENDENCIES,
+                        } as NodeFeaturescriptInfo,
+                        consumes: [] as string[],
+                    });
+                }
+            }
+            return list;
+        });
+
+    return assembleExpressionCode(valueNodes, statements);
 }

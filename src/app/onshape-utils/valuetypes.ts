@@ -108,6 +108,9 @@ export function parseValueType(name: string | undefined | null): ValueType {
         case "Enum":
         case "enum":
             return { name: "Enum" };
+        case "array":
+        case "ParameterArray":
+            return { name: "array", element: UNKNOWN_VALUE_TYPE };
         default:
             // BTParameterSpec* strings and anything else: try the BT mapping.
             if (name != null && name.startsWith("BTParameterSpec")) {
@@ -309,8 +312,17 @@ export function valueTypeFromBTParameterSpec(spec: {
         case "BTParameterSpecForeignId-172":
             return { name: "Id" };
         case "BTParameterSpecArray-2600": {
-            // The member spec is nested under `spec` / `memberSpec` / `member`.
-            const member = s.spec ?? s.memberSpec ?? s.member;
+            // The member specs live in the spec's own `parameters` array on
+            // the wire (see the `BTParameterSpecArray-2600` fixtures in
+            // devEditor.ts: one member for a profiles array, several for a
+            // loft guide); `spec` / `memberSpec` / `member` are accepted
+            // for hand-written fixtures. A single member gives array<T>;
+            // several members make each item a map, hence array<map>.
+            const members = Array.isArray(s.parameters) ? s.parameters : null;
+            const member = members?.length === 1 ? members[0] : s.spec ?? s.memberSpec ?? s.member;
+            if (members != null && members.length > 1) {
+                return { name: "array", element: { name: "map" } };
+            }
             const element =
                 member != null && typeof member === "object"
                     ? valueTypeFromBTParameterSpec(member as { btType?: string })

@@ -6,6 +6,7 @@ import { OnshapeInput } from "../inputoutput/onshapeinput";
 import { AreaPlugin } from "rete-area-plugin";
 import { AreaExtra, Schemes } from "../types";
 import { NodeFeaturescriptInfo } from "../../onshape-utils/featurestudiogenerator";
+import type { ValueExpression } from "../../onshape-utils/expressioncodegen";
 import type { SerializedNodeBase, SerializedNodeKind } from "../serialization/graph-schema-types";
 
 
@@ -121,6 +122,26 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
     return {
       line: "generic node"
     }
+  }
+
+  /**
+   * Issue #10: return this node's expression IR when it is a pure value node
+   * (vector/matrix/transform math, ...), or `undefined` when it is a
+   * statement node. Value nodes never emit statements directly; their
+   * expression is hoisted into a `let` binding by the codegen.
+   *
+   * `variableMapping` maps input keys to the identifier of the connected
+   * value (the same mapping `getFeatureScriptInfo` receives);
+   * `inputProducers` maps the same keys to the producing node's id, which
+   * is what the IR's dependency edges are built from. External inputs
+   * (parameters, `context`) have no producer and are absent from
+   * `inputProducers`.
+   */
+  public getExpressionInfo(_context: {
+    variableMapping: Record<string, string>;
+    inputProducers: Record<string, string>;
+  }): ValueExpression | undefined {
+    return undefined;
   }
 
   public getTitle(): string {

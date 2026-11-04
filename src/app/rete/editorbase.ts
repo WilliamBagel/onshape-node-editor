@@ -38,6 +38,10 @@ import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeature
 import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./serialization/graph-serializer";
 import type { SpecResolver } from "./serialization/graph-schema-types";
 import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "../ui/editorSettings";
+import { ContextMenuPlugin, Presets as ContextMenuPresets } from "rete-context-menu-plugin";
+import { defaultCatalog } from "../onshape/catalog/spec-catalog";
+import type { CatalogEntry } from "../onshape/catalog/types";
+import { createNodeFromCatalogEntry, groupByCategory, nodeableEntries } from "./catalog-node-factory";
 
 /** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
 export function modifierCheckKey(modifier: string): string {
@@ -93,6 +97,8 @@ export type EditorControls = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
+    /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
+    addNodeFromCatalog: (entry: CatalogEntry, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
     destroy: () => void
 }
 
@@ -117,6 +123,8 @@ type EditorBaseInfo = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
+    /** #8: create a node from a catalog entry. */
+    addNodeFromCatalog: (entry: CatalogEntry, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
     /** #6: the open graph as a serialized JSON document (schema v2). */
     serializeGraph: () => string
     /** #6: replace the editor's contents with a stored graph. */
@@ -250,6 +258,26 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     // `group`): drag a node onto a frame to group it, drag a frame to move
     // its contents with it, and it auto-fits the frame to its children. The
     // classic preset is its long-press-capture interaction.
+    vueRender.addPreset(VuePresets.contextMenu.setup());
+
+    // #8: canvas context menu ("Add node") listing the same catalog as the
+    // palette, grouped by category. The plugin's factory adds the node at
+    // the pointer, so placement is at the cursor.
+    const contextMenu = new ContextMenuPlugin<Schemes>({
+        items: ContextMenuPresets.classic.setup(
+            groupByCategory(nodeableEntries(defaultCatalog.entries)).map(
+                (group): [string, [string, () => OnshapeNode][]] => [
+                    group.category,
+                    group.entries.map((entry): [string, () => OnshapeNode] => [
+                        entry.name,
+                        () => createNodeFromCatalogEntry(entry) as OnshapeNode,
+                    ]),
+                ],
+            ),
+        ),
+    });
+    area.use(contextMenu);
+
     const scopes = new ScopesPlugin<Schemes>();
     scopes.addPreset(ScopesPresets.classic.setup());
 
@@ -620,6 +648,30 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         };
     };
 
+    // #8: last pointer position on the canvas, for palette placement.
+    let lastPointer: { x: number; y: number } | null = null;
+    container.addEventListener('pointerdown', (e) => {
+        const t = (area.area as unknown as { transform?: { x: number; y: number; k: number } }).transform;
+        const k = t?.k ?? 1;
+        lastPointer = { x: (e.clientX - container.getBoundingClientRect().left - (t?.x ?? 0)) / k, y: (e.clientY - container.getBoundingClientRect().top - (t?.y ?? 0)) / k };
+    });
+
+    /** #8: viewport centre in canvas coordinates (keyboard placement). */
+    const viewportCentre = (): { x: number; y: number } => {
+        const t = (area.area as unknown as { transform?: { x: number; y: number; k: number } }).transform;
+        const k = t?.k ?? 1;
+        return { x: (container.clientWidth / 2 - (t?.x ?? 0)) / k, y: (container.clientHeight / 2 - (t?.y ?? 0)) / k };
+    };
+
+    /** #8: create a catalog node and place it at the given / last-click / centre position. */
+    const addNodeFromCatalog = async (entry: CatalogEntry, position?: { x: number; y: number }): Promise<OnshapeNode | null> => {
+        const node = createNodeFromCatalogEntry(entry);
+        if (node == null) return null;
+        await editor.addNode(node);
+        await area.translate(node.id, position ?? lastPointer ?? viewportCentre());
+        return node;
+    };
+
     return {
         editor,
         area,
@@ -632,6 +684,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         createFrameFromSelection,
         toggleFrameCollapsed,
         applyPreferences,
+        addNodeFromCatalog,
         serializeGraph,
         loadGraph,
         studioEvents: { build: buildStudio, describe: describeStudio },
