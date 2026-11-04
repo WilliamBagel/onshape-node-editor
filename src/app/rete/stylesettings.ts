@@ -15,7 +15,18 @@ export class StyleSettings {
         "Enum": "#4FC1FF",
         "ValueWithUnits": "#B5CEA8",
         "Boolean": "#4e94ce",
-        "String": "#CE9178"
+        "String": "#CE9178",
+        // Value types from the typed-socket model (issue #9). Muted, chosen
+        // alongside the palette above — no new hues beyond the teal family.
+        "Vector": "#2a8f82",
+        "Matrix": "#a08c5b",
+        "Transform": "#4a6b7c",
+        "CoordSystem": "#6b7c4a",
+        "number": "#9db38f",
+        "boolean": "#4e94ce",
+        "string": "#CE9178",
+        "Query": "#B2DDF6",
+        "map": "#8c8c86"
     }
 
     public getStyle(socket: string): string {

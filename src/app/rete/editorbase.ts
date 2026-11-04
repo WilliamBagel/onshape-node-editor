@@ -282,6 +282,25 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             if (connectionIO == undefined) return;
             const { source, target, output, input } = connectionIO
 
+            // Typed-socket refusal (issue #9): a connection whose value
+            // types have no coercion rule is refused here — returning
+            // `undefined` cancels rete's `connectioncreate`, so
+            // `editor.addConnection` returns false and nothing is wired.
+            // The reason names both types.
+            const sourceSocket = output.socket as OnshapeSocket | undefined;
+            const targetSocket = input.socket as OnshapeSocket | undefined;
+            if (
+                sourceSocket != null &&
+                targetSocket != null &&
+                typeof sourceSocket.incompatibilityReason === 'function'
+            ) {
+                const reason = sourceSocket.incompatibilityReason(targetSocket);
+                if (reason != null) {
+                    console.warn(reason);
+                    return;
+                }
+            }
+
             source.addConnection(output, input);
             target.addConnection(input, output);
 

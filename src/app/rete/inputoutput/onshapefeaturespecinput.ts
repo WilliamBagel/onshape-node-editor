@@ -4,6 +4,7 @@ import { OnshapeInput } from './onshapeinput';
 import { OnshapeSocket } from '../onshapesockets';
 import { BooleanType, EnumType, TransientSelection, TransientSelectionType, OnshapeType, QueryList, QueryListType, ValueWithUnits, ValueWithUnitsType } from '../../onshape-utils/featurescripttypes';
 import { evaluateVisibilityCondition, getSpecFromFeatureSpec } from '../../onshape-utils/bttypetools';
+import { valueTypeFromBTParameterSpec } from '../../onshape-utils/valuetypes';
 import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
 
 export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
@@ -38,7 +39,7 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             const spec = getSpecFromFeatureSpec(param);
 
             const paramInput = new OnshapeInput(
-                new OnshapeSocket(param.btType),
+                new OnshapeSocket(param.btType, valueTypeFromBTParameterSpec(param)),
                 param.parameterName,
                 spec.type,
                 spec,
