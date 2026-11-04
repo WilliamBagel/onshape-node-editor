@@ -5,7 +5,7 @@ name: CI
 # Deliberately separate from deploy-production.yml, which stays default-branch
 # only (a PR must never be able to deploy).
 #
-# type-check is the raw `pnpm run type-check` (vue-tsc over all three projects),
+# type-check is the gated `pnpm run type-check:gate` (vue-tsc over all three projects,
 # with no exemptions: issue #24 patched the one dependency that used to report 25
 # errors, so the compiler is now clean repo-wide and every error should fail the
 # job. If a dependency ever regresses, the fix is a patch under patches/ (see
@@ -30,17 +30,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '22'
+          node-version: '22.12.0'  # pinned: satisfies engines '^20.19.0 || >=22.12.0'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          version: 11.5.2
+          version: 11.22.0  # matches packageManager in package.json
 
       - name: Get pnpm store directory
         id: pnpm-cache
@@ -49,7 +49,7 @@ jobs:
           echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -60,7 +60,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: "Type-check"
-        run: pnpm run type-check
+        run: pnpm run type-check:gate
 
       - name: Style guide gate (#33)
         run: pnpm run style-check
@@ -73,3 +73,13 @@ jobs:
 
       - name: Build server
         run: pnpm run build:server
+
+      - name: Server orphan check (#40)
+        run: pnpm run check:server-orphans
+
+      - name: Dependency audit gate (#46)
+        run: pnpm run audit:gate
+
+      - name: Server-lock audit (#46)
+        working-directory: scripts/server-lock
+        run: npm audit --omit=dev --audit-level=moderate
