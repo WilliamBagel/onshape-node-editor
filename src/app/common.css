@@ -50,4 +50,34 @@ body {
     --font-size-keycap: 10px;
     --opacity-secondary: 0.6;
     --opacity-faint: 0.4;
+
+    /*
+     * Warm-ink palette (#34, STYLE_GUIDE.md "Not default-AI"). The stock
+     * slate/blue tokens above stay for the pre-existing components; new UI
+     * (AppDialog) uses only these deliberately-chosen values: warm ink
+     * #1a1a1a with opacity hierarchy, hairline #d9d9d4, steel blue #2f5f8f
+     * for the single primary action and the focus ring, and a real
+     * 14/13/12/11 type scale (11px is meta only).
+     */
+    --ink: #1a1a1a;
+    --ink-soft: #5a5a55;
+    --surface-panel: #fbfbf9;
+    --canvas-warm: #f7f7f5;
+    --hairline: #d9d9d4;
+    --hairline-strong: #8c8c86;
+    --accent-steel: #2f5f8f;
+    --flow-teal: #2a8f82;
+    --error: #b4443c;
+    --on-steel: #ffffff;
+    --font-size-heading: 14px;
+    --font-size-section: 12px;
+    --font-size-label: 12px;
+    --font-size-value: 13px;
+    --font-size-meta: 11px;
+    --font-size-literal: 12px;
+    --font-weight-title: 600;
+    --font-weight-section: 600;
+    --line-height-body: 1.35;
+    --line-height-title: 1.2;
+    --backdrop-scrim: rgba(26, 26, 26, 0.32);
 }

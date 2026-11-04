@@ -1,6 +1,8 @@
 <script lang="ts">
 import { defineComponent } from 'vue';
 import TopBar from './components/TopBar.vue'
+import AppDialog from './components/AppDialog.vue';
+import { promptText } from './ui/dialog';
 import { createEditor, createEditorDev } from './rete';
 import BottomBar from './components/BottomBar.vue';
 import LogPanel from './components/LogPanel.vue';
@@ -47,6 +49,7 @@ const fallbackLogStore = new BuildLogStore();
 export default defineComponent({
   components: {
     TopBar: TopBar,
+    AppDialog: AppDialog,
     BottomBar: BottomBar,
     LogPanel: LogPanel,
     ToolTip: ToolTip
@@ -112,7 +115,11 @@ export default defineComponent({
         );
         return;
       }
-      const name = window.prompt('Name for the new node graph', this.graphName);
+      const name = await promptText({
+        title: 'Name for the new node graph',
+        label: 'Graph name',
+        initialValue: this.graphName,
+      });
       if (name == null || name.trim() === '') return;
       await host.ensureGraphForDeploy(name);
       this.graphName = host.activeGraphIdentity?.graphName ?? name.trim();
@@ -121,7 +128,11 @@ export default defineComponent({
     async runNewGraph() {
       const host = this.featureStudioHost();
       if (host == null) return;
-      const name = window.prompt('Name for the additional node graph', 'Another Graph');
+      const name = await promptText({
+        title: 'Name for the additional node graph',
+        label: 'Graph name',
+        initialValue: 'Another Graph',
+      });
       if (name == null || name.trim() === '') return;
       await host.createAdditionalGraph(name);
       this.graphName = host.activeGraphIdentity?.graphName ?? name.trim();
@@ -131,7 +142,11 @@ export default defineComponent({
       const host = this.featureStudioHost();
       if (host == null) return false;
       if (host.getFeatureStudioTarget() != null) return true;
-      const name = window.prompt('No node graph in this document yet. Name for the new node graph', this.graphName);
+      const name = await promptText({
+        title: 'No node graph in this document yet. Name for the new node graph',
+        label: 'Graph name',
+        initialValue: this.graphName,
+      });
       if (name == null || name.trim() === '') return false;
       await host.ensureGraphForDeploy(name);
       this.graphName = host.activeGraphIdentity?.graphName ?? name.trim();
@@ -174,11 +189,14 @@ export default defineComponent({
       if (host == null) return;
       const current = host.getPartStudioTarget();
       const initial = current != null ? formatTarget(current) : host.suggestPartStudioTarget();
-      const entered = window.prompt(
-        'Part Studio to insert the generated feature into\n' +
-        'did (document id), wvm (w=workspace, v=version, m=microversion), wvmid (workspace id) and eid (Part Studio element id):',
-        initial
-      );
+      const entered = await promptText({
+        title: 'Part Studio target',
+        label: 'Part Studio to insert the generated feature into',
+        body: 'did (document id), wvm (w=workspace, v=version, m=microversion), wvmid (workspace id) and eid (Part Studio element id):',
+        initialValue: initial,
+        submitLabel: 'Set target',
+        mono: true,
+      });
       if (entered == null) return;
       try {
         host.setPartStudioTarget(entered);
@@ -254,6 +272,7 @@ export default defineComponent({
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
   <ToolTip />
+  <AppDialog />
 </template>
 
 <style scoped>
