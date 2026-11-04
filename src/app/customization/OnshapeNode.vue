@@ -232,14 +232,12 @@ export default defineComponent({
     box-shadow: var(--shadow-1);
   }
 
-  // Header strip: white with a heavier bottom hairline.
+  // Header strip: keep the card's structural hairline; typography and colour
+  // intentionally left as they were before #32 (see issue: node type/palette).
   .ns-dialog-header {
     background: var(--surface);
     border-bottom: 1px solid var(--border-hairline);
     border-radius: var(--radius-card) var(--radius-card) 0 0;
-    color: var(--text-primary);
-    font-size: var(--font-size-title);
-    font-weight: 600;
   }
 }
 
@@ -267,12 +265,12 @@ export default defineComponent({
   margin-right: - round($socket-overflow, 1px);
 }
 
-// 12px node titles, 600 weight (the guide's node-title size).
+// Node typography/colour are unchanged from before #32; a deliberate pass is
+// tracked in its own issue rather than being folded into the style retrofit.
 .ns-dialog-title,
 .os-dialog-header-rename-textbox {
-  color: var(--text-primary) !important;
-  font-size: var(--font-size-title) !important;
-  font-weight: 600 !important;
+  color: black !important;
+  font-size: 17px !important;
   outline: none;
 }
 
@@ -287,9 +285,9 @@ export default defineComponent({
     display: inline-block;
     margin: $socket-margin;
     user-select: none;
-    color: var(--text-secondary);
+    color: black;
     padding-top: 0px;
-    font-size: var(--font-size-field);
+    font-size: 15px;
     overflow: visible;
     align-self: center;
   }
