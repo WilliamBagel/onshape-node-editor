@@ -20,6 +20,15 @@ export interface GraphValidationEntry {
  * Run validation over every node. Never returns an error: it throws an
  * `Error` whose message names each offending node (type, title and id) and
  * the reason. Valid graphs return normally.
+ *
+ * Muted-node semantics (#43): a muted node is never validated or emitted
+ * (callers exclude it from `entries`), and a consumer wired to a muted
+ * producer FAILS — unless the muted node passes that socket through
+ * (its output key is also an input key, e.g. `context`/`id` on statement
+ * nodes), in which case the graph driver resolves the input through the
+ * muted node to the node feeding it. A muted node's *value* outputs
+ * (`return`, ...) have no pass-through, so consuming one is an error
+ * naming both nodes rather than a silent read of an undefined variable.
  */
 export function validateGraphNodes(
     entries: readonly GraphValidationEntry[],
@@ -32,6 +41,20 @@ export function validateGraphNodes(
             problems.push(
                 `Node "${entry.node.type}" (title "${entry.node.getTitle()}", id "${entry.node.id}"): ${message}`,
             );
+        }
+        for (const [inputKey, producer] of Object.entries(entry.producers)) {
+            const producerNode = getNode(producer.nodeId);
+            if (
+                producerNode?.muted === true &&
+                !(producer.outputKey in producerNode.inputs)
+            ) {
+                problems.push(
+                    `Node "${entry.node.type}" (title "${entry.node.getTitle()}", id "${entry.node.id}"): ` +
+                        `input "${inputKey}" is wired to output "${producer.outputKey}" of muted ` +
+                        `node "${producerNode.type}" (title "${producerNode.getTitle()}", id "${producerNode.id}"), ` +
+                        `which emits nothing; unmute that node or remove the connection.`,
+                );
+            }
         }
     }
     if (problems.length > 0) {

@@ -204,6 +204,12 @@ export class MathExpressionNode extends OnshapeNode {
     }
 
     public validateGraph(_context: GraphValidationContext): string | null {
+        if (this.source.trim() === '') {
+            return (
+                `Math expression node "${this.getTitle()}" (id "${this.id}") is empty: ` +
+                `enter an expression; an empty expression defines no "return" value.`
+            );
+        }
         if (this.diagnostics.length === 0) return null;
         const first = this.diagnostics[0];
         return `Math expression "${this.source}" is invalid: ${first.message}`;
