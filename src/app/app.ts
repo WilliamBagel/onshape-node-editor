@@ -46,6 +46,7 @@ import {
     UploadOutcome,
 } from "./onshape-utils/featurestudioupload";
 import { BuildLogStore, type LogSeverity } from "./logging/buildlog";
+import { confirm as confirmDialog } from "./ui/dialog";
 import {
     FeatureInsertion,
     InsertOutcome,
@@ -90,26 +91,38 @@ export class App extends BaseApp {
      */
     public log = new BuildLogStore();
     /**
-     * Confirmation for overwriting a non-empty Feature Studio. Replaceable so a
-     * real dialog (once the UI has one) or a test can stand in for `confirm()`.
+     * Confirmation for overwriting a non-empty Feature Studio. Routed through
+     * the in-app dialog service (#34) but kept as a replaceable seam: a test
+     * can assign a synchronous stub, and every caller already `await`s it.
      */
-    public confirmUpload: (diffText: string) => boolean = (diffText) => {
-        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+    public confirmUpload: (diffText: string) => boolean | Promise<boolean> = async (diffText) => {
+        try {
+            return await confirmDialog({
+                title: 'Overwrite Feature Studio?',
+                body: diffText,
+                confirmLabel: 'Overwrite',
+                danger: true,
+            });
+        } catch {
             return false;
         }
-        return window.confirm(diffText);
     };
 
     /**
      * Confirmation for creating a Feature Studio + graph element in the
-     * user's document (#31). Replaceable so a real dialog or a test can stand
-     * in for `confirm()`.
+     * user's document (#31). Same seam as `confirmUpload`: the in-app dialog
+     * is the default, tests substitute a stub.
      */
-    public confirmCreateGraph: (message: string) => boolean = (message) => {
-        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+    public confirmCreateGraph: (message: string) => boolean | Promise<boolean> = async (message) => {
+        try {
+            return await confirmDialog({
+                title: 'Create node graph in this document?',
+                body: message,
+                confirmLabel: 'Create',
+            });
+        } catch {
             return false;
         }
-        return window.confirm(message);
     };
 
     public start(): void {
