@@ -43,6 +43,10 @@
         </div> -->
       </div>
       <div class="dialog-content" v-show="!collapsed">
+        <p v-if="(data as any).genericDefinition === true" class="generic-definition-warning"
+          data-testid="generic-definition-warning" role="note">
+          Generic definition — definition map schema not known; generated code uses an empty map.
+        </p>
         <!-- Outputs-->
         <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
           :key="'output' + key + seed" :data-testid="'output-' + key">
@@ -462,6 +466,18 @@ export default defineComponent({
 
 .dialog-content {
   width: 100%;
+}
+
+// Generic-definition warning: standard-library statements whose definition
+// map schema is unknown carry this banner instead of looking complete.
+.generic-definition-warning {
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--warning);
+  font-family: var(--node-font-sans);
+  font-size: var(--font-size-label);
+  line-height: 1.35;
 }
 
 .dialog-help-container {

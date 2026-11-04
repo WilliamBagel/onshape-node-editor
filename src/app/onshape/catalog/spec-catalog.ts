@@ -130,7 +130,28 @@ export function buildCatalog(library: RawLibrary, classification: RawClassificat
                 const typed =
                     inputs.every((p) => p.valueType !== 'Unknown') &&
                     outputs.every((p) => p.valueType !== 'Unknown');
-                const nodeable = (kind === 'statement' || kind === 'value') && typed;
+                // Standard-library statement path: `(context, id, definition
+                // is map)` statements carry the definition as an untyped
+                // generic map, which made `typed` false and hid the entry
+                // (e.g. `chamfer`, `fillet`) from every search/palette that
+                // builds from nodeable entries. Such an entry is still
+                // node-able when every *other* port is typed: the factory
+                // synthesizes a CustomFeatureNode from those ports and the
+                // definition map is emitted explicitly as generic. Entries
+                // with untyped definition children stay not-node-able.
+                const TRIO = new Set(['context', 'id', 'definition']);
+                const hasStdlibSignature =
+                    inputs.some((p) => p.name === 'context' && p.valueType === 'Context') &&
+                    inputs.some((p) => p.name === 'id' && p.valueType === 'Id') &&
+                    inputs.some((p) => p.name === 'definition' && p.scrapedType === 'map');
+                const genericDefinition =
+                    kind === 'statement' &&
+                    hasStdlibSignature &&
+                    inputs
+                        .filter((p) => !TRIO.has(p.name))
+                        .every((p) => p.valueType !== 'Unknown') &&
+                    outputs.every((p) => p.valueType !== 'Unknown');
+                const nodeable = (kind === 'statement' || kind === 'value') && (typed || genericDefinition);
 
                 entries.push({
                     key,
@@ -142,6 +163,7 @@ export function buildCatalog(library: RawLibrary, classification: RawClassificat
                     description: raw.description ?? '',
                     kind,
                     nodeable,
+                    ...(genericDefinition ? { genericDefinition: true as const } : {}),
                     inputs,
                     outputs,
                 });

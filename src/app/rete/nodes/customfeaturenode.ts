@@ -22,10 +22,18 @@ import { toFeatureSpecReference } from '../serialization/graph-schema-types';
 export class CustomFeatureNode extends OnshapeNode {
   private featureSpec: BTFeatureSpec129;
   private definitionInput!: OnshapeFeatureSpecInput;
+  /**
+   * True when this node was synthesized from a standard-library statement
+   * with a generic (`is map`) definition whose child schema is unknown.
+   * The node chrome shows a generic-definition warning for these nodes
+   * instead of presenting the empty definition as complete.
+   */
+  public readonly genericDefinition: boolean;
 
   constructor(featureSpec: BTFeatureSpec129) {
     super("CustomFeature");
     this.featureSpec = featureSpec;
+    this.genericDefinition = (featureSpec as unknown as { genericDefinition?: boolean }).genericDefinition === true;
 
     this.addDefaultArguments();
     this.addDefinition();
