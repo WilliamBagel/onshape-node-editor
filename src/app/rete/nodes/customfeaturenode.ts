@@ -8,6 +8,8 @@ import { ContextType } from '../../onshape-utils/featurescripttypes';
 import { NodeFeaturescriptInfo } from '../../onshape-utils/featurestudiogenerator';
 import { STD } from '../../onshape-utils/stdlib';
 import { OnshapeInputControl } from '../controls/onshapeinputcontrol';
+import { ParameterArrayType } from '../../onshape-utils/featurescripttypes';
+import { stripTransientSelections } from '../../onshape-utils/parameterarray';
 import type {
   SerializedCustomFeatureNode,
   SerializedNodeBase,
@@ -115,7 +117,15 @@ export class CustomFeatureNode extends OnshapeNode {
       // DR-001: a captured selection is invalidated by the next document edit,
       // so it is never written to a saved graph. QueryList values round-trip as
       // an empty list (which regenerates as qUnion([])).
-      const value = control.type === "QueryList" ? [] : control.getCurrentValue();
+      const rawValue = control.getCurrentValue();
+      // #26 + DR-001: selections inside array query members are live
+      // references too, so they serialize as empty lists like QueryList.
+      const value =
+        control.type === "QueryList"
+          ? []
+          : control.type === "ParameterArray"
+            ? stripTransientSelections(control.getSpec() as ParameterArrayType, rawValue ?? [])
+            : rawValue;
       parameters[paramId] = { type: control.type, value };
     }
     return parameters;
