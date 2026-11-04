@@ -31,7 +31,7 @@
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
 import { CLIENT_URL, CLIENT_ID, CLIENT_SECRET } from "./config";
-import { fetchWithTimeout } from "./security";
+import { fetchWithTimeout, readBoundedJson, UpstreamBodyError } from "./security";
 
 export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
   // #49: the refresh token is accepted only from the POST body (form or
@@ -64,7 +64,7 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString()
     });
-    const json = await response.json();
+    const json = await readBoundedJson(response);
     // #51: never forward upstream headers verbatim (set-cookie, etc.).
     // Only the headers this endpoint needs are echoed back.
     const safeHeaders: Record<string, string> = {
@@ -76,6 +76,11 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     };
     return { status: response.status, body: JSON.stringify(json), headers: safeHeaders };
   } catch (err: any) {
+    if (err instanceof UpstreamBodyError) {
+      console.error('refresh body rejected', err.reason);
+      const status = err.reason === 'timeout' ? 504 : 502;
+      return { status, body: 'upstream error' };
+    }
     console.error('refresh failed', err?.message || err);
     return { status: 502, body: 'upstream error' };
   }

@@ -155,6 +155,26 @@ describe("codegen regressions (#41, #42, #43, #48)", () => {
         ).toThrowError(/muted/);
     });
 
+    it("#78: a muted pass-through at the head of a chain fails validation naming the node and missing producer", async () => {
+        const loop = new BoundedForNode(3, "");
+        loop.muted = true;
+        const end = new OutputFeatureNode();
+        // Head-of-chain: nothing feeds the muted node's context input,
+        // but the end node consumes its pass-through context output.
+        const { editor, engine } = await buildEditor(
+            [loop, end],
+            [
+                [loop, "context", end, "context"],
+            ],
+        );
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.toThrowError(/muted/);
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.toThrowError(/no producer/);
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.toThrowError(new RegExp(loop.id));
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.toThrowError(/context/);
+        // Never an engine-internal error.
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.not.toThrowError(/doesn't return all of required properties/);
+    });
+
     it("#42: the x / x0 / x chain yields three distinct identifiers and the last consumer reads the third", async () => {
         class SymbolNode extends OnshapeNode {
             constructor(title: string, public readonly symbol: string) {

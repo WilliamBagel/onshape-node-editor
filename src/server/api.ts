@@ -1,6 +1,6 @@
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
-import { parseOnshapeBase, resolvesToPublicAddress, fetchWithTimeout } from "./security";
+import { parseOnshapeBase, resolvesToPublicAddress, fetchWithTimeout, readBoundedBody, readBoundedText, UpstreamBodyError } from "./security";
 require('dotenv').config();
 
 export default async function (request: HttpRequest, context?: any): Promise<HttpResponseInit> {
@@ -86,13 +86,23 @@ export default async function (request: HttpRequest, context?: any): Promise<Htt
 
     if (!upstream.ok) {
       let errBody = '';
-      try { errBody = await upstream.text(); } catch { errBody = ''; }
+      try { errBody = await readBoundedText(upstream); } catch { errBody = ''; }
       // #51: never return the upstream body — log it, echo only the status.
       console.error(`api upstream returned ${upstream.status}`, errBody.slice(0, 500));
       return { status: upstream.status, headers: { 'Content-Type': 'text/plain' }, body: 'upstream error' };
     }
 
-    const responseBody = await upstream.arrayBuffer();
+    let responseBody: Buffer;
+    try {
+      responseBody = await readBoundedBody(upstream);
+    } catch (err: any) {
+      if (err instanceof UpstreamBodyError) {
+        console.error('api upstream body rejected', err.reason);
+        const status = err.reason === 'timeout' ? 504 : 502;
+        return { status, headers: { 'Content-Type': 'text/plain' }, body: 'upstream error' };
+      }
+      throw err;
+    }
 
     const responseHeaders: Record<string, string> = {
       'Cache-Control': 'max-age=0, no-cache, no-store, must-revalidate',

@@ -31,7 +31,7 @@
 
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
 import { CLIENT_ID } from "./config";
-import { getCanonicalBaseUrl, isAllowedRedirectOnshapeUri } from "./security";
+import { getCanonicalBaseUrl, InvalidBaseUrlError, isAllowedRedirectOnshapeUri } from "./security";
 require('dotenv').config()
 
 // This endpoint constructs an Onshape OAuth authorize redirect similar to the PHP original
@@ -57,7 +57,16 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
 
   // #51: prefer the configured canonical base URL over the (untrusted)
   // Host / X-Forwarded-* headers when building the registered redirect_uri.
-  const canonical = getCanonicalBaseUrl();
+  let canonical: string | null;
+  try {
+    canonical = getCanonicalBaseUrl();
+  } catch (err) {
+    // #80: invalid SERVER_BASE_URL fails fast — never fall back to Host.
+    if (err instanceof InvalidBaseUrlError) {
+      return { status: 500, body: 'server configuration error' };
+    }
+    throw err;
+  }
   let scriptBase: string;
   if (canonical) {
     scriptBase = canonical;
