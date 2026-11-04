@@ -13,6 +13,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/__tests__/**/*.test.ts'],
+    // UI harness tests (issue #75) need jsdom + Vue SFCs; they run under
+    // vitest.ui.config.ts only, so the node suite stays at 561 tests.
+    exclude: ['**/node_modules/**', 'src/app/test-utils/**'],
     reporters: ['default'],
   },
 });
