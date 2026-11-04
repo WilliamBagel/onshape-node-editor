@@ -8,6 +8,7 @@ import StringControl from './controls/StringControl.vue';
 import { OnshapeInputControl } from '../rete/controls/onshapeinputcontrol.js';
 import StringConcatControl from './controls/IdControl.vue';
 import QueryListControl from './controls/QueryListControl.vue';
+import ParameterArrayControl from './controls/ParameterArrayControl.vue';
 
 export default defineComponent({
     emits: ['value-change'],
@@ -27,7 +28,8 @@ export default defineComponent({
         BooleanControl,
         StringControl,
         StringConcatControl,
-        QueryListControl
+        QueryListControl,
+        ParameterArrayControl
     }
 })
 </script>
@@ -53,6 +55,9 @@ export default defineComponent({
     <StringConcatControl v-show="show" :control="control" v-if="control.type === 'Id'"
         @value-change="$emit('value-change', $event)">
     </StringConcatControl>
+    <ParameterArrayControl v-show="show" :control="control" v-if="control.type === 'ParameterArray'"
+        @value-change="$emit('value-change', $event)">
+    </ParameterArrayControl>
 </template>
 
 <style scoped>

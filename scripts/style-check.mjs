@@ -8,10 +8,11 @@
 //
 // Explicit allowlists (see docs/style-audit.md):
 //   - vendored CSS: src/app/onshape/**, src/app/OnshapeHTMLCSSReference/** (Onshape/Bootstrap bundles)
-//   - deferred (owned by concurrent cards #9/#26, do not edit here):
+//   - deferred (owned by concurrent cards #9, do not edit here):
 //       src/app/onshape-utils/featurescripttypes.ts, src/app/onshape-utils/bttypetools.ts,
-//       src/app/rete/onshapesockets.ts, src/app/rete/inputoutput/**,
-//       src/app/customization/controls/**, src/app/customization/OnshapeControl.vue
+//       src/app/rete/onshapesockets.ts, src/app/rete/inputoutput/**
+//     (#26 owns the controls/** + OnshapeControl.vue hits; they are now clean
+//     and enforced — see docs/style-audit.md.)
 //   - per-rule exceptions: background.css gradients (canvas grid lines, per guide "Palette")
 //
 // Comments are stripped before scanning so prose mentioning a colour is not a hit.
@@ -34,9 +35,8 @@ const DEFERRED = [
   'src/app/onshape-utils/featurescripttypes.ts',
   'src/app/onshape-utils/bttypetools.ts',
   'src/app/rete/onshapesockets.ts',
-  'src/app/customization/OnshapeControl.vue',
 ]
-const DEFERRED_PREFIX = ['src/app/rete/inputoutput/', 'src/app/customization/controls/']
+const DEFERRED_PREFIX = ['src/app/rete/inputoutput/']
 // file+rule exceptions: { file, rule, reason }
 const EXCEPTIONS = [
   {

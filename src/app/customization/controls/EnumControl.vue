@@ -75,7 +75,7 @@ export default {
 }
 
 .enum-multiselect {
-  --ms-bg: #00000000;
+  --ms-bg: transparent;
 }
 </style>
 <style src="./EnumControl_multiselect-onshape.scss"></style>
