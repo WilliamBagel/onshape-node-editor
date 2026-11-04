@@ -54,6 +54,7 @@ import {
     PartStudioTarget,
     PartStudioTargetSettings,
 } from "./onshape-utils/partstudiofeature";
+import { resolveSinglePartStudio } from "./onshape-utils/partstudiotarget";
 
 export class App extends BaseApp {
     public myserver = 'https://onshape-node-editor-function.azurewebsites.net';
@@ -437,6 +438,77 @@ export class App extends BaseApp {
     /** A starting point for the target prompt: this document and workspace, no element id. */
     public suggestPartStudioTarget(): string {
         return `did=${this.documentId ?? ''},wvm=w,wvmid=${this.workspaceId ?? ''},eid=`;
+    }
+
+    /**
+     * #2: auto-resolve the run target from the active document.
+     *
+     * Lists the active document's elements and, when exactly one Part Studio
+     * exists, persists it as the target and returns it — so Run never asks
+     * for a raw id string in the single-studio case. Zero or multiple Part
+     * Studios returns `undefined` without prompting; the caller (`runRun()`)
+     * then falls back to the manual dialog prompt. An already-configured
+     * target is returned as-is (auto-resolution is never consulted).
+     */
+    public async resolveSinglePartStudioTarget(): Promise<PartStudioTarget | undefined> {
+        const existing = this.getPartStudioTarget();
+        if (existing != null) return existing;
+
+        const documentApi = this.onshape?.documentApi;
+        if (documentApi == null || this.documentId === '' || this.workspaceId === '') {
+            this.reportMessage(
+                'Cannot auto-select a Part Studio: no active Onshape document. Choose the Part Studio target manually.',
+                'warning',
+                'run',
+            );
+            return undefined;
+        }
+
+        let result;
+        try {
+            result = await resolveSinglePartStudio(documentApi, {
+                did: this.documentId,
+                workspaceId: this.workspaceId,
+            });
+        } catch (error) {
+            this.reportMessage(
+                `Cannot auto-select a Part Studio: ${error instanceof Error ? error.message : String(error)} Choose the Part Studio target manually.`,
+                'warning',
+                'run',
+            );
+            return undefined;
+        }
+
+        switch (result.status) {
+            case 'unique': {
+                const stored = this.setPartStudioTarget(result.target);
+                const name = result.element.name != null && result.element.name !== ''
+                    ? ` "${result.element.name}"`
+                    : '';
+                this.reportMessage(
+                    `Auto-selected the single Part Studio${name} (${stored.eid}) in the active document as the run target.`,
+                    'info',
+                    'run',
+                );
+                return stored;
+            }
+            case 'none':
+                this.reportMessage(
+                    'No Part Studio found in the active document (0 found); choose the Part Studio target manually.',
+                    'warning',
+                    'run',
+                );
+                return undefined;
+            case 'ambiguous': {
+                const list = result.elements.map((el) => `${el.name ?? el.id} (${el.id})`).join(', ');
+                this.reportMessage(
+                    `${result.count} Part Studios found in the active document (${list}); choose which one to run into.`,
+                    'warning',
+                    'run',
+                );
+                return undefined;
+            }
+        }
     }
 
     /**

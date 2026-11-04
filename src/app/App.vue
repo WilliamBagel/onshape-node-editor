@@ -35,6 +35,11 @@ interface FeatureStudioHost {
   getPartStudioTarget(): FeatureStudioTarget | undefined;
   setPartStudioTarget(target: string): unknown;
   suggestPartStudioTarget(): string;
+  /**
+   * #2: resolve (and persist) the active document's single Part Studio.
+   * Returns the target when exactly one Part Studio exists, else `undefined`.
+   */
+  resolveSinglePartStudioTarget(): Promise<unknown> | unknown;
   reportMessage(message: string, severity?: LogSeverity, source?: string): void;
   reportBuildResult(source: string | undefined, failure?: string): void;
   insertPartStudioFeature(feature: FeatureInsertion): Promise<unknown>;
@@ -189,6 +194,13 @@ export default defineComponent({
      * storage key, because a Part Studio and a Feature Studio are never the same
      * element.
      */
+    /**
+     * Manual Part Studio target entry — the fallback of last resort.
+     *
+     * #2: `runRun()` tries the single-Part-Studio auto-resolution first and
+     * only reaches this prompt when the document has zero or multiple Part
+     * Studios. Uses the in-app dialog service (#34); never a browser default.
+     */
     async runSelectPartStudioTarget() {
       const host = this.featureStudioHost();
       if (host == null) return;
@@ -222,6 +234,12 @@ export default defineComponent({
       if (host.getFeatureStudioTarget() == null) {
         host.reportMessage('Run needs the Feature Studio that defines the feature: make a node graph first.', 'warning', 'run');
         return;
+      }
+      // #2: no consumer target yet. First auto-resolve the active document's
+      // single Part Studio — no raw-id prompt when exactly one exists. Only
+      // zero or multiple Part Studios fall back to the manual dialog prompt.
+      if (host.getPartStudioTarget() == null) {
+        await host.resolveSinglePartStudioTarget();
       }
       if (host.getPartStudioTarget() == null) {
         await this.runSelectPartStudioTarget();
