@@ -34,6 +34,14 @@ import {
     MemoryStorage,
 } from "./onshape-utils/featurestudiotarget";
 import {
+    GraphIdentity,
+    GraphIdentityService,
+    graphElementNameFor,
+    type EnsureOutcome,
+    type ResolveResult,
+} from "./onshape-utils/graphidentity";
+import { NodeStore } from "./onshape-utils/nodestore";
+import {
     FeatureStudioUploader,
     UploadOutcome,
 } from "./onshape-utils/featurestudioupload";
@@ -52,12 +60,22 @@ export class App extends BaseApp {
     public userinfo!: UserInfo;
     public developerMode = false;
     /**
-     * #1: persisted Feature Studio target. `UserSettings.featureStudioTarget` is
-     * the same type and is where #6 will migrate it once Save/Open exists; the
-     * target lives in browser storage today because `UserInfo.init()` only
-     * resolves inside an embedded Onshape session.
+     * #31: graphs known in this session and the one currently deployed. The
+     * deploy target is the active document (`documentId`/`workspaceId` from
+     * the extension bootstrap) plus the active graph's recorded element ids —
+     * the browser-stored `feature-studio-target` key is NOT an authority
+     * anymore and its legacy value is cleared in `start()`.
      */
-    public featureStudioTargets = new FeatureStudioTargetSettings(browserStorage() ?? new MemoryStorage());
+    public graphIdentities: GraphIdentity[] = [];
+    public activeGraphIdentity: GraphIdentity | undefined;
+    /**
+     * Supplies the serialized form of the open editor graph when a graph is
+     * created, so it can be written into the new graph element. Left unset
+     * until the Save/Open path (#6) exposes the editor serializer; the
+     * element is still created per graph and the write goes through
+     * `NodeStore.setNodeData` once a provider exists.
+     */
+    public serializedGraphProvider: (() => string | undefined) | undefined;
     /**
      * #2: the Part Studio the generated feature is inserted into. A separate
      * field (and a separate storage key) from the Feature Studio target: the
@@ -82,8 +100,25 @@ export class App extends BaseApp {
         return window.confirm(diffText);
     };
 
+    /**
+     * Confirmation for creating a Feature Studio + graph element in the
+     * user's document (#31). Replaceable so a real dialog or a test can stand
+     * in for `confirm()`.
+     */
+    public confirmCreateGraph: (message: string) => boolean = (message) => {
+        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+            return false;
+        }
+        return window.confirm(message);
+    };
+
     public start(): void {
         this.userinfo = new UserInfo(this.onshape);
+
+        // #31: the browser-stored `feature-studio-target` key must not survive
+        // as the Feature Studio authority; drop any legacy value now that the
+        // deploy target is the active document plus the graph's recorded ids.
+        new FeatureStudioTargetSettings(browserStorage() ?? new MemoryStorage()).clear();
 
         this.startVueApp(this.developerMode);
 
@@ -92,26 +127,112 @@ export class App extends BaseApp {
         this.getStandardLibrary();
     }
 
-    /* --- #1: Feature Studio upload target ------------------------------- */
+    /* --- #31: graph identity / deploy target --------------------------- */
 
-    /** The persisted upload target, or `undefined` when none is set. */
+    /**
+     * The deploy target: the active document plus the active graph's recorded
+     * Feature Studio element id. `undefined` until a graph exists in this
+     * session — resolution against the document's elements happens in
+     * `resolveGraphTarget()` before any write.
+     */
     public getFeatureStudioTarget(): FeatureStudioTarget | undefined {
-        return this.featureStudioTargets.get();
+        const identity = this.activeGraphIdentity;
+        if (identity == null || this.documentId === '' || this.workspaceId === '') {
+            return undefined;
+        }
+        return {
+            did: this.documentId,
+            wvm: 'w',
+            wvmid: this.workspaceId,
+            eid: identity.featureStudioElementId,
+        };
     }
 
-    /** Persist a target from a typed object or its `did=...&wvm=...` string form. Throws when invalid. */
-    public setFeatureStudioTarget(target: FeatureStudioTarget | string): FeatureStudioTarget {
-        const stored = this.featureStudioTargets.set(target);
-        this.reportMessage(`Feature Studio target set to ${formatTarget(stored)}`);
-        return stored;
+    private graphIdentityService(): GraphIdentityService | undefined {
+        const api = this.onshape;
+        if (api == null || this.documentId === '' || this.workspaceId === '') {
+            return undefined;
+        }
+        const did = this.documentId;
+        const wid = this.workspaceId;
+        return new GraphIdentityService({
+            apis: {
+                documentApi: api.documentApi,
+                featureStudioApi: api.featureStudioApi,
+                // Reuses the existing AppStorage/NodeStore element machinery.
+                createGraphElement: (elementName) =>
+                    new NodeStore(api).createGraphElement(did, wid, elementName),
+                persistGraph: async (graphElementId, serializedGraph) => {
+                    const store = new NodeStore(api);
+                    await store.initFromExisting(did, graphElementId, graphElementNameFor(''));
+                    await store.setNodeData({ reteJSON: serializedGraph });
+                },
+            },
+            context: { did, workspaceId: wid },
+            confirm: (message) => this.confirmCreateGraph(message),
+            report: (severity, message, source) => this.reportMessage(message, severity, source),
+            getSerializedGraph: () => this.serializedGraphProvider?.(),
+        });
+    }
+
+    private registerGraph(identity: GraphIdentity): void {
+        if (!this.graphIdentities.some((known) => known.graphElementId === identity.graphElementId)) {
+            this.graphIdentities.push(identity);
+        }
+        this.activeGraphIdentity = identity;
     }
 
     /**
-     * A starting point for the target prompt: this document, its default
-     * workspace, and no element id (the Feature Studio has to be picked).
+     * Resolve the active graph against the active document's elements. Drift
+     * is reported through the log (`severity: 'error'`, source `upload`) and
+     * the caller must not write.
      */
-    public suggestFeatureStudioTarget(): string {
-        return `did=${this.documentId ?? ''},wvm=w,wvmid=${this.workspaceId ?? ''},eid=`;
+    public async resolveGraphTarget(): Promise<ResolveResult | undefined> {
+        const service = this.graphIdentityService();
+        if (service == null || this.activeGraphIdentity == null) {
+            return undefined;
+        }
+        return service.resolve(this.activeGraphIdentity);
+    }
+
+    /**
+     * First open / deploy: resolve the active graph, or offer "Make new node
+     * graph" and create its Feature Studio + graph element. Returns the
+     * outcome; a successful create/resolve makes the graph the active one.
+     */
+    public async ensureGraphForDeploy(graphName: string): Promise<EnsureOutcome | undefined> {
+        const service = this.graphIdentityService();
+        if (service == null) {
+            this.reportMessage(
+                'No active Onshape document: the app must run inside an Onshape document to deploy.',
+                'error',
+                'upload',
+            );
+            return undefined;
+        }
+        const outcome = await service.ensureGraph(this.activeGraphIdentity, graphName);
+        if (outcome.status === 'created' || outcome.status === 'resolved') {
+            this.registerGraph(outcome.identity);
+        }
+        return outcome;
+    }
+
+    /** `+`: an additional graph with its own studio and element. */
+    public async createAdditionalGraph(graphName: string): Promise<EnsureOutcome | undefined> {
+        const service = this.graphIdentityService();
+        if (service == null) {
+            this.reportMessage(
+                'No active Onshape document: the app must run inside an Onshape document to create a graph.',
+                'error',
+                'editor',
+            );
+            return undefined;
+        }
+        const outcome = await service.createAdditionalGraph(graphName);
+        if (outcome.status === 'created') {
+            this.registerGraph(outcome.identity);
+        }
+        return outcome;
     }
 
     /**
@@ -252,7 +373,25 @@ export class App extends BaseApp {
      * handed to Onshape byte-for-byte. Returns the outcome so the caller (and
      * tests) can tell "wrote", "already up to date" and "refused" apart.
      */
-    public uploadFeatureStudio(source: string | undefined): Promise<UploadOutcome> {
+    public async uploadFeatureStudio(source: string | undefined): Promise<UploadOutcome> {
+        // #31: drift blocks the write. Resolve the active graph against the
+        // document's elements first; a missing studio/element or two elements
+        // claiming one graph is reported and nothing is written.
+        const identity = this.activeGraphIdentity;
+        if (identity != null) {
+            const resolved = await this.resolveGraphTarget();
+            if (resolved?.status === 'drift') {
+                const outcome: UploadOutcome = {
+                    status: 'failed',
+                    stage: 'target',
+                    message:
+                        `Deploy target drift for graph "${identity.graphName}": ` +
+                        resolved.issues.map((issue) => issue.message).join(' '),
+                };
+                this.reportUploadOutcome(outcome);
+                return outcome;
+            }
+        }
         const uploader = new FeatureStudioUploader({
             api: this.onshape?.featureStudioApi,
             getTarget: () => this.getFeatureStudioTarget(),

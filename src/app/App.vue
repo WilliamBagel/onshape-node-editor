@@ -9,6 +9,7 @@ import { inject } from 'vue'
 import ToolTip from './components/tooltip/ToolTip.vue';
 import { editorBase, EditorControls } from './rete/editorbase.js';
 import { formatTarget, type FeatureStudioTarget } from './onshape-utils/featurestudiotarget';
+import type { GraphIdentity } from './onshape-utils/graphidentity';
 import type { FeatureInsertion } from './onshape-utils/partstudiofeature';
 import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 import { BuildLogStore, type LogSeverity } from './logging/buildlog';
@@ -21,9 +22,13 @@ import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 interface FeatureStudioHost {
   /** #4: the build/upload/run log rendered by LogPanel.vue. */
   log: BuildLogStore;
+  /** #31: the active graph, whose recorded ids form the deploy target. */
+  activeGraphIdentity?: GraphIdentity;
   getFeatureStudioTarget(): FeatureStudioTarget | undefined;
-  setFeatureStudioTarget(target: string): unknown;
-  suggestFeatureStudioTarget(): string;
+  /** #31: resolve the active graph, or offer "Make new node graph". */
+  ensureGraphForDeploy(graphName: string): Promise<unknown> | unknown;
+  /** #31: `+` — an additional graph with its own studio and element. */
+  createAdditionalGraph(graphName: string): Promise<unknown> | unknown;
   getPartStudioTarget(): FeatureStudioTarget | undefined;
   setPartStudioTarget(target: string): unknown;
   suggestPartStudioTarget(): string;
@@ -54,7 +59,9 @@ export default defineComponent({
   },
   data() {
     return {
-      controls: null as EditorControls | null
+      controls: null as EditorControls | null,
+      /** #31: name of the graph the deploy target is resolved for. */
+      graphName: 'My Graph'
     }
   },
   computed: {
@@ -90,42 +97,60 @@ export default defineComponent({
       }
     },
     /**
-     * Ask for the upload target (`did`, `wvm`, `wvmid`, `eid`) and persist it.
-     * There is no settings dialog in the app yet, so the prompt is the selector;
-     * parsing and validation live in `FeatureStudioTargetSettings`.
+     * #31: the deploy target is the active document plus the active graph's
+     * recorded element ids, resolved against the document's elements. With no
+     * active graph yet (first open in a document), offer "Make new node
+     * graph"; the name prompt is the graph selector until a graph list UI
+     * exists.
      */
     async runSelectTarget() {
       const host = this.featureStudioHost();
       if (host == null) return;
-      const current = host.getFeatureStudioTarget();
-      const initial = current != null ? formatTarget(current) : host.suggestFeatureStudioTarget();
-      const entered = window.prompt(
-        'Upload target for the generated FeatureScript\n' +
-        'did (document id), wvm (w=workspace, v=version, m=microversion), wvmid (workspace id) and eid (Feature Studio element id):',
-        initial
-      );
-      if (entered == null) return;
-      try {
-        host.setFeatureStudioTarget(entered);
-      } catch (error) {
-        host.reportMessage(error instanceof Error ? error.message : String(error));
+      if (host.getFeatureStudioTarget() != null) {
+        host.reportMessage(
+          'Deploy target is the active document and the active graph\'s Feature Studio (resolved by its recorded element id).',
+        );
+        return;
       }
+      const name = window.prompt('Name for the new node graph', this.graphName);
+      if (name == null || name.trim() === '') return;
+      await host.ensureGraphForDeploy(name);
+      this.graphName = host.activeGraphIdentity?.graphName ?? name.trim();
+    },
+    /** #31: `+` — an additional graph with its own studio and element. */
+    async runNewGraph() {
+      const host = this.featureStudioHost();
+      if (host == null) return;
+      const name = window.prompt('Name for the additional node graph', 'Another Graph');
+      if (name == null || name.trim() === '') return;
+      await host.createAdditionalGraph(name);
+      this.graphName = host.activeGraphIdentity?.graphName ?? name.trim();
+    },
+    /** #31: first open in a document offers "Make new node graph". */
+    async ensureGraphOrReport(source: string): Promise<boolean> {
+      const host = this.featureStudioHost();
+      if (host == null) return false;
+      if (host.getFeatureStudioTarget() != null) return true;
+      const name = window.prompt('No node graph in this document yet. Name for the new node graph', this.graphName);
+      if (name == null || name.trim() === '') return false;
+      await host.ensureGraphForDeploy(name);
+      this.graphName = host.activeGraphIdentity?.graphName ?? name.trim();
+      if (host.getFeatureStudioTarget() == null) {
+        host.reportMessage(
+          `${source} needs a node graph in the active document: make one with the graph target button.`,
+          'error',
+          source === 'Upload' ? 'upload' : 'run',
+        );
+        return false;
+      }
+      return true;
     },
     /** Build the graph and write its FeatureScript into the target Feature Studio. */
     async runUpload() {
       const host = this.featureStudioHost();
       if (host == null) return;
       if (host.getFeatureStudioTarget() == null) {
-        await this.runSelectTarget();
-        if (host.getFeatureStudioTarget() == null) {
-          // #4: a refused/dismissed target prompt is a pipeline outcome too.
-          host.reportMessage(
-            'Upload needs a Feature Studio target (did, wvm, wvmid, eid). Set one with the Upload Target button.',
-            'error',
-            'upload',
-          );
-          return;
-        }
+        if (!(await this.ensureGraphOrReport('Upload'))) return;
       }
       try {
         const featurescript = await this.controls?.studioEvents.build();
@@ -172,7 +197,7 @@ export default defineComponent({
       if (host == null) return;
 
       if (host.getFeatureStudioTarget() == null) {
-        host.reportMessage('Run needs the Feature Studio that defines the feature: set the Upload Target first.', 'warning', 'run');
+        host.reportMessage('Run needs the Feature Studio that defines the feature: make a node graph first.', 'warning', 'run');
         return;
       }
       if (host.getPartStudioTarget() == null) {
@@ -213,11 +238,11 @@ export default defineComponent({
 </script>
 
 <template>
-  <TopBar project-name="My Graph" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
-    @settings="runSettings" @upload="runUpload" @target="runSelectTarget"
+  <TopBar :project-name="graphName" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
+    @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
     @run-target="runSelectPartStudioTarget" />
   <main class="rete" ref="rete"></main>
-  <BottomBar graph-name="My Graph" @search="runSearch" />
+  <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
   <ToolTip />
 </template>
