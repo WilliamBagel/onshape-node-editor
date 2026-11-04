@@ -55,7 +55,7 @@ export const GRAPH_SCHEMA_VERSION = 2;
 export const LOADABLE_SCHEMA_VERSIONS: readonly number[] = [1, GRAPH_SCHEMA_VERSION];
 
 /** `OnshapeNode.type` values that can appear in a saved graph. */
-export type SerializedNodeKind = "CustomFeature" | "define-feature" | "output-feature" | "function";
+export type SerializedNodeKind = "CustomFeature" | "define-feature" | "output-feature" | "function" | "utility-statement";
 
 export interface Vec2 {
     x: number;
@@ -138,13 +138,26 @@ export interface SerializedFunctionNode extends SerializedNodeBase {
     kind: "function";
     functionName: string;
     inputs: import("../../onshape/catalog/types").CatalogPort[];
+    /** Curated utility identity (issue #11), when the node came from the utility registry. */
+    utilityId?: string;
+    /** FeatureScript literals for unconnected inputs, keyed by input key. */
+    literals?: Record<string, string>;
+}
+
+/** #11: a curated statement utility (opTransform, instanceOnPoints). */
+export interface SerializedUtilityStatementNode extends SerializedNodeBase {
+    kind: "utility-statement";
+    utilityId: string;
+    /** FeatureScript literals for unconnected inputs, keyed by input key. */
+    literals?: Record<string, string>;
 }
 
 export type SerializedNode =
     | SerializedCustomFeatureNode
     | SerializedDefineFeatureNode
     | SerializedOutputFeatureNode
-    | SerializedFunctionNode;
+    | SerializedFunctionNode
+    | SerializedUtilityStatementNode;
 
 /**
  * A grouping frame (#13). Frames are presentation only: they are not nodes in
