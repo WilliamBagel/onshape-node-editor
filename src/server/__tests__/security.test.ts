@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
+import { InvalidBaseUrlError } from "../security";
 import {
   corsHeadersFor,
   fetchWithTimeout,
@@ -104,5 +105,56 @@ describe("oauth redirect validation (#51)", () => {
   });
   it("stays buildable with vi mock available", () => { // placeholder to keep import used
     expect(vi).toBeDefined();
+  });
+});
+
+describe("isPrivateOrReservedIp extended ranges (#80)", () => {
+  it("flags TEST-NET / docs ranges", () => {
+    for (const ip of ["192.0.2.1", "198.51.100.1", "203.0.113.1", "192.0.0.1"]) {
+      expect(isPrivateOrReservedIp(ip), ip).toBe(true);
+    }
+  });
+  it("flags documentation and site-local IPv6", () => {
+    for (const ip of ["2001:db8::1", "fec0::1"]) {
+      expect(isPrivateOrReservedIp(ip), ip).toBe(true);
+    }
+  });
+  it("flags NAT64 / 6to4 embedding private IPv4", () => {
+    // 64:ff9b::a9fe:a9fe == 169.254.169.254, 2002:7f00:1:: == 127.0.0.1
+    for (const ip of ["64:ff9b::a9fe:a9fe", "64:ff9b:1::a9fe:a9fe", "2002:7f00:1::1"]) {
+      expect(isPrivateOrReservedIp(ip), ip).toBe(true);
+    }
+  });
+  it("allows NAT64 / 6to4 embedding public IPv4", () => {
+    // 64:ff9b::5db8:d822 == 93.184.216.34, 2002:5db8:d822:: == same
+    for (const ip of ["64:ff9b::5db8:d822", "2002:5db8:d822::1"]) {
+      expect(isPrivateOrReservedIp(ip), ip).toBe(false);
+    }
+  });
+});
+
+describe("getCanonicalBaseUrl fail-fast (#80)", () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    delete process.env.SERVER_BASE_URL;
+    delete process.env.CANONICAL_BASE_URL;
+    Object.assign(process.env, saved);
+  });
+  it("returns null when unset, origin when valid https", () => {
+    delete process.env.SERVER_BASE_URL;
+    delete process.env.CANONICAL_BASE_URL;
+    expect(getCanonicalBaseUrl()).toBeNull();
+    process.env.SERVER_BASE_URL = "https://app.example.com/some/path";
+    expect(getCanonicalBaseUrl()).toBe("https://app.example.com");
+  });
+  it("throws on invalid / http off-loopback / userinfo values", () => {
+    for (const bad of ["not a url", "http://app.example.com", "https://user@app.example.com", "ftp://app.example.com"]) {
+      process.env.SERVER_BASE_URL = bad;
+      expect(() => getCanonicalBaseUrl(), bad).toThrow();
+    }
+  });
+  it("allows http loopback for local development", () => {
+    process.env.SERVER_BASE_URL = "http://localhost:3000";
+    expect(getCanonicalBaseUrl()).toBe("http://localhost:3000");
   });
 });

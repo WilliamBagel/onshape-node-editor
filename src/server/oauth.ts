@@ -30,7 +30,7 @@
 
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
-import { fetchWithTimeout } from "./security";
+import { fetchWithTimeout, readBoundedJson, UpstreamBodyError } from "./security";
 require('dotenv').config()
 
 const CLIENT_URL = process.env.CLIENT_URL;
@@ -77,7 +77,7 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
       body: params.toString()
     });
 
-    const json = await response.json();
+    const json = await readBoundedJson(response);
 
     // Set response headers matching .htaccess configuration
     const responseHeaders: Record<string, string> = {
@@ -96,6 +96,18 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
 
   } catch (err: any) {
     // #51: log detail server-side, return a generic error code.
+    if (err instanceof UpstreamBodyError) {
+      console.error('oauth body rejected', err.reason);
+      const status = err.reason === 'timeout' ? 504 : 502;
+      return {
+        status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        body: JSON.stringify({ error: 'request_failed' })
+      };
+    }
     console.error('oauth token exchange failed', err?.message || err);
     return {
       status: 502,

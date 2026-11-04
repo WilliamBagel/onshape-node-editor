@@ -3,6 +3,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const { mockFetch } = vi.hoisted(() => ({ mockFetch: vi.fn() }));
 
 vi.mock("node-fetch", () => ({ default: mockFetch }));
+vi.mock("node:dns", () => ({
+  promises: {
+    lookup: vi.fn(async (_host: string) => [{ address: "93.184.216.34", family: 4 }]),
+  },
+}));
 
 import type { HeaderMap, HttpRequest } from "../httpTypes";
 
@@ -124,6 +129,22 @@ describe("oauthsignin (#51)", () => {
     const redirectUri = outer.searchParams.get("redirect_uri") ?? "";
     const nested = new URL(redirectUri);
     expect(nested.searchParams.get("redirectOnshapeUri")).toBe(evil);
+  });
+
+  it("fails fast (500) on invalid SERVER_BASE_URL instead of Host fallback", async () => {
+    process.env.SERVER_BASE_URL = "http://app.example.com";
+    try {
+      const res = await oauthsignin(makeRequest({
+        method: "GET",
+        query: "redirectOnshapeUri=" + encodeURIComponent("https://cad.onshape.com/x"),
+        url: "http://localhost/oauthsignin",
+        headers: { host: "localhost" },
+      }));
+      expect(res.status).toBe(500);
+      expect(res.body).toBe("server configuration error");
+    } finally {
+      delete process.env.SERVER_BASE_URL;
+    }
   });
 
   it("rejects a foreign redirect target", async () => {

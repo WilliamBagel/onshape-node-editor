@@ -31,7 +31,7 @@
 
 import fetch from "node-fetch";
 import { HttpRequest, HttpResponseInit } from "./httpTypes";
-import { fetchWithTimeout } from "./security";
+import { fetchWithTimeout, readBoundedBody, resolvesToPublicAddress, UpstreamBodyError } from "./security";
 
 export default async function (request: HttpRequest, _context?: any): Promise<HttpResponseInit> {
 
@@ -43,8 +43,9 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
   }
 
   // validate URL
+  let parsed: URL;
   try {
-    const parsed = new URL(url);
+    parsed = new URL(url);
     // Hardened: https only, no userinfo, no non-standard port.
     if (parsed.protocol !== 'https:') {
       return { status: 400, body: 'invalid url protocol' };
@@ -66,6 +67,11 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     return { status: 400, body: 'invalid url' };
   }
 
+  // #80: same DNS/private-IP defence-in-depth as api.ts; generic error.
+  if (!(await resolvesToPublicAddress(parsed.hostname))) {
+    return { status: 403, body: 'url not allowed' };
+  }
+
   try {
     // #49: forward only Accept / Accept-Language — never Authorization,
     // Cookie, or anything else the browser attached.
@@ -83,7 +89,23 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
       redirect: 'manual'
     });
     
-    const buf = await response.arrayBuffer();
+    // #80: never echo an upstream error page verbatim.
+    const upstreamOk = response.ok !== undefined ? response.ok : (response.status >= 200 && response.status < 300);
+    if (!upstreamOk) {
+      console.error(`getfile upstream returned ${response.status}`);
+      return { status: 502, body: 'upstream error' };
+    }
+    let buf: Buffer;
+    try {
+      buf = await readBoundedBody(response);
+    } catch (err: any) {
+      if (err instanceof UpstreamBodyError) {
+        console.error('getfile upstream body rejected', err.reason);
+        const status = err.reason === 'timeout' ? 504 : 502;
+        return { status, body: 'upstream error' };
+      }
+      throw err;
+    }
     
     // Get the content-type from the response
     const contentType = response.headers.get('content-type');
@@ -96,7 +118,7 @@ export default async function (request: HttpRequest, _context?: any): Promise<Ht
     return {
       status: response.status,
       headers: responseHeaders,
-      body: Buffer.from(buf)
+      body: buf
     };
   } catch (err: any) {
     // #51: log detail server-side, return a generic error.
