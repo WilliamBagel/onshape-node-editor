@@ -447,6 +447,11 @@ export default defineComponent({
       if (!canDispatchAction({ dialogOpen: dialogService.current != null })) return;
       await this.runCommand(command);
     },
+    /** #73 follow-up: a node chosen in the same search menu inserts it. */
+    async onActionInsert(item: PaletteInsertable) {
+      this.actionsOpen = false;
+      await this.onPaletteSelect(item);
+    },
     /** #73: the bottom Search button opens the Blender-style action palette. */
     runSearch() { this.actionsOpen = true; },
     /** #73: resolve a palette insertable to its creation path. */
@@ -479,7 +484,7 @@ export default defineComponent({
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
   <ToolTip />
-  <ActionPalette :open="actionsOpen" :bindings="bindings" @select="onActionSelect" @close="actionsOpen = false" />
+  <ActionPalette :open="actionsOpen" :bindings="bindings" :insertables="paletteInsertables" @select="onActionSelect" @insert="onActionInsert" @close="actionsOpen = false" />
   <NodePalette :open="paletteOpen" :insertables="paletteInsertables" @select="onPaletteSelect" @close="paletteOpen = false" />
     <AppDialog />
     <!-- #16: debug grid (node-wrangler view); row click focuses the node. -->

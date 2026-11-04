@@ -16,9 +16,9 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
     public hiddenParameters: { [parameterId: string]: boolean } = {};
     private updateCallback: () => void = () => { };
 
-    constructor(socket: ClassicPreset.Socket, featureSpec: BTFeatureSpec129) {
+    constructor(socket: ClassicPreset.Socket, featureSpec: BTFeatureSpec129, label: string = 'Definition') {
         // Initialize as a map input without parameterSpec so it doesn't create default control
-        super(socket, 'Definition', 'map');
+        super(socket, label, 'map');
 
         this.featureSpec = featureSpec;
 
@@ -39,12 +39,20 @@ export class OnshapeFeatureSpecInput extends OnshapeInput<any> {
             const paramId = param.parameterId;
             const spec = getSpecFromFeatureSpec(param);
 
-            const paramInput = new OnshapeInput(
-                new OnshapeSocket(param.btType, valueTypeFromBTParameterSpec(param)),
-                param.parameterName,
-                spec.type,
-                spec,
-            );
+            const socket = new OnshapeSocket(param.btType, valueTypeFromBTParameterSpec(param));
+            const nestedSpecs = (spec as unknown as { parameters?: unknown }).parameters;
+            const paramInput = spec.type === 'map' && Array.isArray(nestedSpecs)
+                ? new OnshapeFeatureSpecInput(
+                    socket,
+                    { parameters: nestedSpecs } as unknown as BTFeatureSpec129,
+                    param.parameterName,
+                )
+                : new OnshapeInput(
+                    socket,
+                    param.parameterName,
+                    spec.type,
+                    spec,
+                );
             this.paramInputs[paramId] = paramInput;
             this.configuredParameters[paramId] = spec;
 

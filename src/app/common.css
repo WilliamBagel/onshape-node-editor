@@ -122,9 +122,12 @@ body {
  * guide-maximum shadow. Doubled attribute keeps specificity above the
  * preset's scoped styles.
  */
-[rete-context-menu][rete-context-menu] .menu {
+.menu[rete-context-menu] {
     padding: 4px;
-    width: 220px;
+    width: 260px;
+    max-width: min(380px, 80vw);
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
     margin-top: 0;
     margin-left: 0;
     background: var(--surface);
@@ -134,31 +137,33 @@ body {
     font-family: var(--font-sans);
 }
 
-[rete-context-menu][rete-context-menu] .block {
+.menu[rete-context-menu] .block {
     color: var(--text-primary);
     background-color: var(--surface);
     border-bottom: 1px solid var(--hairline);
     font-size: var(--font-size-label);
     line-height: var(--line-height-body);
     padding: 6px 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
-[rete-context-menu][rete-context-menu] .block:hover {
+.menu[rete-context-menu] .block:hover {
     background-color: var(--surface-sunken);
 }
 
-[rete-context-menu][rete-context-menu] .block:first-child {
+.menu[rete-context-menu] .block:first-child {
     border-top-left-radius: var(--radius-card);
     border-top-right-radius: var(--radius-card);
 }
 
-[rete-context-menu][rete-context-menu] .block:last-child {
+.menu[rete-context-menu] .block:last-child {
     border-bottom-left-radius: var(--radius-card);
     border-bottom-right-radius: var(--radius-card);
     border-bottom: none;
 }
 
-[rete-context-menu][rete-context-menu] .search {
+.menu[rete-context-menu] .search {
     color: var(--text-primary);
     background: var(--surface-sunken);
     border: 1px solid var(--hairline);
@@ -168,7 +173,7 @@ body {
     padding: 6px 8px;
 }
 
-[rete-context-menu][rete-context-menu] .search:focus {
+.menu[rete-context-menu] .search:focus {
     outline: 1px solid var(--accent-steel);
     border-color: var(--accent-steel);
 }

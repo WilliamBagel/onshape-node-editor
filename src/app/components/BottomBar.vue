@@ -179,7 +179,8 @@ const hoveredButton = ref<'search' | null>(null)
   border: 1px solid var(--hairline);
   border-radius: var(--radius-keycap);
   padding: 1px 4px;
-  color: var(--ink);
-  opacity: var(--opacity-secondary);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  opacity: 1;
 }
 </style>

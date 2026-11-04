@@ -163,6 +163,19 @@ export function getSpecFromFeatureSpec(parameterSpec: BTParameterSpec6): Onshape
             label: parameterSpec.parameterName,
         } as unknown as ParameterArrayType;
     }
+    const rawMap = parameterSpec as Record<string, any>;
+    if (Array.isArray(rawMap.parameters) && !String(rawMap.btType ?? '').startsWith('BTParameterSpecArray')) {
+        // Map parameters (nested definitions): the member specs live on the
+        // spec's own `parameters` array, like arrays but keyed by parameterId.
+        // Keep the member specs so OnshapeFeatureSpecInput can build nested
+        // inputs (#72 follow-up: nested maps never reached the UI).
+        return {
+            type: 'map',
+            value: {},
+            parameters: rawMap.parameters,
+            label: parameterSpec.parameterName,
+        } as unknown as OnshapeType<any>;
+    }
     console.warn("Could not convert parameterSpec: ", parameterSpec)
     return parameterSpec as OnshapeType;
 }
