@@ -263,7 +263,13 @@ export default defineComponent({
 
   &.selected .ns-dialog-frame {
     border-color: var(--node-accent);
-    box-shadow: var(--shadow-1);
+    // Selection ring as an outer box-shadow (issue #37): painted BEHIND the
+    // element, unlike a border or outline, so it can never cover the port
+    // rectangles that straddle the frame edge. Combined with the lifted
+    // .socket-container (OnshapeSocket.vue, z-index within this node's own
+    // stacking context), ports always paint above the selection outline at
+    // every edge. No per-node z-index: NodeOrderKeeper owns paint order.
+    box-shadow: 0 0 0 1px var(--node-accent), var(--shadow-1);
   }
 
   // Header strip: structural hairline only; header type is set below.
@@ -401,6 +407,9 @@ export default defineComponent({
 .feature-dialog-main {
   position: relative;
   box-sizing: border-box;
+  // Node-local stacking context (issue #37): child z-indexes (ports) are
+  // scoped to this node and cannot fight NodeOrderKeeper's paint order.
+  isolation: isolate;
 }
 
 .feature-dialog {

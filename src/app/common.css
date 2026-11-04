@@ -82,4 +82,26 @@ body {
     --line-height-body: 1.35;
     --line-height-title: 1.2;
     --backdrop-scrim: rgba(26, 26, 26, 0.32);
+    /*
+     * Port fills are DATA ENCODING, not chrome (exception to the muted-page
+     * palette, see STYLE_GUIDE.md "Port colours: data-encoding exception").
+     * Each value family gets one bright, distinguishable hue, informed by the
+     * pre-#33 StyleSettings hues (#4EC9B0, #B2DDF6, #4FC1FF, #B5CEA8, #4e94ce,
+     * #CE9178) but kept saturated enough to read as distinct on the white
+     * node surface and brighter than the muted #33 page tokens. Consumed
+     * only by the socket style table in src/app/rete/stylesettings.ts.
+     */
+    --socket-query: #4ec9b0;
+    --socket-id: #4e94ce;
+    --socket-quantity: #e5a93d;
+    --socket-enum: #ce9178;
+    --socket-boolean: #7fb069;
+    --socket-string: #e8799b;
+    --socket-vector: #4fc1ff;
+    --socket-matrix: #8e7cc3;
+    --socket-transform: #d95763;
+    --socket-coordsystem: #a3d977;
+    --socket-number: #f2d06b;
+    --socket-map: #6fa8dc;
+    --socket-context: #26a69a;
 }
