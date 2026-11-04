@@ -24,6 +24,7 @@ import { FunctionNode, type FunctionNodeMeta } from "./nodes/functionnode";
 import { UtilityStatementNode, type UtilityStatementDef } from "./nodes/utilitystatementnode";
 import { createArrayNode as createArrayNodeImpl, ARRAY_NODE_VARIANTS } from "./nodes/arraynodes";
 import type { ArrayNodeVariant } from "./nodes/arraynodes";
+import { MathExpressionNode } from "./nodes/mathexpressionnode";
 import type { ValueType } from "../onshape-utils/valuetypes";
 import { OnshapeNode } from "./nodes/onshapenode";
 
@@ -36,6 +37,12 @@ export type { ArrayNodeVariant };
  * entries. Palette/UIs offer `ARRAY_NODE_VARIANTS` and call this; no
  * `App.vue` changes are needed to construct the nodes.
  */
+/** #20: create a math expression node. Palette/UIs call this; the node
+ * derives its sockets from the source on `setSource`. */
+export function createMathExpressionNode(source = ""): MathExpressionNode {
+  return new MathExpressionNode(source);
+}
+
 export function createArrayNode(
   variant: ArrayNodeVariant,
   options?: { elementType?: ValueType; resultElementType?: ValueType; bound?: number; body?: string },

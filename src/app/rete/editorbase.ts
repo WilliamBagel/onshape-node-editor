@@ -30,6 +30,8 @@ import { CustomConnectionPlugin } from "./customconnectionplugin";
 import { OnshapeNode } from "./nodes/onshapenode";
 import { FrameNode } from "./nodes/framenode";
 import FrameNodeView from "../customization/FrameNodeView.vue";
+import MathExpressionNodeView from "../customization/MathExpressionNodeView.vue";
+import { MathExpressionNode } from "./nodes/mathexpressionnode";
 import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
@@ -167,6 +169,9 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 node(context: any) {
                     if (context.payload instanceof FrameNode) {
                         return FrameNodeView;
+                    }
+                    if (context.payload instanceof MathExpressionNode) {
+                        return MathExpressionNodeView;
                     }
                     if (context.payload instanceof OnshapeNode) {
                         return CustomFeatureComp;
