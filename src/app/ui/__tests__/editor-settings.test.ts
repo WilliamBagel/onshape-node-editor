@@ -30,6 +30,12 @@ describe('editorSettings: preference defaults', () => {
       snapGridSize: 20,
       snapModifier: 'Control',
       accumulateModifier: 'Shift',
+      debugGrid: {
+        columns: ['node', 'socket', 'type', 'units', 'value'],
+        showOnlyErrors: false,
+        sortBy: 'node',
+        sortDir: 'asc',
+      },
     });
   });
 
@@ -70,6 +76,12 @@ describe('editorSettings: persistence', () => {
       snapGridSize: 12,
       snapModifier: 'Alt',
       accumulateModifier: 'Shift',
+      debugGrid: {
+        columns: ['node', 'socket', 'type', 'units', 'value'],
+        showOnlyErrors: false,
+        sortBy: 'node',
+        sortDir: 'asc',
+      },
     });
   });
 
@@ -104,8 +116,8 @@ describe('editorSettings: persistence', () => {
 });
 
 describe('editorSettings: shortcut registry', () => {
-  it('lists exactly the eight implemented commands, each with a unique default', () => {
-    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'addNode']);
+  it('lists exactly the nine implemented commands, each with a unique default', () => {
+    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'addNode', 'debugGrid']);
     expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(COMMANDS.length);
   });
 
