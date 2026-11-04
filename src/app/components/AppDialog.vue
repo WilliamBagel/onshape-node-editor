@@ -298,8 +298,17 @@ export default defineComponent({
   width: min(560px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   overflow-y: auto;
+  /* #73: an obvious scrollbar, so scrollable content is never gated
+     behind an invisible one. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) var(--surface-sunken);
+  scrollbar-gutter: stable;
   border-radius: 6px;
 }
+
+.app-dialog--wide::-webkit-scrollbar { width: 10px; }
+.app-dialog--wide::-webkit-scrollbar-track { background: var(--surface-sunken); }
+.app-dialog--wide::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 5px; border: 2px solid var(--surface-sunken); }
 
 .app-dialog-text {
   margin: 0 0 8px;

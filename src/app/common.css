@@ -105,3 +105,62 @@ body {
     --socket-map: #6fa8dc;
     --socket-context: #26a69a;
 }
+
+/*
+ * #73: canvas context menu theme. The rete-vue-plugin context-menu preset
+ * ships stock blue `.block` chrome; these rules re-skin it with the
+ * STYLE_GUIDE tokens so it reads as one system with the palettes:
+ * white surface, hairline, 12/13px text, hover tint, 5px radius,
+ * guide-maximum shadow. Doubled attribute keeps specificity above the
+ * preset's scoped styles.
+ */
+[rete-context-menu][rete-context-menu] .menu {
+    padding: 4px;
+    width: 220px;
+    margin-top: 0;
+    margin-left: 0;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1);
+    font-family: var(--font-sans);
+}
+
+[rete-context-menu][rete-context-menu] .block {
+    color: var(--text-primary);
+    background-color: var(--surface);
+    border-bottom: 1px solid var(--hairline);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height-body);
+    padding: 6px 8px;
+}
+
+[rete-context-menu][rete-context-menu] .block:hover {
+    background-color: var(--surface-sunken);
+}
+
+[rete-context-menu][rete-context-menu] .block:first-child {
+    border-top-left-radius: var(--radius-card);
+    border-top-right-radius: var(--radius-card);
+}
+
+[rete-context-menu][rete-context-menu] .block:last-child {
+    border-bottom-left-radius: var(--radius-card);
+    border-bottom-right-radius: var(--radius-card);
+    border-bottom: none;
+}
+
+[rete-context-menu][rete-context-menu] .search {
+    color: var(--text-primary);
+    background: var(--surface-sunken);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-control);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-value);
+    padding: 6px 8px;
+}
+
+[rete-context-menu][rete-context-menu] .search:focus {
+    outline: 1px solid var(--accent-steel);
+    border-color: var(--accent-steel);
+}

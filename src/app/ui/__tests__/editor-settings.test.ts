@@ -117,16 +117,16 @@ describe('editorSettings: persistence', () => {
 
 describe('editorSettings: shortcut registry', () => {
   it('lists exactly the nine implemented commands, each with a unique default', () => {
-    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'addNode', 'debugGrid']);
+    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'addNode', 'debugGrid', 'actionPalette']);
     expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(COMMANDS.length);
   });
 
-  it('never lists Save/Open/Search as shortcuts (they are still no-ops)', () => {
+  it('lists Save/Open/Search-actions as real commands, with nothing omitted', () => {
     const ids = COMMANDS.map((c) => c.id);
-    expect(ids).not.toContain('save');
-    expect(ids).not.toContain('open');
-    expect(ids).not.toContain('search');
-    expect(OMITTED_COMMANDS.map((o) => o.label)).toEqual(['Save file', 'Open file', 'Search']);
+    expect(ids).toContain('save');
+    expect(ids).toContain('open');
+    expect(ids).toContain('actionPalette');
+    expect(OMITTED_COMMANDS).toEqual([]);
   });
 
   it('rebinds a command and persists the new binding across reload', () => {

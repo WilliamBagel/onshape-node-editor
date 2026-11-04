@@ -102,7 +102,7 @@
       </div>
     </section>
 
-    <section aria-labelledby="settings-omitted">
+    <section v-if="OMITTED_COMMANDS.length > 0" aria-labelledby="settings-omitted">
       <h3 id="settings-omitted" class="settings-heading">Not bound</h3>
       <p v-for="item in OMITTED_COMMANDS" :key="item.label" class="settings-meta">
         {{ item.label }} — no shortcut: {{ item.reason }}
@@ -235,9 +235,12 @@ export default defineComponent({
   font-family: var(--font-sans);
   color: var(--ink);
   text-align: left;
+  /* #73: breathing room so content never touches the dialog frame. */
+  padding: 8px 4px 16px;
 }
+.settings section + section { margin-top: 16px; }
 .settings-heading {
-  margin: 16px 0 8px;
+  margin: 8px 0 8px;
   font-size: var(--font-size-heading);
   font-weight: 600;
   line-height: var(--line-height-title);
