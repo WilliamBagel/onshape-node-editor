@@ -98,7 +98,10 @@ function makeHelpers(ctx) {
    *  editing a radius field, keystrokes go to the input, not the
    *  Shift+A shortcut — the app ignores shortcuts while typing). */
   async function openNodePalette() {
-    await page.mouse.click(640, 820).catch(() => {});
+    // Defocus click must land on empty, safe canvas — NOT the bottom edge:
+    // the app places the next palette node at the last pointer position, so
+    // a click at (640, 820) burying the node under the Build Log is a bug.
+    await page.mouse.click(640, 420).catch(() => {});
     await page.waitForTimeout(250);
     await page.keyboard.press('Shift+A');
     await page.waitForTimeout(700);
@@ -323,6 +326,19 @@ export const makeFilletedCylinderTask = {
       need(found, `search "fCylinder" results were [${names.join(', ')}] — no exact fCylinder item`);
       const node = h.nodeByTitle('fCylinder');
       need((await node.count()) > 0, 'fCylinder node card did not appear after insert');
+      const box = await node.first().boundingBox().catch(() => null);
+      need(box, 'fCylinder node has no bounding box');
+      const vp = page.viewportSize() || { width: 1280, height: 900 };
+      need(
+        box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width && box.y + box.height <= vp.height,
+        `fCylinder node is offscreen: bbox=${JSON.stringify(box)} viewport=${JSON.stringify(vp)}`,
+      );
+      const logBox = await page.locator('.log-panel').first().boundingBox().catch(() => null);
+      const overlapsLog =
+        logBox != null &&
+        box.x < logBox.x + logBox.width && box.x + box.width > logBox.x &&
+        box.y < logBox.y + logBox.height && box.y + box.height > logBox.y;
+      need(!overlapsLog, `fCylinder node overlaps the Build Log panel: node=${JSON.stringify(box)} log=${JSON.stringify(logBox)}`);
       fcDump = await h.dumpNode(node);
       await h.shot('fillet-fcylinder-inserted');
       return `outputs=[${fcDump.outputs.join(',')}] inputs=[${fcDump.inputs.join(',')}] warning=${fcDump.warning ? 'yes' : 'no'}`;
