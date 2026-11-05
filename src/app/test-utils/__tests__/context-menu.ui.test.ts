@@ -53,6 +53,43 @@ describe("EditorContextMenu", () => {
     wrapper.unmount();
   });
 
+  it("opens a category only on click, not on pointerenter; second click closes it", async () => {
+    const { items, sin } = menuItems();
+    const onHide = vi.fn();
+    const wrapper = mount(EditorContextMenu, { props: { items, searchBar: false, onHide } });
+    const category = wrapper.findAll(".block").find(b => b.text().includes("Math"));
+    expect(category?.exists()).toBe(true);
+    const heightBefore = wrapper.find(".menu").element.getBoundingClientRect().height;
+
+    // Hover must not expand the category, change height, or steal focus.
+    await category?.trigger("pointerenter");
+    await category?.trigger("pointerleave");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".subitem")).toHaveLength(0);
+    expect(wrapper.text()).not.toContain("sin");
+    expect(wrapper.find(".menu").element.getBoundingClientRect().height).toBe(heightBefore);
+    expect((category?.element as HTMLElement).tabIndex).toBe(-1);
+    expect(document.activeElement).not.toBe(category?.element);
+
+    // Click opens; a second click on the open category closes it.
+    await category?.find(".content").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".subitem").map(s => s.text())).toEqual(["sin", "cos"]);
+
+    await category?.find(".content").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".subitem")).toHaveLength(0);
+
+    // Re-open and click a leaf: handler runs and the menu hides.
+    await category?.find(".content").trigger("click");
+    await wrapper.vm.$nextTick();
+    const leaf = wrapper.findAll(".subitem").find(s => s.text() === "sin");
+    await leaf?.trigger("click");
+    expect(sin).toHaveBeenCalledOnce();
+    expect(onHide).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
   it("searches Onshape features and reports no match cleanly", async () => {
     const { items } = menuItems();
     const wrapper = mount(EditorContextMenu, { props: { items, searchBar: true } });
