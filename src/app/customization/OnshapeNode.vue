@@ -484,12 +484,14 @@ export default defineComponent({
   }
 
   // Quantity value inputs: 13px/400 sans, like every other node value
-  // (STYLE_GUIDE). Narrower than the literal-mono rule above: same :deep
-  // depth with an extra class, declared AFTER it, so it wins for
-  // `input.os-param-number` and anything inside the quantity holder. Without
-  // this, quantity fields rendered in Courier — wrong for a value control.
-  :deep(input.os-param-number),
-  :deep(.quantity-autocomplete-holder input) {
+  // (STYLE_GUIDE). Specificity is raised to tie the literal-mono rule above
+  // (input[type=...] + :not(...) = 0,2,1) and declared AFTER it, so it wins
+  // for `os-param-number` inputs and anything inside the quantity holder.
+  // Without this, quantity fields rendered in Courier — wrong for a value
+  // control (measured: ui-monospace 12px in headless Chrome).
+  :deep(input[type='text'].os-param-number),
+  :deep(input[type='number'].os-param-number),
+  :deep(.quantity-autocomplete-holder input.os-param-number) {
     font-family: var(--node-font-sans) !important;
     font-size: var(--node-value-size) !important;
   }

@@ -30,13 +30,13 @@ describe('node title true bold (700)', () => {
 describe('quantity inputs are sans 13px, never monospace', () => {
     it('narrow quantity rule follows the broad mono rule', () => {
         const monoIndex = nodeSrc.indexOf(":deep(input[type='text']");
-        const quantityIndex = nodeSrc.indexOf(':deep(input.os-param-number)');
+        const quantityIndex = nodeSrc.indexOf(":deep(input[type='text'].os-param-number)");
         expect(monoIndex).toBeGreaterThan(-1);
         expect(quantityIndex).toBeGreaterThan(monoIndex);
     });
     it('quantity inputs get the sans value font at 13px', () => {
         expect(nodeSrc).toMatch(
-            /:deep\(input\.os-param-number\)[\s\S]*?font-family:\s*var\(--node-font-sans\)\s*!important;[\s\S]*?font-size:\s*var\(--node-value-size\)\s*!important/,
+            /:deep\(input\[type='text'\]\.os-param-number\)[\s\S]*?font-family:\s*var\(--node-font-sans\)\s*!important;[\s\S]*?font-size:\s*var\(--node-value-size\)\s*!important/,
         );
         expect(nodeSrc).toMatch(/--node-value-size:\s*13px/);
     });
