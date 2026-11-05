@@ -162,8 +162,10 @@ A frame is a grouping rectangle the rete-scopes-plugin parents nodes into
 (`node.parent`). Frames are not codegen nodes: they have no inputs or
 outputs, so the flattening walk (which follows connection parents from the
 output node) never reaches them and generated FeatureScript is unaffected by
-framing. `label` and `color` are the frame header's; `collapsed` hides the
-frame's descendants on the canvas without deleting them. A frame's own
+framing. `label` and `color` are the frame header's. `collapsed` is a legacy
+schema field only: frame collapsing was removed, frames always stay
+expanded, and a document carrying `collapsed: true` loads expanded
+(descendants visible). It is always serialized as `false`. A frame's own
 `group` is its parent frame's id (frames nest). A child whose `group` names a
 frame that is missing from the document loads ungrouped, with a warning, and
 so does a frame whose parent frame is missing.

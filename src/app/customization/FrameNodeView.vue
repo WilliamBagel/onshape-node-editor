@@ -1,7 +1,7 @@
 <template>
   <div
     class="frame-node node"
-    :class="{ selected: data.selected, collapsed: data.collapsed }"
+    :class="{ selected: data.selected }"
     :style="{
       width: Number.isFinite(width) ? `${width}px` : '',
       height: Number.isFinite(height) ? `${height}px` : '',
@@ -36,19 +36,7 @@
           @change="data.update()"
           @pointerdown.stop
         />
-        <button
-          type="button"
-          class="frame-toggle"
-          :title="data.collapsed ? 'Expand frame' : 'Collapse frame'"
-          @click="toggleCollapse"
-          @pointerdown.stop
-        >
-          {{ data.collapsed ? "▸" : "▾" }}
-        </button>
       </span>
-    </div>
-    <div class="frame-body" v-if="data.collapsed">
-      <span class="frame-meta">collapsed · contents hidden</span>
     </div>
   </div>
 </template>
@@ -74,15 +62,7 @@ export default defineComponent({
       props.data.update();
     }
 
-    function toggleCollapse() {
-      // Hiding/showing descendants needs the area, which the view does not
-      // own; editorbase assigns `onCollapsedChanged` for exactly this.
-      props.data.collapsed = !props.data.collapsed;
-      props.data.update();
-      props.data.onCollapsedChanged?.(props.data.collapsed);
-    }
-
-    return { titleEditFocus, titleEditElem, endTitleEdit, toggleCollapse };
+    return { titleEditFocus, titleEditElem, endTitleEdit };
   },
 });
 </script>
@@ -159,31 +139,6 @@ export default defineComponent({
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
-}
-
-.frame-toggle {
-  font-size: 12px;
-  line-height: 1;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  padding: 3px 5px;
-  cursor: pointer;
-}
-
-.frame-toggle:hover {
-  border-color: var(--border-hairline);
-  color: var(--accent);
-}
-
-.frame-body {
-  padding: 6px 8px;
-}
-
-.frame-meta {
-  font-size: 11px;
-  color: var(--text-secondary); opacity: var(--opacity-secondary);
 }
 
 .frame-node.selected {
