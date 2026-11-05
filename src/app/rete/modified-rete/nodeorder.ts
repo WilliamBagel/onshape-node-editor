@@ -105,7 +105,7 @@ export interface NodeOrderHooks {
     /**
      * #13: nodes the keeper must not own — frames. A frame element must stay
      * behind its children, so it is never stacked by selection order (the
-     * canvas pins frame elements to the front of the holder instead). The
+     * canvas pins frame elements to their own paint layer instead). The
      * keeper refuses to record such a node even if asked.
      */
     isExcluded?: (id: string) => boolean;
