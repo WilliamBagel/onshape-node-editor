@@ -1,5 +1,5 @@
 <template>
-  <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected }" :style="{
+  <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected, collapsed }" :style="{
     'width': Number.isFinite(width) ? `${width}px` : '',
     'height': Number.isFinite(height) ? `${height}px` : '',
     'min-width': Number.isFinite(data.minWidth) ? `${data.minWidth}px` : '',
@@ -546,6 +546,14 @@ export default defineComponent({
 .feature-dialog {
   left: 0px;
   top: 0px;
+}
+
+// A collapsed node is content-sized: the inline expanded height must not leave
+// a blank card under the socket strip. Re-expanding removes this class and
+// restores the stored expanded height.
+.node.collapsed {
+  height: auto !important;
+  min-height: 0;
 }
 
 // Header chrome (#72): the title is centred between two small header buttons.
