@@ -69,6 +69,11 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Dashboard controls smoke test
+        run: |
+          node scripts/ui-report.mjs --report scripts/ui-report.sample.json --out /tmp/ui-dashboard-smoke
+          node scripts/ui-report.smoke.mjs --dashboard /tmp/ui-dashboard-smoke/dashboard.html
+
       - name: Build application
         run: pnpm run build:app
 
@@ -84,3 +89,73 @@ jobs:
       - name: Server-lock audit (#46)
         working-directory: scripts/server-lock
         run: npm audit --omit=dev --audit-level=moderate
+
+  # Exploratory UI QA on every pull request. The dashboard is published as a
+  # workflow artifact even when it finds product gaps; a harness crash still
+  # fails the job. Master deployments publish the same report at /qa/.
+  ui-qa:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.14.0'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.22.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Pillow for screenshot annotations
+        run: python3 -m pip install --user --break-system-packages pillow
+
+      - name: Serve the app for exploratory UI QA
+        run: |
+          pnpm exec vite --port 5173 --strictPort --host 127.0.0.1 > /tmp/ui-preview.log 2>&1 &
+          echo $! > /tmp/ui-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/onshape-node-editor/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ui-preview.log
+          exit 1
+
+      - name: Explore the UI and build the QA dashboard
+        run: |
+          pnpm run explore:ui -- \
+            --url http://127.0.0.1:5173/onshape-node-editor/ \
+            --out dist/app/qa \
+            --task make-filleted-cylinder \
+            --max-actions 40 \
+            --advisory
+          cp dist/app/qa/dashboard.html dist/app/qa/index.html
+
+      - name: Upload UI QA report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ui-qa-report-${{ github.run_id }}
+          path: dist/app/qa
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop the UI QA server
+        if: always()
+        run: |
+          if [ -f /tmp/ui-preview.pid ]; then kill "$(cat /tmp/ui-preview.pid)" 2>/dev/null || true; fi
+          pkill -f 'vite --port 5173' 2>/dev/null || true

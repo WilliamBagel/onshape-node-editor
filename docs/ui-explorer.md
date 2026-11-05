@@ -38,10 +38,12 @@ Flags:
 | `--chrome` | auto / `CHROME_BIN` | Chrome executable |
 | `--timeout` | `30000` | Per-action timeout in ms |
 | `--keep-open` | off | Do not close Chrome on exit (debug) |
+| `--advisory` | off | Record critical/high/task findings but exit 0 (CI publishing) |
 
 Exit code is non-zero when any **critical** or **high** issue is found, or when
-the requested task fails. Medium/low findings still exit 0 (so the tool can run
-in a scheduled smoke job without blocking on polish).
+the requested task fails. Medium/low findings still exit 0. `--advisory` is for
+the CI/CD publisher: known product gaps must not block the app deployment, but a
+harness crash still exits 2.
 
 ## Output
 
@@ -62,7 +64,10 @@ in a scheduled smoke job without blocking on polish).
 when opened via `file://`: summary cards, severity/category filters, one row per
 issue with a thumbnail, annotated screenshot, expected/actual, reproduction
 steps, console output, and a **user-level suggested fix** in plain language.
-Relative paths only.
+Issue screenshots are embedded as data URIs so the single HTML file remains
+portable when downloaded from an artifact or published under `/qa/`; missing
+images render a placeholder. The same report is published by CI/CD at
+`https://williambagel.github.io/onshape-node-editor/qa/`.
 
 ## Report schema (source of truth)
 

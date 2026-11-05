@@ -68,6 +68,30 @@ The deployed URL is part of the Onshape extension registration, so it must stay
 in step with `myclient` (`src/app/app.ts:51`), `public/redirect.html:17` and the
 portal — see `docs/extension-setup.md` §7.
 
+### UI QA dashboard (CI/CD product)
+
+Every `master` deployment also publishes the exploratory UI QA dashboard at:
+
+```
+https://williambagel.github.io/onshape-node-editor/qa/
+```
+
+The deploy workflow builds the app, starts the Vite dev entrypoint (the
+production entrypoint requires Onshape OAuth and cannot boot outside the
+Onshape host), runs `scripts/ui-explorer.mjs` against the sample graph,
+annotates findings, and writes the dashboard into `dist/app/qa` before the
+Pages artifact is uploaded. Findings are advisory for the deploy (known product
+gaps must not block the app), but a harness crash still fails the job. Pull
+requests run the same explorer and attach `ui-qa-report-<run>` as a workflow
+artifact.
+
+Run it locally with:
+
+```sh
+pnpm run dev
+pnpm run explore:ui -- --out tmp/ui-explorer --task make-filleted-cylinder
+```
+
 Publishing from a branch other than `master`, without pushing `master`:
 
 ```

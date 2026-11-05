@@ -56,6 +56,16 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 const arr = (v) => (Array.isArray(v) ? v : []);
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const existsRel = (rel) => { try { return !!rel && existsSync(path.join(reportDir, rel)); } catch { return false; } };
+const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' };
+function dataUri(rel) {
+  try {
+    const abs = path.join(reportDir, rel);
+    const mime = MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream';
+    return `data:${mime};base64,${readFileSync(abs).toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
 const sevRank = (s) => (s in SEV_RANK ? SEV_RANK[s] : 4);
 const sortedIssues = () => [...arr(report.issues)].sort((a, b) =>
   sevRank(a.severity) - sevRank(b.severity) ||
@@ -77,8 +87,10 @@ function imgTag(issue) {
   const src = annotated ?? shot;
   const alt = annotated ? `Annotated screenshot for ${issue.title ?? 'issue'}` : `Screenshot for ${issue.title ?? 'issue'}`;
   if (!src) return `<div class="img-placeholder" aria-label="Screenshot not available">Screenshot not available</div>`;
+  const embedded = dataUri(src);
+  if (!embedded) return `<div class="img-placeholder" aria-label="Screenshot not available">Screenshot not available</div>`;
   const label = annotated ? 'Annotated' : 'Screenshot';
-  return `<figure class="shot"><img loading="lazy" src="${esc(src)}" alt="${esc(alt)}"><figcaption>${esc(label)}: ${esc(src)}</figcaption></figure>`;
+  return `<figure class="shot"><img decoding="async" src="${embedded}" alt="${esc(alt)}"><figcaption>${esc(label)}</figcaption></figure>`;
 }
 function consoleBlock(issue) {
   const lines = arr(issue.console).map((c) => (typeof c === 'string' ? c : c?.message ?? c?.text ?? JSON.stringify(c))).filter(Boolean);

@@ -27,6 +27,10 @@ const maxActions = parseInt(arg('max-actions', '80'), 10) || 80;
 const perActionTimeout = parseInt(arg('timeout', '30000'), 10) || 30000;
 const headed = flag('headed');
 const keepOpen = flag('keep-open');
+// CI publishes findings without failing the deployment: the report is the
+// product, and known product gaps are expected until they are fixed. A
+// harness crash still exits 2.
+const advisory = flag('advisory');
 
 fs.mkdirSync(path.join(outDir, 'screenshots', 'actions'), { recursive: true });
 fs.mkdirSync(path.join(outDir, 'screenshots', 'issues'), { recursive: true });
@@ -659,7 +663,8 @@ async function main() {
   else console.log('keep-open: browser left running for debugging');
 
   const fatal = issues.some(i => i.severity === 'critical' || i.severity === 'high') || taskResult.status === 'failed';
-  process.exit(fatal ? 1 : 0);
+  if (advisory && fatal) console.warn('advisory: findings recorded; not failing this run');
+  process.exit(advisory ? 0 : fatal ? 1 : 0);
 }
 
 main().catch(async (e) => {

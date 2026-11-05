@@ -83,6 +83,43 @@ jobs:
       - name: Build application
         run: pnpm run build:app
 
+      - name: Install Pillow for screenshot annotations
+        run: python3 -m pip install --user --break-system-packages pillow
+
+      - name: Serve the app for exploratory UI QA
+        run: |
+          # The production entrypoint goes through Onshape OAuth and cannot run
+          # without the Onshape host; the dev entrypoint boots the sample graph
+          # used by the explorer. The deployable app is still built above.
+          pnpm exec vite --port 5173 --strictPort --host 127.0.0.1 > /tmp/ui-preview.log 2>&1 &
+          echo $! > /tmp/ui-preview.pid
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/onshape-node-editor/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ui-preview.log
+          exit 1
+
+      - name: Explore the UI and build the QA dashboard
+        run: |
+          pnpm run explore:ui -- \
+            --url http://127.0.0.1:5173/onshape-node-editor/ \
+            --out dist/app/qa \
+            --task make-filleted-cylinder \
+            --max-actions 80 \
+            --advisory
+          cp dist/app/qa/dashboard.html dist/app/qa/index.html
+          node -e "const r=require('./dist/app/qa/report.json'); console.log('UI QA: '+r.summary.issues+' issues ('+r.summary.high+' high), task='+r.task.status)" >> "$GITHUB_STEP_SUMMARY"
+          echo 'UI QA dashboard: https://williambagel.github.io/onshape-node-editor/qa/' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop the UI QA server
+        if: always()
+        run: |
+          if [ -f /tmp/ui-preview.pid ]; then kill "$(cat /tmp/ui-preview.pid)" 2>/dev/null || true; fi
+          pkill -f 'vite --port 5173' 2>/dev/null || true
+
       - name: Build server
         run: pnpm run build:server
 

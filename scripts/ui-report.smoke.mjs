@@ -23,6 +23,21 @@ dashboardPath = dashboardPath
 const shotPath = path.join(path.dirname(dashboardPath), 'smoke.png');
 const fileUrl = 'file://' + dashboardPath.replace(/^\//, '/');
 
+function findChrome() {
+  const explicit = process.env.CHROME_BIN;
+  if (explicit && existsSync(explicit)) return explicit;
+  for (const p of ['/usr/bin/google-chrome-stable', '/usr/bin/google-chrome', '/opt/google/chrome/chrome']) {
+    if (existsSync(p)) return p;
+  }
+  for (const bin of ['google-chrome-stable', 'google-chrome', 'chromium', 'chromium-browser']) {
+    for (const dir of (process.env.PATH || '').split(':')) {
+      const p = path.join(dir, bin);
+      if (existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
 let failures = 0;
 function check(name, cond, detail = '') {
   if (cond) console.log(`PASS ${name}${detail ? ' — ' + detail : ''}`);
@@ -43,9 +58,13 @@ async function main() {
     process.exit(1);
   }
   console.log(`INFO dashboard: ${dashboardPath}`);
-  const exec = '/usr/bin/google-chrome-stable';
+  const exec = findChrome();
+  if (!exec) {
+    console.log('FAIL no Chrome binary found; set CHROME_BIN');
+    process.exit(1);
+  }
   const browser = await chromium.launch({
-    executablePath: existsSync(exec) ? exec : '/opt/google/chrome/chrome',
+    executablePath: exec,
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });

@@ -26,7 +26,10 @@ clears, and a live `Showing N of M issues` count is shown), and a
 rather than a dead end. Issue cards are sorted
 critical → low then area/title with the annotated screenshot when that
 file exists (otherwise the raw screenshot, otherwise a quiet
-"Screenshot not available" placeholder), expected/actual, numbered
+"Screenshot not available" placeholder). Issue images are embedded as
+data URIs, so a dashboard downloaded by itself still shows its
+screenshots; no external asset paths are required. Each card also has
+expected/actual, numbered
 reproduction steps, collapsible console output, and a prominent
 user-level "Suggested fix". A "How to read this" legend, an empty state
 for zero issues, and a task section (per-step pass/fail/skip + error)
@@ -75,3 +78,14 @@ control with real clicks/typing (High → All, Accessibility, search,
 no-match, `×`/Escape, `Clear all`), asserts `Showing N of M` counts and
 ≥24px controls, writes `tmp/dashboard-fix/smoke.png`, and exits
 non-zero on failure.
+
+## CI/CD publication
+
+The deploy workflow publishes the live report at
+`https://williambagel.github.io/onshape-node-editor/qa/`. It starts the
+Vite dev entrypoint (the production entrypoint requires Onshape OAuth),
+runs the explorer with `--advisory` into `dist/app/qa`, copies
+`dashboard.html` to `qa/index.html`, and uploads the normal Pages
+artifact. Pull requests run the same explorer and attach the report as a
+workflow artifact; the dashboard smoke test runs in the main CI check
+job.
