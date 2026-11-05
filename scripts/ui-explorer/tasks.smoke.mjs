@@ -60,7 +60,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 300)));
 
 const results = [];
-for (const task of tasks) {
+for (const task of Object.values(tasks)) {
   console.log(`\n=== TASK ${task.id} — ${task.name} ===`);
   const records = [];
   const ctx = {

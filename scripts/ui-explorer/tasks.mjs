@@ -436,5 +436,8 @@ export const makeFilletedCylinderTask = {
   },
 };
 
-export const tasks = [smokeTask, makeFilletedCylinderTask];
+export const tasks = {
+  smoke: smokeTask,
+  'make-filleted-cylinder': makeFilletedCylinderTask,
+};
 export default tasks;

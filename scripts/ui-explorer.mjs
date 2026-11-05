@@ -111,7 +111,11 @@ async function reload() {
 }
 
 async function addIssue({ title, severity = 'medium', category, area, description, expected, actual, steps, suggestion, bbox, actionId, console: cons = [], dedupLabel = '' }) {
-  const key = `${category}|${area}|${title.toLowerCase()}|${dedupLabel || title}`;
+  // The same DOM control is re-scanned after every action. Key on geometry when
+  // no explicit label is supplied so one control yields one issue, not one per
+  // screen tour (the area field may legitimately differ between tours).
+  const geom = bbox ? `${bbox.x},${bbox.y},${bbox.width},${bbox.height}` : '';
+  const key = `${category}|${title.toLowerCase()}|${dedupLabel || geom || title}`;
   if (issueKeys.has(key)) return null;
   if ((catCounts[category] || 0) >= 20) return null;
   issueKeys.add(key); catCounts[category] = (catCounts[category] || 0) + 1;
@@ -120,7 +124,7 @@ async function addIssue({ title, severity = 'medium', category, area, descriptio
   issues.push({
     id, title, severity, category, area, description, expected, actual,
     steps, suggestion, screenshot, annotated: null,
-    bbox: bbox || { x: 0, y: 0, width: 10, height: 10 },
+    bbox: bbox ?? null,
     viewport: viewport(), actionId: actionId || null, console: cons,
   });
   console.log(`ISSUE ${id} [${severity}/${category}] ${title}`);
@@ -573,14 +577,25 @@ async function main() {
         else {
           const steps = [];
           const ctx = {
-            page, shot: async (n) => shotPath('action', actSeq, n), record, reload,
-            log: (m) => steps.push({ label: m, status: 'passed', detail: '' }),
+            page, shot: async (n) => shotPath('action', actSeq, n), reload,
+            log: (m) => console.log(`[task] ${m}`),
+            record: (label, status, detail) => {
+              const normalized = status === 'pass' ? 'passed' : status === 'fail' ? 'failed' : status === 'skip' ? 'skipped' : status;
+              steps.push({ label: String(label), status: normalized, detail: detail ? String(detail) : '' });
+            },
             assert: (cond, label) => { steps.push({ label, status: cond ? 'passed' : 'failed', detail: '' }); if (!cond) throw new Error(`assertion failed: ${label}`); },
-            issue: addIssue,
+            issue: (title, detail) => addIssue({
+              title: String(title).slice(0, 120), severity: 'high', category: 'functional', area: 'task',
+              description: 'A task step failed while exercising the UI.',
+              expected: 'The step completes from the visible UI.',
+              actual: String(detail || title).slice(0, 500),
+              steps: [String(title)], suggestion: 'Fix the blocker shown in this task step so a user can complete the flow.',
+              actionId: null, console: [],
+            }),
           };
           try { await t.run(ctx); taskResult = { id: t.id, name: t.name, status: steps.some(s => s.status === 'failed') ? 'failed' : 'passed', steps, error: null }; }
           catch (e) { taskResult = { id: t.id, name: t.name, status: 'failed', steps, error: e.message.slice(0, 500) };
-            await addIssue({ title: 'Task failed', severity: 'high', category: 'functional', area: 'task', description: `Task ${t.id} did not complete.`, expected: `Task ${t.id} completes.`, actual: e.message.slice(0, 300), steps: steps.map(s => s.label), suggestion: 'Fix the blocker shown in the task steps so the task can be completed from the UI.', bbox: { x: 0, y: 0, width: 10, height: 10 }, actionId: null, console: [] }); }
+            await addIssue({ title: 'Task failed', severity: 'high', category: 'functional', area: 'task', description: `Task ${t.id} did not complete.`, expected: `Task ${t.id} completes.`, actual: e.message.slice(0, 300), steps: steps.map(s => s.label), suggestion: 'Fix the blocker shown in the task steps so the task can be completed from the UI.', actionId: null, console: [] }); }
         }
       } catch (e) { taskResult = { id: taskId, name: taskId, status: 'failed', steps: [], error: e.message.slice(0, 500) }; }
     } else {
@@ -603,7 +618,7 @@ async function main() {
       expected: 'All resources load successfully.', actual: req,
       steps: ['Open the app', 'Watch the network tab for a failed request'],
       suggestion: 'Fix the missing resource or its URL so it loads.',
-      bbox: { x: 0, y: 0, width: 10, height: 10 }, actionId: null, console: [req] });
+      actionId: null, console: [req] });
   }
 
   const report = {
@@ -623,7 +638,15 @@ async function main() {
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(`wrote ${path.join(outDir, 'report.json')} actions=${actions.length} issues=${issues.length}`);
 
-  // Optional reporter / annotator — degrade gracefully
+  // Annotate first, then report, so the dashboard sees issue.annotated paths.
+  const annotateScript = path.join(REPO, 'scripts', 'annotate-ui-shots.py');
+  if (fs.existsSync(annotateScript)) {
+    try {
+      const { execFileSync } = await import('node:child_process');
+      execFileSync('python3', [annotateScript, '--report', path.join(outDir, 'report.json'), '--out', path.join(outDir, 'annotated')], { stdio: 'inherit' });
+    } catch (e) { console.warn(`warning: annotator skipped: ${e.message}`); }
+  }
+
   const reportScript = path.join(REPO, 'scripts', 'ui-report.mjs');
   if (fs.existsSync(reportScript)) {
     try {
@@ -631,14 +654,6 @@ async function main() {
       execFileSync(process.execPath, [reportScript, '--report', path.join(outDir, 'report.json'), '--out', outDir], { stdio: 'inherit' });
     } catch (e) { console.warn(`warning: ui-report.mjs failed: ${e.message}`); }
   } else console.warn('warning: scripts/ui-report.mjs not found; only report.json written');
-
-  const annotateScript = path.join(REPO, 'scripts', 'annotate-ui-shots.py');
-  if (fs.existsSync(annotateScript)) {
-    try {
-      const { execFileSync } = await import('node:child_process');
-      execFileSync('python3', [annotateScript, '--report', path.join(outDir, 'report.json'), '--out', outDir], { stdio: 'inherit' });
-    } catch (e) { console.warn(`warning: annotator skipped: ${e.message}`); }
-  }
 
   if (!keepOpen) { await browser.close().catch(() => {}); }
   else console.log('keep-open: browser left running for debugging');
