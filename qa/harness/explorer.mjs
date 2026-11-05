@@ -603,7 +603,7 @@ async function main() {
         }
       } catch (e) { taskResult = { id: taskId, name: taskId, status: 'failed', steps: [], error: e.message.slice(0, 500) }; }
     } else {
-      console.warn('warning: scripts/ui-explorer/tasks.mjs not found; running exploration only');
+      console.warn('warning: qa/harness/tasks.mjs not found; running exploration only');
       taskResult = { id: taskId, name: taskId, status: 'skipped', steps: [], error: 'tasks.mjs absent' };
     }
     await reload().catch(() => {});

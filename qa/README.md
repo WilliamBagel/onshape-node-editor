@@ -26,6 +26,7 @@ pnpm run dev   # app dev server
 pnpm run explore:ui -- --url http://localhost:5173/onshape-node-editor/ --out tmp/qa-runs/<id> --task make-filleted-cylinder
 pnpm run build:qa-dashboard          # -> dist/qa-dashboard
 pnpm run smoke:qa-dashboard          # http + Playwright, sample report
+pnpm run qa:node-chrome              # node chrome regression check (needs a dev server; QA_URL optional)
 pnpm run qa:report -- --report tmp/qa-runs/<id>/report.json --out qa/runs/<id>   # report.md
 pnpm run qa:review -- --report tmp/qa-runs/<id>/report.json   # -> qa/runs/<id>/review-packet.md
 ```

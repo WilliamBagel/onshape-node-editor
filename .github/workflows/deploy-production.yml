@@ -102,6 +102,11 @@ jobs:
           cat /tmp/ui-preview.log
           exit 1
 
+      - name: Node chrome regression check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:node-chrome
+
       - name: Explore the UI and build the QA dashboard
         run: |
           pnpm run explore:ui -- \

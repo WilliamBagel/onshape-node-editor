@@ -34,6 +34,7 @@
     "explore:ui": "node qa/harness/explorer.mjs",
     "build:qa-dashboard": "vite build --config qa/dashboard/vite.config.ts",
     "smoke:qa-dashboard": "node qa/dashboard/dashboard.smoke.mjs",
+    "qa:node-chrome": "node qa/harness/node-chrome-check.mjs",
     "qa:report": "node qa/harness/report.mjs",
     "qa:review": "node qa/review/review-packet.mjs"
   },
