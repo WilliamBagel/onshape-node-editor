@@ -49,6 +49,8 @@ const emit = defineEmits<{
   (e: 'settings'): void
   /** #30: "Locate" on a design check row; the app selects that node. */
   (e: 'locateNode', nodeId: string): void
+  /** #14: create a node group from the current selection. */
+  (e: 'createGroup'): void
 }>()
 
 /* ── Tooltip hover state ────────────────────────────────────────── */
@@ -109,6 +111,15 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
           v-tooltip="{ label: 'New Graph', description: 'Create an additional node graph with its own Feature Studio and graph element.' }"
           @click="emit('newGraph')">
           <SvgIcon href="#svg-icon-add-button" :size="16" aria-label="New graph" />
+        </button>
+      </div>
+
+      <!-- Create group from selection (#14): quiet ghost button, icon-first -->
+      <div class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Create group from selection"
+          v-tooltip="{ label: 'Create Group from Selection', description: 'Turn the selected nodes into a reusable node group. Select the instance and press Tab to edit it.' }"
+          @click="emit('createGroup')">
+          <SvgIcon href="#svg-icon-mateGroup" :size="16" aria-label="Create group from selection" />
         </button>
       </div>
 

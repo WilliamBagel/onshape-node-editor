@@ -116,8 +116,8 @@ describe('editorSettings: persistence', () => {
 });
 
 describe('editorSettings: shortcut registry', () => {
-  it('lists exactly the nine implemented commands, each with a unique default', () => {
-    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'addNode', 'debugGrid', 'actionPalette']);
+  it('lists exactly the implemented commands, each with a unique default', () => {
+    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'createGroup', 'addNode', 'debugGrid', 'actionPalette']);
     expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(COMMANDS.length);
   });
 
@@ -200,6 +200,8 @@ describe('editorSettings: combo normalisation and matching', () => {
     const bindings = { ...DEFAULT_BINDINGS };
     expect(matchCommand({ key: 'b', ctrlKey: true }, null, bindings)).toBe('build');
     expect(matchCommand({ key: 'Delete' }, null, bindings)).toBe('deleteSelected');
+    expect(matchCommand({ key: 'G', ctrlKey: true, shiftKey: true }, null, bindings)).toBe('createGroup');
+    expect(matchCommand({ key: 'g', ctrlKey: true }, null, bindings)).toBe('createFrame');
     expect(matchCommand({ key: 'x', ctrlKey: true }, null, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'INPUT' }, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'TEXTAREA' }, bindings)).toBeNull();
