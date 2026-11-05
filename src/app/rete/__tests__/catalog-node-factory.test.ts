@@ -139,3 +139,46 @@ describe("ranked search (#73)", () => {
     expect(filterCatalogEntries(entries, "zzz")).toEqual([]);
   });
 });
+
+describe("standard-library generic definitions", () => {
+  const chamfer = defaultCatalog.entries.find(e => e.name === "chamfer");
+  const opChamfer = defaultCatalog.entries.find(e => e.name === "opChamfer");
+
+  it("chamfer is offered, searchable first, and insertable without throwing", () => {
+    expect(chamfer).toBeDefined();
+    expect(nodeableEntries(defaultCatalog.entries)).toContain(chamfer);
+    const items = buildPaletteInsertables(defaultCatalog.entries);
+    const found = searchPaletteInsertables(items, "chamfer");
+    expect(found[0].name).toBe("chamfer");
+    expect(found[0].meta).toContain("generic definition");
+    const node = createNodeFromCatalogEntry(chamfer!) as CustomFeatureNode;
+    expect(node).toBeInstanceOf(CustomFeatureNode);
+    expect(node.genericDefinition).toBe(true);
+    expect(node.getTitle()).toBe("chamfer");
+    expect(node.getFeaturescript({ context: "context", id: "id" })).toContain("chamfer(context, id,");
+    // context/id sockets exist; the generic map has no synthesized children
+    expect(node.inputs.context).toBeDefined();
+    expect(node.inputs.id).toBeDefined();
+    expect(node.inputs.definition).toBeDefined();
+    expect(synthesizeFeatureSpec(chamfer!).parameters).toEqual([]);
+  });
+
+  it("opChamfer synthesizes its typed definition parameters", () => {
+    const node = createNodeFromCatalogEntry(opChamfer!) as CustomFeatureNode;
+    expect(node.genericDefinition).toBe(true);
+    expect(synthesizeFeatureSpec(opChamfer!).parameters.map(p => p.parameterId)).toContain("entities");
+    expect(node.inputs.entities).toBeDefined();
+  });
+
+  it("fillet remains insertable and ranking is deterministic on ties", () => {
+    const fillet = defaultCatalog.entries.find(e => e.name === "fillet");
+    expect(createNodeFromCatalogEntry(fillet!)).toBeInstanceOf(CustomFeatureNode);
+    const a: CatalogEntry = { ...valueEntry, name: "zeta" };
+    const b: CatalogEntry = { ...valueEntry, name: "alpha" };
+    // Same score for both on a category match: name order breaks the tie.
+    expect(filterCatalogEntries([a, b], "math").map(e => e.name)).toEqual(["alpha", "zeta"]);
+    const items = buildPaletteInsertables([a, b]);
+    const catalogHits = searchPaletteInsertables(items, "math").filter(i => i.entry != null);
+    expect(catalogHits.map(i => i.name)).toEqual(["alpha", "zeta"]);
+  });
+});
