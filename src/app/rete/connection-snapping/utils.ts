@@ -7,6 +7,37 @@ export function sameSocket(s1: SocketData, s2: SocketData) {
 }
 
 /**
+ * Find the SocketData for a (nodeId, side, key) triple in the connection
+ * plugin's sockets cache (a Map<Element, SocketData>). The pseudo-connection
+ * render pipe uses this to recompute the picked socket's anchor fresh instead
+ * of trusting the socket-position watcher's 'rendered'-time cache, which is
+ * captured before the initial layout settles and stays stale (off by the
+ * area holder's page offset) until the node is re-rendered/resized.
+ */
+export function findSocketData(
+    socketsCache: Map<Element, SocketData>,
+    nodeId: string,
+    side: 'input' | 'output',
+    key: string
+): SocketData | undefined {
+    for (const data of socketsCache.values()) {
+        if (data.nodeId === nodeId && data.side === side && data.key === key) {
+            return data;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Which endpoint of a pseudo-connection is anchored to the picked socket:
+ * 'start' when the picked socket is an output (source side), 'end' when it
+ * is an input (target side). The other endpoint is the hanging pointer end.
+ */
+export function pseudoAnchoredSide(payload: { source?: string; target?: string }): 'start' | 'end' {
+    return payload.source ? 'start' : 'end';
+}
+
+/**
  * MIT License
  *
  * Copyright (c) 2023 "Ni55aN" Vitaliy Stoliarov
