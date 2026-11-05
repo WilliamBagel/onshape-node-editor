@@ -90,7 +90,7 @@
         </span>
       </div>
       <div class="dialog-help-container"><a class="os-help-link os-center-content"
-          href="./probably-a-popup-here-instead.error" target="help"><svg class="os-svg-icon os-help-btn"
+          href="./probably-a-popup-here-instead.error" target="help" aria-label="Open FeatureScript help" title="Help"><svg class="os-svg-icon os-help-btn"
             xmlns="http://www.w3.org/2000/svg">
             <use xlink:href="#svg-icon-help-button"></use>
           </svg></a>
