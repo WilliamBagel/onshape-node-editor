@@ -4,13 +4,16 @@
                 :aria-expanded="isExpanded ? 'true' : 'false'"
                 @pointerdown.stop
                 @click="toggleExpanded">
-                <div class="map-header-content os-center-content">
+                <div class="map-header-content">
                     <span class="map-dropdown-icon" :class="{ expanded: isExpanded }" aria-hidden="true"></span>
                     <span class="map-header-title  os-param-label">{{ input.label }}</span>
+                    <span v-if="visibleParameters.length === 0" class="map-header-empty" aria-hidden="true">(empty)</span>
                 </div>
             </button>
         <!-- Map Parameters -->
         <div v-if="isExpanded" class="map-parameters">
+            <div v-if="visibleParameters.length === 0" class="map-empty-state" role="status"
+                :aria-label="emptyStateLabel">{{ emptyStateLabel }}</div>
             <template v-for="param in visibleParameters">
                 <OnshapeInputMap v-if="isNestedMap(param.input)" :key="'map-param-' + param.key + seed"
                     :input="param.input" :nodeId="nodeId" :emit="emit" :seed="seed"
@@ -61,6 +64,10 @@ const OnshapeInputMap = defineComponent({
             const paramInputs = (this.input as OnshapeFeatureSpecInput)?.paramInputs;
             const hiddenParameters = (this.input as OnshapeFeatureSpecInput)?.hiddenParameters;
             return visibleParamEntries(paramInputs, hiddenParameters);
+        },
+        emptyStateLabel(): string {
+            const label = (this.input as { label?: string } | null | undefined)?.label ?? 'Definition';
+            return `${label} (empty) — No parameters`;
         }
     },
     watch: {
@@ -123,10 +130,26 @@ export default OnshapeInputMap
 }
 
 .map-header-content {
-    // display: flex;
-    // align-items: center;
-    // gap: 8px;
-    // width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+}
+
+.map-header-empty {
+    font-size: 11px;
+    opacity: 0.6;
+    user-select: none;
+}
+
+.map-empty-state {
+    font-size: 12px;
+    opacity: 0.6;
+    padding: 4px 8px;
+    user-select: none;
+    text-align: left;
 }
 
 .map-dropdown-icon {
