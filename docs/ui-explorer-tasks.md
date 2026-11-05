@@ -1,3 +1,6 @@
+# UI explorer tasks (moved to qa/harness)
+
+Canonical task docs: `qa/README.md`. Tasks live in `qa/harness/tasks.mjs`; smoke driver `qa/harness/tasks.smoke.mjs`.
 # UI explorer tasks
 
 `scripts/ui-explorer/tasks.mjs` exports `tasks` (array) and the individual
