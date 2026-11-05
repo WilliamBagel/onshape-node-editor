@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-04T12:34:56.000Z",
+  "url": "http://localhost:5173/onshape-node-editor/",
+  "durationMs": 48210,
+  "task": {
+    "id": "make-filleted-cylinder",
+    "name": "Make a filleted cylinder",
+    "status": "failed",
+    "steps": [
+      { "label": "Open the Add-node palette (Shift+A)", "status": "passed", "detail": "Palette opened; search box focused." },
+      { "label": "Search for \"cylinder\" and insert a cylinder node", "status": "passed", "detail": "fCylinder node appeared on the canvas." },
+      { "label": "Connect the cylinder output to a fillet node", "status": "failed", "detail": "Output socket accepted no connection; the fillet node's input stayed unconnected." },
+      { "label": "Build the graph", "status": "skipped", "detail": "Skipped because the connection step failed." }
+    ],
+    "error": "Connection step failed: cylinder output socket would not connect to the fillet input."
+  },
+  "summary": { "actions": 42, "issues": 4, "critical": 0, "high": 2, "medium": 1, "low": 1 },
+  "actions": [
+    {
+      "id": "act-001",
+      "name": "Boot / baseline",
+      "area": "canvas",
+      "status": "passed",
+      "durationMs": 900,
+      "changed": false,
+      "error": null,
+      "consoleErrors": [],
+      "screenshot": "screenshots/actions/000-baseline.png"
+    },
+    {
+      "id": "act-002",
+      "name": "Open Settings",
+      "area": "settings",
+      "status": "passed",
+      "durationMs": 140,
+      "changed": true,
+      "error": null,
+      "consoleErrors": [],
+      "screenshot": "screenshots/actions/001-open-settings.png"
+    }
+  ],
+  "issues": [
+    {
+      "id": "ui-001",
+      "title": "Console error when opening the Settings dialog",
+      "severity": "high",
+      "category": "console",
+      "area": "settings",
+      "description": "Opening Settings logs an uncaught TypeError and the dialog's Apply button stops responding.",
+      "expected": "Settings opens with no console errors and every control works.",
+      "actual": "An uncaught TypeError is logged and Apply does nothing until the page is reloaded.",
+      "steps": ["Open the editor", "Click Settings in the toolbar", "Watch the browser console"],
+      "suggestion": "Reopen Settings after reloading the page. Until this is fixed, change preferences the other way: edit the graph name in the top bar, which still works.",
+      "screenshot": "screenshots/issues/001-settings-console-error.png",
+      "annotated": "annotated/001-settings-console-error.png",
+      "bbox": { "x": 1180, "y": 640, "width": 200, "height": 44 },
+      "viewport": { "width": 1440, "height": 900 },
+      "actionId": "act-002",
+      "console": ["TypeError: Cannot read properties of undefined (reading 'theme') at SettingsDialog.tsx:142"]
+    },
+    {
+      "id": "ui-002",
+      "title": "Fillet node label is clipped in the task flow",
+      "severity": "high",
+      "category": "functional",
+      "area": "task",
+      "description": "After inserting the fillet node during the cylinder task, its title is cut off and its output socket cannot be connected.",
+      "expected": "The fillet node's full name is visible and its output socket connects like other nodes.",
+      "actual": "The title is clipped mid-word and dragging from the output socket does nothing.",
+      "steps": ["Run the Make a filleted cylinder task", "Insert the fillet node", "Try to drag a connection from its output socket"],
+      "suggestion": "Reload the page and add the fillet node again from the Add-node palette (Shift+A), then connect it immediately. If the socket still will not connect, rename the node by double-clicking its title — renamed nodes connect normally.",
+      "screenshot": "screenshots/issues/002-fillet-label-clipped.png",
+      "annotated": "annotated/002-fillet-label-clipped.png",
+      "bbox": { "x": 520, "y": 300, "width": 210, "height": 96 },
+      "viewport": { "width": 1440, "height": 900 },
+      "actionId": "act-003",
+      "console": []
+    },
+    {
+      "id": "ui-003",
+      "title": "Long node names overflow the node card",
+      "severity": "medium",
+      "category": "visual",
+      "area": "node",
+      "description": "Node titles longer than the card width run past the card edge instead of wrapping or truncating with an ellipsis.",
+      "expected": "Long node names are truncated with an ellipsis inside the card.",
+      "actual": "The text overflows the card border and overlaps the socket area.",
+      "steps": ["Rename any node to a long name", "Look at the node card header"],
+      "suggestion": "Keep node names short (under ~20 characters). If a name is too long, hover it to read the full name in the tooltip.",
+      "screenshot": "screenshots/issues/003-long-node-name-overflow.png",
+      "annotated": "annotated/003-long-node-name-overflow.png",
+      "bbox": { "x": 330, "y": 190, "width": 250, "height": 40 },
+      "viewport": { "width": 1440, "height": 900 },
+      "actionId": "act-004",
+      "console": []
+    },
+    {
+      "id": "ui-004",
+      "title": "Group button has no accessible name",
+      "severity": "low",
+      "category": "accessibility",
+      "area": "toolbar",
+      "description": "The Create group toolbar button is icon-only with no text, aria-label, or title, so screen readers announce nothing.",
+      "expected": "Every toolbar button has an accessible name.",
+      "actual": "The Create group button has no accessible name.",
+      "steps": ["Move focus to the toolbar with Tab", "Check what the screen reader announces for Create group"],
+      "suggestion": "Use the keyboard shortcut Ctrl+G to create a group instead of the toolbar button.",
+      "screenshot": "screenshots/issues/004-group-button-no-name.png",
+      "annotated": "annotated/004-group-button-no-name.png",
+      "bbox": { "x": 250, "y": 12, "width": 28, "height": 28 },
+      "viewport": { "width": 1440, "height": 900 },
+      "actionId": "act-005",
+      "console": []
+    }
+  ]
+}
