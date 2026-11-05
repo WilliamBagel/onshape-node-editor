@@ -48,6 +48,7 @@ import { editorContextMenuPreset } from "./editor-context-menu";
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
+import { cachedSpecResolver } from "../onshape/feature-spec-cache";
 import { GroupNode } from "./nodes/groupinstancenode";
 import { assertGroupableSelection, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
 import { GroupEditorController } from "./groups/group-editor";
@@ -327,7 +328,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                     group.category,
                     group.entries.map((entry): [string, () => OnshapeNode] => [
                         entry.name,
-                        () => createNodeFromCatalogEntry(entry) as OnshapeNode,
+                        () => createNodeFromCatalogEntry(entry, cachedSpecResolver) as OnshapeNode,
                     ]),
                 ],
             ),
@@ -1025,7 +1026,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     /** #8: create a catalog node and place it at the given / last-click / centre position. */
     const addNodeFromCatalog = async (entry: CatalogEntry, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
-        placeNode(createNodeFromCatalogEntry(entry), position);
+        placeNode(createNodeFromCatalogEntry(entry, cachedSpecResolver), position);
 
     /** #73: array/iteration nodes the catalog does not contain. */
     const addArrayNode = async (variant: ArrayNodeVariant, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
