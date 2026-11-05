@@ -31,6 +31,8 @@ import type { BaseAreaPlugin } from "rete-area-plugin";
 import type { BaseSchemes } from "rete";
 
 export const FRAME_PADDING = 16;
+/** Height of FrameNodeView's header; the frame label sits above the first child. */
+export const FRAME_HEADER_HEIGHT = 30;
 /** Below the connection layer (-5), above the background (-10). */
 export const FRAME_Z_INDEX = -6;
 export const BACKGROUND_Z_INDEX = -10;
@@ -50,13 +52,14 @@ export interface FrameBounds {
 /** Bounds enclosing every box with `padding` on all four sides. */
 export function computeFrameBounds(
     boxes: readonly { left: number; top: number; right: number; bottom: number }[],
-    padding: number = FRAME_PADDING
+    padding: number = FRAME_PADDING,
+    topExtra: number = 0
 ): FrameBounds {
     if (boxes.length === 0) {
         return { left: 0, top: 0, width: 0, height: 0 };
     }
     const left = Math.min(...boxes.map((box) => box.left)) - padding;
-    const top = Math.min(...boxes.map((box) => box.top)) - padding;
+    const top = Math.min(...boxes.map((box) => box.top)) - padding - topExtra;
     const right = Math.max(...boxes.map((box) => box.right)) + padding;
     const bottom = Math.max(...boxes.map((box) => box.bottom)) + padding;
     return { left, top, width: right - left, height: bottom - top };

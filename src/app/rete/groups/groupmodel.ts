@@ -203,6 +203,7 @@ export function findGroupCycle(
 /** Node kinds that can be cloned into a group definition (#47). */
 const GROUPABLE_KINDS: ReadonlySet<string> = new Set([
     "function",
+    "CustomFeature",
     "utility-statement",
     "math-expression",
     "group-instance",

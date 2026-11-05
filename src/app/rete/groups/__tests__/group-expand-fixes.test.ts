@@ -72,7 +72,7 @@ async function connectSockets(
 describe("group clone gaps (#47)", () => {
     it("isGroupableKind allows math; assertGroupableSelection names an unsupported node", () => {
         expect(isGroupableKind("math-expression")).toBe(true);
-        expect(isGroupableKind("CustomFeature")).toBe(false);
+        expect(isGroupableKind("CustomFeature")).toBe(true);
         expect(isGroupableKind("define-feature")).toBe(false);
         const define = new DefineFeatureNode({
             annotation: { type: "Feature Type Name", value: "Refusal Demo" },

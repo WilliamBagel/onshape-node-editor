@@ -248,7 +248,14 @@ async function openPath() {
     if (!p) return null;
     const d = p.getAttribute('d') || '';
     const nums = d.match(/-?\\d+\\.?\\d*/g) || [];
-    return { d, start: nums.length >= 2 ? [+nums[0], +nums[1]] : null, end: nums.length >= 2 ? [+nums[nums.length - 2], +nums[nums.length - 1]] : null };
+    if (nums.length < 4) return { d, start: null, end: null };
+    const m = p.getScreenCTM && p.getScreenCTM();
+    const screen = (x, y) => {
+      if (m == null) return null;
+      const pt = new DOMPoint(x, y).matrixTransform(m);
+      return [pt.x, pt.y];
+    };
+    return { d, start: screen(+nums[0], +nums[1]), end: screen(+nums[nums.length - 2], +nums[nums.length - 1]) };
   })()`);
 }
 {
@@ -320,7 +327,7 @@ let collapseNode = null;
   const before = await cdp.evaluate(`(() => {
     const node = document.querySelector('.node');
     if (!node) return { matches: false };
-    const sockets = [...node.querySelectorAll('[data-testid="input-socket"], [data-testid="output-socket"]')];
+    const sockets = [...node.querySelectorAll('[data-testid="input-socket"], [data-testid="output-socket"], [data-testid="collapsed-input-socket"], [data-testid="collapsed-output-socket"]')];
     const visible = sockets.filter(s => { const r = s.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(s).display !== 'none' && getComputedStyle(s).visibility !== 'hidden'; });
     const toggle = node.querySelector('.node-collapse-toggle');
     if (!toggle || !toggle.matches('.node-collapse-toggle')) return { matches: false, sockets: sockets.length };
@@ -334,9 +341,9 @@ let collapseNode = null;
     await cdp.sleep(500);
     const after = await cdp.evaluate(`(() => {
       const node = document.querySelector('.node');
-      const sockets = [...node.querySelectorAll('[data-testid="input-socket"], [data-testid="output-socket"]')];
+      const sockets = [...node.querySelectorAll('[data-testid="input-socket"], [data-testid="output-socket"], [data-testid="collapsed-input-socket"], [data-testid="collapsed-output-socket"]')];
       const visible = sockets.filter(s => { const r = s.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(s).display !== 'none' && getComputedStyle(s).visibility !== 'hidden'; });
-      return { total: sockets.length, visible: visible.length, height: node.getBoundingClientRect().height };
+      return { total: sockets.length, visible: visible.length, strip: node.querySelectorAll('.collapsed-socket-strip').length, height: node.getBoundingClientRect().height };
     })()`);
     await cdp.shot('03-collapsed.png');
     const ok = after.total === before.total && after.visible === before.visible && after.visible > 0;
@@ -385,9 +392,33 @@ let collapseNode = null;
     return true;
   })()`);
   if (!res.ok) skip('empty-definition-label', res.why || 'model mutation unavailable');
-  else if (res.children !== 0) skip('empty-definition-label', `emptying the Definition did not render an empty map (children=${res.children}); cannot verify headlessly`);
-  else if (res.labelLen > 0) pass('empty-definition-label', fmt(res));
-  else fail('empty-definition-label', fmt(res));
+  else if (res.children === 0 && res.labelLen > 0) pass('empty-definition-label', fmt(res));
+  else {
+    // The model mutation above is not reactive through the component's
+    // computed cache. Use a real empty Definition instead: insert the
+    // generic chamfer statement, whose definition map is intentionally empty.
+    await cdp.keys('F3');
+    await cdp.sleep(300);
+    const typed = await cdp.evaluate(`(() => {
+      const i = document.querySelector('.actions-search');
+      if (!i) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(i, 'chamfer'); i.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await cdp.sleep(500);
+    const item = await cdp.evaluate(`(() => { const b = document.querySelector('.actions-item'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    if (item) { await cdp.click(item.x, item.y); await cdp.sleep(900); }
+    const empty = await cdp.evaluate(`(() => {
+      const label = document.querySelector('.map-empty-state');
+      const tag = document.querySelector('.map-header-empty');
+      const n = [...document.querySelectorAll('.node')].find(e => e.querySelector('.map-empty-state'));
+      return n ? { text: label?.textContent?.trim() ?? null, tag: tag?.textContent?.trim() ?? null, aria: label?.getAttribute('aria-label') ?? null } : null;
+    })()`);
+    await cdp.shot('07-empty-definition.png');
+    if (typed && empty && empty.text && empty.text.length > 0) pass('empty-definition-label', fmt({ ...empty, source: 'generic chamfer node' }));
+    else skip('empty-definition-label', `generic chamfer did not expose an empty Definition (${fmt({ typed, empty })})`);
+  }
 }
 
 // --------------------------------------- 6. frame encloses selection ------
@@ -458,20 +489,20 @@ let collapseNode = null;
       const el = document.elementFromPoint(pt.x, pt.y);
       if (el) hits.push({ x: Math.round(pt.x), y: Math.round(pt.y), top: (el.tagName || '') + '.' + (typeof el.className === 'string' ? el.className : (el.className.baseVal || '')), isFrame: el === frame || frame.contains(el) });
     }
-    const holder = frame.parentElement;
-    const kids = holder ? [...holder.children] : [];
-    const frameIdx = kids.indexOf(frame.closest('.node') || frame);
-    const svgIdx = kids.indexOf(svg);
-    // Document-order stacking: a later element paints above an earlier one
-    // (both are positioned in the same holder), so this records whether the
-    // frame could paint over the connection even where elementFromPoint
-    // cannot hit the thin wire stroke.
+    const frameEl = frame.closest('.node') || frame;
+    const frameZ = Number.parseInt(getComputedStyle(frameEl).zIndex, 10);
+    const svgZ = Number.parseInt(getComputedStyle(svg).zIndex, 10);
     const frameBeforeSvg = Boolean(frame.compareDocumentPosition(svg) & Node.DOCUMENT_POSITION_FOLLOWING);
-    return { ok: true, samples: hits.length, frameHits: hits.filter(h => h.isFrame).length, hits: hits.slice(0, 4), frameDomIndex: frameIdx, svgDomIndex: svgIdx, frameBeforeSvg };
+    // elementFromPoint cannot prove paint order for the wire: rete gives the
+    // connection SVG pointer-events: none, so the frame still receives the
+    // hit even when the wire paints above it. Use the actual stacking values.
+    const stackedBelow = Number.isFinite(frameZ) && Number.isFinite(svgZ) && frameZ < svgZ;
+    return { ok: true, samples: hits.length, frameHits: hits.filter(h => h.isFrame).length,
+      hits: hits.slice(0, 4), frameZ, svgZ, frameBeforeSvg, stackedBelow };
   })()`);
   await cdp.shot('13-frame-connection.png');
   if (!res.ok) skip('frame-below-connection', res.why);
-  else if (res.frameHits === 0) pass('frame-below-connection', fmt(res));
+  else if (res.stackedBelow || res.frameHits === 0) pass('frame-below-connection', fmt(res));
   else fail('frame-below-connection', fmt(res));
 }
 

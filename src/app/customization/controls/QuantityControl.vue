@@ -83,13 +83,12 @@ export default {
 .quantity-autocomplete-holder {
   input.os-param-number {
     box-shadow: none !important;
-    // STYLE_GUIDE.md: monospace 12px for literal values (`0.005 m`).
-    // Pinned here (inheriting the node's --node-* tokens) so the field
-    // renders in the node type scale, not the UA default input font.
-    font-family: var(--node-font-mono, ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace) !important;
-    font-size: var(--node-value-mono-size, 12px) !important;
-    font-weight: 400 !important;
-    line-height: 1.35 !important;
+    // Match the node's value typography (the user asked for the quantity
+    // field to read like the node, not like a separate browser input).
+    font-family: var(--node-font-sans, 'Inter', 'Segoe UI', system-ui, sans-serif) !important;
+    font-size: var(--node-value-size, 13px) !important;
+    font-weight: var(--node-value-weight, 400) !important;
+    line-height: var(--node-value-line-height, 1.35) !important;
     color: var(--node-ink, var(--text-primary)) !important;
 
     &:focus {

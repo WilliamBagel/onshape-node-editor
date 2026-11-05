@@ -96,6 +96,11 @@ export class CustomFeatureNode extends OnshapeNode {
     return this.definitionInput;
   }
 
+  /** The live/synthesized spec, used when cloning into a group definition. */
+  public getFeatureSpec(): BTFeatureSpec129 {
+    return this.featureSpec;
+  }
+
   /**
    * Serialize this node: base fields + a reference to the feature spec + the
    * current value of every parameter control.

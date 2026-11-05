@@ -36,7 +36,7 @@ import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
-import { FRAME_PADDING, areaZoom, computeFrameBounds, installFrameSizeSync, pinFrameElement, syncNodeSize } from './modified-rete/frame-layout';
+import { FRAME_HEADER_HEIGHT, FRAME_PADDING, areaZoom, computeFrameBounds, installFrameSizeSync, pinFrameElement, syncNodeSize } from './modified-rete/frame-layout';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
 import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./serialization/graph-serializer";
 import type { SpecResolver } from "./serialization/graph-schema-types";
@@ -337,7 +337,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     // scopes plugin's own refits (drag, remove) agree with the initial
     // measured fit instead of jumping to the plugin's 40/20 defaults.
     const scopes = new ScopesPlugin<Schemes>({
-        padding: () => ({ top: FRAME_PADDING, left: FRAME_PADDING, right: FRAME_PADDING, bottom: FRAME_PADDING }),
+        padding: () => ({ top: FRAME_PADDING + FRAME_HEADER_HEIGHT, left: FRAME_PADDING, right: FRAME_PADDING, bottom: FRAME_PADDING }),
     });
     scopes.addPreset(ScopesPresets.classic.setup());
 
@@ -632,7 +632,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 bottom: position.y + node.height,
             };
         });
-        const bounds = computeFrameBounds(boxes, FRAME_PADDING);
+        const bounds = computeFrameBounds(boxes, FRAME_PADDING, FRAME_HEADER_HEIGHT);
 
         const frame = new FrameNode();
         frame.width = Math.max(frame.minWidth, bounds.width);
@@ -765,10 +765,34 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return positions;
     };
 
+    /**
+     * CustomFeature serialization stores only a spec reference. A group
+     * snapshot/restore removes and re-adds those nodes, so carry the actual
+     * specs alongside the snapshot; otherwise loadGraph cannot rebuild them
+     * and exiting a group wipes the outer graph.
+     */
+    const collectSpecs = (): Record<string, unknown> => {
+        const specs: Record<string, unknown> = {};
+        const add = (node: OnshapeNode): void => {
+            if (!(node instanceof CustomFeatureNode)) return;
+            const spec = node.getFeatureSpec();
+            const key = typeof spec?.featureType === 'string' ? spec.featureType : null;
+            if (key != null) specs[key] = spec;
+        };
+        for (const node of editor.getNodes()) add(node);
+        for (const definition of groupDefinitions.values()) {
+            for (const node of definition.nodes) add(node);
+        }
+        return specs;
+    };
+
     const groupController = new GroupEditorController(editor, {
-        snapshot: () => ({ document: serializeGraph(), positions: canvasPositions() }),
+        snapshot: () => ({ document: serializeGraph(), positions: canvasPositions(), specs: collectSpecs() }),
         restore: async (snap) => {
-            await loadGraph(snap.document, () => undefined);
+            await loadGraph(snap.document, (ref) => {
+                const spec = snap.specs?.[ref.featureType];
+                return spec as never;
+            });
         },
         getPositions: () => canvasPositions(),
         setPositions: async (positions) => {

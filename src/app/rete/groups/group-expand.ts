@@ -17,8 +17,9 @@
  * (`<instanceId>:<memberId>`), nested instances expand recursively, and the
  * instance's external connections are rewired to the cloned boundary
  * members. A muted instance expands to nothing. Cloning supports
- * function/utility/array/group nodes; a CustomFeature (spec-dependent)
- * inside a group cannot be cloned here and throws a clear error.
+ * function/utility/array/group nodes; a CustomFeature is cloned from its
+ * (possibly live) feature spec so grouped chamfer/fillet nodes keep their
+ * parameter sockets.
  */
 import { NodeEditor } from "rete";
 import { DataflowEngine } from "rete-engine";
@@ -30,6 +31,7 @@ import { FunctionNode } from "../nodes/functionnode";
 import { ArrayConcatNode, ArrayIndexNode, ArrayLiteralNode, ArraySizeNode, BoundedForNode, ForEachNode, MapArrayNode } from "../nodes/arraynodes";
 import { UtilityStatementNode } from "../nodes/utilitystatementnode";
 import { MathExpressionNode } from "../nodes/mathexpressionnode";
+import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { createUtilityNode } from "../catalog-node-factory";
 import { connectGraphNodes } from "../serialization/graph-serializer";
 import type { GroupDefinition } from "./groupmodel";
@@ -104,6 +106,10 @@ function cloneMember(node: OnshapeNode, newId: string): OnshapeNode {
         }
     } else if (node instanceof MathExpressionNode) {
         clone = MathExpressionNode.fromJSON(node.toJSON());
+    } else if (node instanceof CustomFeatureNode) {
+        // Custom features keep their (possibly live) spec, so the clone can
+        // rebuild the same parameter sockets inside the group definition.
+        clone = new CustomFeatureNode(node.getFeatureSpec());
     } else if (node instanceof ArrayLiteralNode) {
         clone = ArrayLiteralNode.fromJSON(node.toJSON());
     } else if (node instanceof ArrayConcatNode) {
