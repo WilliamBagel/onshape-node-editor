@@ -85,11 +85,15 @@ function consoleBlock(issue) {
   if (!lines.length) return '';
   return `<details class="console"><summary>Console output (${lines.length})</summary><pre>${esc(lines.join('\n'))}</pre></details>`;
 }
+function searchText(issue) {
+  const consoleLines = arr(issue.console).map((c) => (typeof c === 'string' ? c : c?.message ?? c?.text ?? JSON.stringify(c))).filter(Boolean);
+  return [issue.title, issue.description, issue.area, issue.category, issue.expected, issue.actual, issue.suggestion, ...consoleLines].filter(Boolean).join(' ');
+}
 function issueCard(issue) {
   const steps = arr(issue.steps).map((s, k) => `<li>${esc(s)}</li>`).join('');
   const badges = [issue.severity, issue.category, issue.area].filter(Boolean)
     .map((b) => `<span class="badge sev-${esc(b)}">${esc(b)}</span>`).join('');
-  return `<article class="card" data-severity="${esc(issue.severity ?? '')}" data-category="${esc(issue.category ?? '')}" data-search="${esc([issue.title, issue.description, issue.area, issue.category, issue.expected, issue.actual, issue.suggestion].filter(Boolean).join(' ').toLowerCase())}">
+  return `<article class="card" data-severity="${esc(issue.severity ?? '')}" data-category="${esc(issue.category ?? '')}" data-search="${esc(searchText(issue).toLowerCase())}">
     ${imgTag(issue)}
     <div class="card-body">
       <h3>${esc(issue.title ?? '(untitled issue)')}</h3>
@@ -118,14 +122,15 @@ function taskSection() {
 }
 
 function chipGroup(name, values, active) {
-  return values.map((v) => `<button type="button" class="chip${v === active ? ' on' : ''}" data-filter-group="${name}" data-filter-value="${esc(v)}" aria-pressed="${v === active}">${esc(v)}</button>`).join('');
+  return values.map((v) => `<button type="button" class="chip${v === active ? ' on' : ''}" data-filter-group="${name}" data-filter-value="${esc(v)}" aria-pressed="${v === active}">${v === 'all' ? 'All' : esc(v)}</button>`).join('');
 }
 
 const filtersHtml = `<div class="filters">
-  <div class="group"><span>Severity</span>${chipGroup('severity', SEVS, 'all')}</div>
-  ${cats.length ? `<div class="group"><span>Category</span>${chipGroup('category', cats, 'all')}</div>` : ''}
-  <label class="search">Search <input id="q" type="search" placeholder="Filter issues…" autocomplete="off"></label>
-  <button type="button" class="chip" id="reset">Reset</button>
+  <div class="group"><span>Severity</span>${chipGroup('severity', ['all', ...SEVS], 'all')}</div>
+  ${cats.length ? `<div class="group"><span>Category</span>${chipGroup('category', ['all', ...cats], 'all')}</div>` : ''}
+  <label class="search">Search <span class="search-wrap"><input id="q" type="search" placeholder="Filter issues…" autocomplete="off" aria-label="Search issues"><button type="button" id="clear-q" class="clear-q" aria-label="Clear search" hidden>×</button></span></label>
+  <span id="result-count" class="result-count" aria-live="polite">Showing ${issues.length} of ${issues.length} issues</span>
+  <button type="button" class="chip" id="clear-all">Clear all</button>
 </div>`;
 const dur = report.durationMs ? `${(num(report.durationMs) / 1000).toFixed(1)}s` : '—';
 const dashboard = `<!doctype html>
@@ -143,10 +148,14 @@ h1{font-size:20px;line-height:1.2;margin:0 0 4px}h2{font-size:14px;margin:28px 0
 .legend{font-size:12px}.legend b{font-size:12px}
 .filters{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
 .filters .group{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.filters .group>span{font-size:11px;color:var(--ink2)}
-.chip{font:inherit;font-size:12px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+.chip{font:inherit;font-size:12px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 10px;cursor:pointer;min-height:28px}
 .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip:focus-visible,.search input:focus-visible,.clear-q:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .search{margin-left:auto;font-size:12px;display:flex;gap:6px;align-items:center}
-.search input{font:inherit;font-size:13px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;min-width:200px}
+.search-wrap{position:relative;display:inline-flex;align-items:center}
+.search input{font:inherit;font-size:13px;padding:6px 32px 6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;min-width:200px;min-height:28px}
+.clear-q{position:absolute;right:2px;top:50%;transform:translateY(-50%);min-height:28px;min-width:28px;line-height:1;font-size:16px;background:transparent;border:none;color:var(--ink2);cursor:pointer;border-radius:4px}
+.result-count{font-size:12px;color:var(--ink2);min-width:140px}
 .issue-list{display:grid;gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:6px;display:grid;grid-template-columns:minmax(240px,340px) 1fr;gap:16px;padding:14px}
 .shot{margin:0}.shot img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:4px}
@@ -167,8 +176,9 @@ table{width:100%;border-collapse:collapse;background:var(--card)}th,td{border:1p
 .status{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 7px}
 .status-passed{color:var(--teal);border-color:var(--teal)}.status-failed{color:var(--err);border-color:var(--err);font-weight:600}
 .empty{border:1px dashed var(--line);border-radius:6px;padding:28px;text-align:center;color:var(--ink2);background:var(--card)}
+.empty p{margin:0 0 12px}
 @media (max-width:1000px){.card{grid-template-columns:1fr}.search{margin-left:0;width:100%}}
-@media print{body{background:#fff}main{max-width:none}.chip{display:none}.card{break-inside:avoid}}
+@media print{body{background:#fff}main{max-width:none}.chip{display:none}.clear-q{display:none}.card{break-inside:avoid}}
 </style></head><body><main>
 <header><h1>UI explorer report</h1>
 <p class="meta">URL: ${esc(report.url ?? '—')}<br>Generated: ${esc(report.generatedAt ?? '—')} &middot; Duration: ${esc(dur)}</p></header>
@@ -180,15 +190,25 @@ ${SEVS.map((s) => `<div class="card-stat"><b>${counts[s]}</b><span>${s[0].toUppe
 </section>
 <section class="legend"><b>How to read this:</b> issues are sorted critical → low, then area and title. “Annotated” means the red-box screenshot from <code>annotate-ui-shots.py</code>; otherwise the raw screenshot is shown. “Suggested fix” is written for users, not developers. Use the filters/search above to narrow the list.</section>
 ${filtersHtml}
-${issues.length ? `<section class="issue-list" id="issues">${issues.map(issueCard).join('')}</section><p class="empty" id="no-match" hidden>No issues match the current filters.</p>` : `<p class="empty">No issues found in this run. 🎉</p>`}
+${issues.length ? `<section class="issue-list" id="issues">${issues.map(issueCard).join('')}</section><div class="empty" id="no-match" hidden><p>No issues match the current filters.</p><button type="button" class="chip" id="clear-filters">Clear filters</button></div>` : `<p class="empty">No issues found in this run. 🎉</p>`}
 ${taskSection()}
 </main><script>
 const cards=[...document.querySelectorAll('.card[data-severity]')];
+const total=cards.length;
 const state={severity:'all',category:'all',q:''};
-function apply(){let shown=0;for(const c of cards){const ok=(state.severity==='all'||c.dataset.severity===state.severity)&&(state.category==='all'||c.dataset.category===state.category)&&(!state.q||c.dataset.search.includes(state.q));c.hidden=!ok;if(ok)shown++;}const nm=document.getElementById('no-match');if(nm)nm.hidden=shown>0;}
-document.querySelectorAll('[data-filter-group]').forEach(b=>b.addEventListener('click',()=>{const g=b.dataset.filterGroup;document.querySelectorAll('[data-filter-group="'+g+'"]').forEach(x=>{x.classList.toggle('on',x===b);x.setAttribute('aria-pressed',String(x===b));});state[g]=b.dataset.filterValue;apply();}));
-document.getElementById('q').addEventListener('input',e=>{state.q=e.target.value.trim().toLowerCase();apply();});
-document.getElementById('reset').addEventListener('click',()=>{location.reload();});
+const qEl=document.getElementById('q');
+const clearQ=document.getElementById('clear-q');
+const resultCount=document.getElementById('result-count');
+function syncChips(){document.querySelectorAll('[data-filter-group]').forEach(function(b){var on=state[b.dataset.filterGroup]===b.dataset.filterValue;b.classList.toggle('on',on);b.setAttribute('aria-pressed',String(on));});}
+function apply(){var shown=0;for(var i=0;i<cards.length;i++){var c=cards[i];var ok=(state.severity==='all'||c.dataset.severity===state.severity)&&(state.category==='all'||c.dataset.category===state.category)&&(!state.q||(c.dataset.search||'').indexOf(state.q)!==-1);c.hidden=!ok;if(ok)shown++;}if(resultCount)resultCount.textContent='Showing '+shown+' of '+total+' issues';var nm=document.getElementById('no-match');if(nm)nm.hidden=shown>0;syncChips();if(clearQ)clearQ.hidden=!qEl.value;}
+function clearAll(){state.severity='all';state.category='all';state.q='';qEl.value='';apply();}
+document.querySelectorAll('[data-filter-group]').forEach(function(b){b.addEventListener('click',function(){var g=b.dataset.filterGroup;var v=b.dataset.filterValue;state[g]=(state[g]===v&&v!=='all')?'all':v;apply();});});
+qEl.addEventListener('input',function(){state.q=qEl.value.trim().toLowerCase();apply();});
+qEl.addEventListener('keydown',function(e){if(e.key==='Escape'){qEl.value='';state.q='';apply();qEl.focus();}});
+if(clearQ)clearQ.addEventListener('click',function(){qEl.value='';state.q='';apply();qEl.focus();});
+var clearAllEl=document.getElementById('clear-all');if(clearAllEl)clearAllEl.addEventListener('click',clearAll);
+var clearFiltersEl=document.getElementById('clear-filters');if(clearFiltersEl)clearFiltersEl.addEventListener('click',clearAll);
+apply();
 </script></body></html>\n`;
 writeFileSync(path.join(outDir, 'dashboard.html'), dashboard);
 
