@@ -39,3 +39,9 @@ src/server/config.json
 # data; the raw scrape and its html input are regenerable: `pnpm run scrape:all`.
 /src/app/onshape/featurescript-library.json
 /scripts/std-library-scrapper/library.html
+
+# QA review packets
+/qa/runs/*
+!/qa/runs/.gitkeep
+!/qa/runs/.gitignore
+__pycache__/

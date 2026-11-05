@@ -283,7 +283,7 @@ export interface SerializedFrame {
     id: string;
     label: string;
     color: string;
-    /** When true, the frame's descendants are hidden on the canvas. */
+    /** Legacy schema field; frames always serialize expanded (see FrameNode). */
     collapsed: boolean;
     position: Vec2 | null;
     size: NodeSize;

@@ -1,5 +1,5 @@
 /**
- * TEST-ONLY throwaway driver for scripts/ui-explorer/tasks.mjs.
+ * TEST-ONLY throwaway driver for qa/harness/tasks.mjs.
  *
  * Launches Chromium via playwright-core, opens the dev server, and runs
  * every exported task with a minimal ctx (page, log, record, shot,
@@ -11,7 +11,7 @@
  * standalone install under the scratch dir, then to the main checkout.
  *
  * Usage:
- *   node scripts/ui-explorer/tasks.smoke.mjs [--url http://localhost:5173/onshape-node-editor/]
+ *   node qa/harness/tasks.smoke.mjs [--url http://localhost:5173/onshape-node-editor/]
  *                                            [--out tmp/ui-task-smoke]
  * Exit code is non-zero if any task throws (i.e. any step failed).
  */

@@ -1,6 +1,9 @@
+# UI explorer tasks (moved to qa/harness)
+
+Canonical task docs: `qa/README.md`. Tasks live in `qa/harness/tasks.mjs`; smoke driver `qa/harness/tasks.smoke.mjs`.
 # UI explorer tasks
 
-`scripts/ui-explorer/tasks.mjs` exports `tasks` (array) and the individual
+`qa/harness/tasks.mjs` exports `tasks` (array) and the individual
 task objects. Each task is `{ id, name, description, async run(ctx) }`.
 All interactions are visible-UI only (keyboard/mouse/palette/toolbar);
 nothing uses `page.evaluate` to mutate the graph model. Read-only DOM
@@ -13,7 +16,7 @@ decide the next click and to record what a user sees.
 |---|---|---|---|
 | `ctx.page` | yes | Playwright `Page` | Every action targets this page. Tasks call `page.setDefaultTimeout(8000)`. |
 | `ctx.log` | no | `(message) => void` | Falls back to `console.log`. |
-| `ctx.shot` | no | `(name) => path` | Screenshot by name (no extension); harness owns the directory. Fallback: `./tmp/ui-task-smoke/<name>.png` via `page.screenshot`. |
+| `ctx.shot` | no | `(name) => path` | Screenshot by name (no extension); harness owns the directory. Fallback: `./tmp/qa-runs/task-smoke/<name>.png` via `page.screenshot`. |
 | `ctx.record` | no | `(label, status, detail) => void` | Called once per step; `status` is `'pass' \| 'fail' \| 'skip'`. |
 | `ctx.assert` | no | `(condition, message) => void` | **Not relied on** for step gating — kept for harness compatibility. |
 | `ctx.issue` | no | `(...args) => void` | Called on each failed step if present. |
@@ -37,8 +40,8 @@ appear/re-expand → node count still ≥4 and Build logs
 "Built FeatureScript".
 
 Verified 2026-11-04 against `http://localhost:5173/onshape-node-editor/`
-with `node scripts/ui-explorer/tasks.smoke.mjs`: **PASS, 7/7 steps**.
-Screenshots: `tmp/ui-task-smoke/smoke-*.png`.
+with `node qa/harness/tasks.smoke.mjs`: **PASS, 7/7 steps**.
+Screenshots: `tmp/qa-runs/task-smoke/smoke-*.png`.
 
 ### `make-filleted-cylinder` — real user scenario (expected: FAIL, app blocker)
 
@@ -54,7 +57,7 @@ Passing:
   Its radius text input is editable — filling `1 inch` sticks.
 - Reload/reset and Build button themselves work.
 
-Blockers (each screenshot in `tmp/ui-task-smoke/fillet-*.png`):
+Blockers (each screenshot in `tmp/qa-runs/task-smoke/fillet-*.png`):
 1. **No body output on `fCylinder`** — only `output-context` (label
    "Context"). There is no body socket to drag from.
    (`fillet-fcylinder-inserted.png`)
@@ -84,16 +87,16 @@ The task deliberately throws rather than passing on the basis of (6).
 
 ## Throwaway driver (test-only)
 
-`scripts/ui-explorer/tasks.smoke.mjs` — launches Chromium via
+`qa/harness/tasks.smoke.mjs` — launches Chromium via
 `playwright-core`, runs every task with a minimal ctx, writes
-`tmp/ui-task-smoke/report.json`. Not imported by the explorer harness.
+`tmp/qa-runs/task-smoke/report.json`. Not imported by the explorer harness.
 Requires `playwright-core` (package.json devDependency; a worktree
 without its own `node_modules` falls back to a scratch install — see
 the header comment) and Chrome at `/usr/bin/google-chrome-stable`
 (override `CHROME_BIN`). Dev server must be running; do not kill it.
 
 ```sh
-node scripts/ui-explorer/tasks.smoke.mjs [--url ...] [--out tmp/ui-task-smoke]
+node qa/harness/tasks.smoke.mjs [--url ...] [--out tmp/qa-runs/task-smoke]
 # exit 1 if any task throws (make-filleted-cylinder always does, per above)
 ```
 

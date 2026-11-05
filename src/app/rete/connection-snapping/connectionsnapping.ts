@@ -25,7 +25,7 @@ import { ClassicScheme, SocketData } from "rete-connection-plugin/_types/types";
 import { AreaExtra, Connection, OnshapeSocketData, Schemes } from "../types";
 import { OnshapeNode } from "../nodes/onshapenode";
 import { AreaPlugin } from "rete-area-plugin";
-import { getDOMSocketPosition } from "rete-render-utils";
+import { LiveDOMSocketPosition } from "./live-socket-position";
 import { elementsFromPoint, findSocket, findSocketData, pseudoAnchoredSide, sameSocket } from "./utils";
 import { NodeEditor } from "rete";
 
@@ -34,7 +34,7 @@ export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends 
     public pointerSnapped: boolean = false;
     public snappedPointer: Position = { x: 0, y: 0 };
     public snappedType!: string;
-    public socketPositionWatcher = getDOMSocketPosition({
+    public socketPositionWatcher = new LiveDOMSocketPosition<Schemes, K>({
         offset: (position) => {
             return position;
         }

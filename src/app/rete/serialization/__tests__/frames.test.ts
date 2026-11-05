@@ -19,14 +19,15 @@ import { FeatureSpecReference } from "../graph-schema-types";
  * parents from the output node and a frame has no connections, so generated
  * FeatureScript must be byte-identical with and without frames. The
  * persistence contract is that `group` (the scopes plugin's `parent`) and the
- * frame's label/colour/collapsed/position survive a save/load round trip.
+ * frame's label/colour/position survive a save/load round trip. Frame
+ * collapsing was removed: `collapsed` is a legacy schema field, always
+ * normalized to false, so old documents with `collapsed: true` load expanded.
  *
  * What is NOT covered here: the DOM behaviour (drag the frame, the plugin
- * translates children whose `parent` is the frame's id; collapse hides the
- * child elements). That needs a real area plugin and a DOM, and this suite
- * runs in `environment: 'node'`. The headless half of those behaviours — the
- * parent linkage the plugin translates by, and the collapsed flag — is
- * asserted below.
+ * translates children whose `parent` is the frame's id). That needs a real
+ * area plugin and a DOM, and this suite runs in `environment: 'node'`. The
+ * headless half of those behaviours — the parent linkage the plugin
+ * translates by — is asserted below.
  */
 const FIXTURE_SPEC = {
     btType: "BTFeatureSpec-129",
@@ -101,6 +102,8 @@ async function buildGraph(withFrame: boolean): Promise<{
     if (withFrame) {
         frame = new FrameNode("Finishing");
         frame.color = "#b3402e";
+        // Simulate a legacy document: collapsing no longer exists, so the
+        // flag is force-normalized and never survives a round trip.
         frame.collapsed = true;
         frame.width = 400;
         frame.height = 240;
@@ -164,9 +167,10 @@ describe("frames (#13)", () => {
         expect(restored.id).toBe(frame!.id);
         expect(restored.label).toBe("Finishing");
         expect(restored.color).toBe("#b3402e");
-        // Collapse hides contents without deleting them: the flag and the
-        // membership both come back, and the grouped node is still there.
-        expect(restored.collapsed).toBe(true);
+        // The frame was built with the legacy collapsed flag set; collapse
+        // was removed, so it loads expanded (flag false) and the grouped
+        // node is still there and still parented to the frame.
+        expect(restored.collapsed).toBe(false);
         expect(restored.width).toBe(400);
 
         const restoredChamfer = fresh.getNodes().find((node) => node.id === chamfer.id);
@@ -246,5 +250,28 @@ describe("frames (#13)", () => {
         const plain = await buildGraph(false);
         const plainSource = await generateFeatureStudioSource(plain.editor, plain.engine);
         expect(source).toBe(plainSource);
+    });
+
+    it("frames are never collapsed: construction normalizes to false", () => {
+        const frame = new FrameNode("F");
+        expect(frame.collapsed).toBe(false);
+        // Even a legacy caller forcing the flag cannot make it stick when
+        // the frame is serialized: serialization always reports expanded.
+        frame.collapsed = true;
+        expect(frame.toFrameJSON().collapsed).toBe(false);
+    });
+
+    it("an old document with collapsed=true loads expanded", () => {
+        const restored = FrameNode.fromJSON({
+            id: "frame-1",
+            label: "Legacy",
+            color: "#2f5f8f",
+            collapsed: true,
+            position: { x: 10, y: 20 },
+            size: { width: 320, height: 200 },
+            group: null,
+        });
+        expect(restored.collapsed).toBe(false);
+        expect(restored.label).toBe("Legacy");
     });
 });

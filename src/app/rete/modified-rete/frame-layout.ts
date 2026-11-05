@@ -9,12 +9,16 @@
  *    updated when the rendered node grows (expanded Definition/parameter
  *    content overflows the fixed-height box). A frame created from model
  *    sizes therefore comes out tiny/wrong until a drag (which triggers
- *    the scopes plugin's `resizeParent`) or a collapse (which shrinks the
+ *    plugin's `resizeParent`) or a node repaints (which shrinks the
  *    content back to the model size). The fix is to measure the rendered
  *    node view, sync the model size from it, and only then let the scopes
  *    plugin fit the frame (`scopes.update` -> `scopeupdated` ->
  *    `resizeParent`). A ResizeObserver/MutationObserver keeps the model
  *    in sync afterwards, so expanding a node inside a frame re-fits it.
+ *
+ *    Frame collapsing does not exist: frames always stay expanded and no
+ *    code path hides descendants (`collapsed` is a legacy schema field,
+ *    normalized to false on construction/fromJSON — see framenode.ts).
  *
  * 2. Layering: paint order in the area holder is not pure DOM order.
  *    The canvas background (`background.css`) carries `z-index: -1` and
@@ -25,6 +29,8 @@
  *    above the background, which drops to -10), and are pinned in the
  *    holder directly after the background element. Nodes stay at 0 and
  *    above the frame, so they and their sockets remain interactive.
+ *    Selected nodes additionally raise their incident connections to
+ *    z-index -4 (above other connections only — see connection-raise.ts).
  *    This is a real stacking fix, not a translucent background.
  */
 import type { BaseAreaPlugin } from "rete-area-plugin";
