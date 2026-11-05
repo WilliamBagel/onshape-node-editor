@@ -1,5 +1,6 @@
 import { OnshapeFeatureSpecInput } from '../rete/inputoutput/onshapefeaturespecinput.js';
 import type { OnshapeInput as OnshapeInputClass } from '../rete/inputoutput/onshapeinput.js';
+import type { OnshapeOutput as OnshapeOutputClass } from '../rete/inputoutput/onshapeoutput.js';
 
 /**
  * Pure decisions for node chrome (OnshapeNode / OnshapeInputMap), kept out of
@@ -97,4 +98,74 @@ export function commitTitleEdit(original: string, draft: string): string {
 /** Collapsed state after toggling the header affordance. */
 export function nextCollapsed(collapsed: boolean): boolean {
     return !collapsed;
+}
+
+/**
+ * One socket to render on a collapsed node: exactly the same shape the
+ * expanded `Ref` sockets carry (`side/key/btType/nodeId/payload`), so the
+ * collapsed card keeps every connection point.
+ */
+export interface CollapsedSocket {
+    side: 'input' | 'output';
+    key: string;
+    btType: string;
+    nodeId: string;
+    payload: OnshapeInputClass<any>;
+}
+
+/**
+ * Flatten the visible entries to the leaf sockets the expanded rows expose:
+ * top-level leaves directly, nested-map children recursively (each level
+ * through its own `visibleParamEntries`, so hidden children stay hidden).
+ * A `seen` set refuses a second registration of the same `side:key`, so the
+ * collapsed strip can never mount a duplicate usable socket.
+ */
+export function collectCollapsedSockets(
+    entries: ParamEntry[],
+    nodeId: string,
+): CollapsedSocket[] {
+    const out: CollapsedSocket[] = [];
+    const seen = new Set<string>();
+    const push = (socket: CollapsedSocket): void => {
+        if (socket.key === '') return;
+        const id = `${socket.side}:${socket.key}`;
+        if (seen.has(id)) return;
+        seen.add(id);
+        out.push(socket);
+    };
+    const visit = (list: ParamEntry[]): void => {
+        for (const { key, input } of list) {
+            if (isNestedMapInput(input)) {
+                const map = input as OnshapeFeatureSpecInput;
+                visit(visibleParamEntries(map.paramInputs, map.hiddenParameters));
+            } else {
+                push({ side: 'input', key, btType: (input as { type?: string })?.type ?? '', nodeId, payload: input });
+            }
+        }
+    };
+    visit(entries);
+    return out;
+}
+
+/** Output sockets for the collapsed strip (all outputs, de-duplicated). */
+export function collectCollapsedOutputSockets(
+    outputs: Record<string, OnshapeOutputClass> | null | undefined,
+    nodeId: string,
+): CollapsedSocket[] {
+    if (outputs == null) return [];
+    const seen = new Set<string>();
+    return Object.entries(outputs)
+        .filter(([key]) => {
+            const id = `output:${key}`;
+            if (key === '' || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        })
+        .map(([key, output]) => ({
+            side: 'output' as const,
+            key,
+            btType: (output as { type?: string })?.type ?? '',
+            nodeId,
+            payload: output as unknown as OnshapeInputClass<any>,
+        }));
 }
