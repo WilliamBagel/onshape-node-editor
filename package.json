@@ -28,6 +28,7 @@
     "organize:docs": "node scripts/std-library-scrapper/organizeLibrary.mjs",
     "scrape:all": "npm run scrape:docs && npm run organize:docs",
     "style-check": "node scripts/style-check.mjs",
+    "fetch:feature-specs": "node scripts/fetch-feature-specs.mjs",
     "test:ui": "vitest run --config vitest.ui.config.ts",
     "verify:ui": "node scripts/ui-verify.mjs",
     "explore:ui": "node scripts/ui-explorer.mjs"
