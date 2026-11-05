@@ -36,13 +36,13 @@ Selection of a node is a ring **behind** the ports (outer `box-shadow` on `.ns-d
 
 ## Typography
 - System sans (Inter/system-ui), but use a scale with real contrast — not one size for everything:
-  - 14px / 600 node titles and panel headings.
+  - 14px / 700 node titles and panel headings (true bold — a real Inter Bold face, never synthesized).
   - 12px / 600 section labels.
   - 12px / 400 field labels.
-  - 13px / 400 values (13px, not 11–12px, so numeric values stay legible at 100% zoom).
+  - 13px / 400 values (13px, not 11–12px, so numeric values stay legible at 100% zoom). Quantity inputs are values: 13px sans, never monospace/Courier.
   - 11px / 400 meta and keycaps only.
 - Line-height 1.35 for body, 1.2 for titles. No all-caps tracking.
-- Monospace 12px for literal values (`0.005 m`, `46 deg`).
+- Monospace 12px for literal values (`0.005 m`, `46 deg`). Quantity *inputs* are not literals — they are value controls and stay 13px sans.
 - Text hierarchy from opacity (100/60/40%), not color changes.
 - Do not flatten the UI into 12px titles + 11px everything: that uniform tiny scale is the default-AI look and is rejected.
 
