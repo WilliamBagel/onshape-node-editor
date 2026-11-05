@@ -37,6 +37,7 @@ import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
 import { FRAME_HEADER_HEIGHT, FRAME_PADDING, areaZoom, computeFrameBounds, installFrameSizeSync, pinFrameElement, syncNodeSize } from './modified-rete/frame-layout';
+import { clampNodePlacement } from './modified-rete/node-placement';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
 import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./serialization/graph-serializer";
 import type { SpecResolver } from "./serialization/graph-schema-types";
@@ -830,9 +831,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             return null;
         }
         const instance = new GroupNode(definition);
-        await editor.addNode(instance);
-        await area.translate(instance.id, lastPointer ?? viewportCentre());
-        return instance;
+        const placed = await placeNode(instance);
+        return placed as GroupNode | null;
     };
 
     const createGroupFromSelection = async (): Promise<GroupNode | null> => {
@@ -953,11 +953,70 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return { x: (container.clientWidth / 2 - (t?.x ?? 0)) / k, y: (container.clientHeight / 2 - (t?.y ?? 0)) / k };
     };
 
-    /** #73: place a node at the given / last-click / centre position. */
+    /** #73: place a node at the given / last-click / centre position, clamped into view. */
+    const getTransform = (): { x: number; y: number; k: number } => {
+        const t = (area.area as unknown as { transform?: { x: number; y: number; k: number } }).transform;
+        return { x: t?.x ?? 0, y: t?.y ?? 0, k: t?.k ?? 1 };
+    };
+
+    /** Screen px at the bottom of the container covered by the Build Log / bottom bar. */
+    const reservedBottomPx = (): number => {
+        try {
+            const containerRect = container.getBoundingClientRect();
+            let reserved = 0;
+            for (const selector of ['.log-panel', '#bottom-bar']) {
+                const el = document.querySelector(selector);
+                if (el != null) {
+                    const rect = el.getBoundingClientRect();
+                    reserved = Math.max(reserved, containerRect.bottom - rect.top);
+                }
+            }
+            return Math.max(0, Math.min(reserved, containerRect.height * 0.6));
+        } catch {
+            return 0;
+        }
+    };
+
+    const nextFrame = (): Promise<void> => new Promise((resolve) => {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => resolve());
+        } else {
+            setTimeout(resolve, 50);
+        }
+    });
+
     const placeNode = async (node: OnshapeNode | null, position?: { x: number; y: number }): Promise<OnshapeNode | null> => {
         if (node == null) return null;
+        let desired = position ?? lastPointer ?? viewportCentre();
+        // A pointer-derived position in the bottom reserved strip would bury
+        // the node under the Build Log: prefer the canvas centre instead.
+        // Explicit positions are honoured unless clipped (clamped below).
+        if (position == null) {
+            const t = getTransform();
+            const screenY = desired.y * t.k + t.y;
+            if (screenY > container.clientHeight - reservedBottomPx()) {
+                desired = viewportCentre();
+            }
+        }
         await editor.addNode(node);
-        await area.translate(node.id, position ?? lastPointer ?? viewportCentre());
+        await area.translate(node.id, desired);
+        // Measure the rendered node (expanded Definition included) before
+        // clamping; the model size is the stale 220x150 default until synced.
+        await nextFrame();
+        syncNodeSize(node, area.nodeViews.get(node.id), areaZoom(area));
+        await nextFrame();
+        syncNodeSize(node, area.nodeViews.get(node.id), areaZoom(area));
+        const clamped = clampNodePlacement({
+            desired,
+            size: { width: node.width, height: node.height },
+            transform: getTransform(),
+            containerRect: { width: container.clientWidth, height: container.clientHeight },
+            reservedBottom: reservedBottomPx(),
+            margin: 12,
+        });
+        if (Math.abs(clamped.x - desired.x) > 0.5 || Math.abs(clamped.y - desired.y) > 0.5) {
+            await area.translate(node.id, clamped);
+        }
         return node;
     };
 
