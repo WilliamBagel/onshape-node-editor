@@ -26,8 +26,11 @@ const TYPE_UNITS: { [quantityType: string]: Array<string> } = {
 export class QuantityUtil {
 
     public static getText(value: ValueWithUnits): string {
-        const units = UnitUtil.shorten(value.units);
-        return value.value + ' ' + units;
+        if (value == null || typeof value !== 'object') {
+            return '';
+        }
+        const units = value.units ? UnitUtil.shorten(value.units) : undefined;
+        return units == null ? `${value.value}` : `${value.value} ${units}`;
     }
 
     public static getValue(text: string): ValueWithUnits | undefined {
