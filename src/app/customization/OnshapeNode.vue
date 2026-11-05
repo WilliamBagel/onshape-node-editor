@@ -333,7 +333,7 @@ export default defineComponent({
   --node-font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --node-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --node-title-size: 14px;
-  --node-title-weight: 600;
+  --node-title-weight: 700;
   --node-title-line-height: 1.2;
   --node-label-size: 12px;
   --node-label-weight: 400;
@@ -398,7 +398,8 @@ export default defineComponent({
   margin-right: - round($socket-overflow, 1px);
 }
 
-// Node title (#35): 14px/600 warm ink at 100% opacity, 1.2 line-height.
+// Node title (#35): 14px/700 true bold (real Inter Bold face, common.css)
+// warm ink at 100% opacity, 1.2 line-height.
 // `!important` retained only to beat the vendored woolsthorpe.css title size.
 .ns-dialog-title,
 .os-dialog-header-rename-textbox {
@@ -480,6 +481,17 @@ export default defineComponent({
     font-size: var(--node-value-mono-size) !important;
     font-weight: var(--node-value-weight) !important;
     line-height: var(--node-value-line-height) !important;
+  }
+
+  // Quantity value inputs: 13px/400 sans, like every other node value
+  // (STYLE_GUIDE). Narrower than the literal-mono rule above: same :deep
+  // depth with an extra class, declared AFTER it, so it wins for
+  // `input.os-param-number` and anything inside the quantity holder. Without
+  // this, quantity fields rendered in Courier — wrong for a value control.
+  :deep(input.os-param-number),
+  :deep(.quantity-autocomplete-holder input) {
+    font-family: var(--node-font-sans) !important;
+    font-size: var(--node-value-size) !important;
   }
 
   // Non-literal values (enum/select surfaces): 13px/400 sans at 100%.
@@ -635,20 +647,24 @@ export default defineComponent({
   pointer-events: auto;
 }
 
-// Compact socket strip while collapsed: input sockets hug the left edge,
-// output sockets the right edge, Blender-style, so wires can still attach.
+// Compact socket strip while collapsed: sockets run vertically down the card
+// — inputs in a left column hugging the left edge, outputs in a right column
+// hugging the right edge, Blender-style, so wires can still attach. Tighter
+// than the expanded rows (1px row gap, 2px/4px padding, no min-height) because
+// a collapsed card must not reserve expanded space.
 .collapsed-socket-strip {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  min-height: 24px;
+  min-height: 0;
   padding: 2px 4px;
 }
 
 .collapsed-socket-group {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 1px;
 }
 
 .collapsed-socket {
