@@ -22,19 +22,25 @@ export class FrameNode extends OnshapeNode {
     public label: string = "Frame";
     /** Header accent colour (hex). */
     public color: string = DEFAULT_FRAME_COLOR;
-    /** When true, descendant node elements are hidden (not deleted). */
+    /**
+     * Legacy compatibility field only. Frame collapsing was removed: frames
+     * always stay expanded so descendants can never be hidden. The field is
+     * kept so old serialized documents (`collapsed: true`) still parse, but
+     * every construction path normalizes it to false.
+     */
     public collapsed: boolean = false;
 
     /**
-     * Canvas-side collapse hook, assigned by `editorbase` (which owns the
-     * area). The view toggles `collapsed`, calls `update()`, then this, so
-     * hiding/showing children stays behind the view.
+     * Legacy canvas-side collapse hook. Never invoked: collapsing is
+     * disabled, so there is nothing for the canvas to hide or show. Kept so
+     * old programmatic callers fail quiet instead of throwing.
      */
     public onCollapsedChanged: ((collapsed: boolean) => void) | null = null;
 
     constructor(label: string = "Frame") {
         super("frame", label);
         this.label = label;
+        this.collapsed = false;
         this.width = 320;
         this.height = 200;
     }
@@ -50,7 +56,9 @@ export class FrameNode extends OnshapeNode {
             id: this.id,
             label: this.label,
             color: this.color,
-            collapsed: this.collapsed,
+            // Frames can never be collapsed (collapse was removed); always
+            // serialize expanded so reloads cannot resurrect hidden nodes.
+            collapsed: false,
             position: null,
             size: { width: this.width, height: this.height },
             group: this.group,
@@ -69,7 +77,8 @@ export class FrameNode extends OnshapeNode {
         } as SerializedNodeBase);
         node.label = data.label;
         node.color = data.color;
-        node.collapsed = data.collapsed;
+        // Old documents may carry `collapsed: true`; they load expanded.
+        node.collapsed = false;
         node.setTitle(data.label);
         return node;
     }

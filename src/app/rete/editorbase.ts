@@ -36,6 +36,7 @@ import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
+import { installConnectionRaise, syncConnectionRaise } from './modified-rete/connection-raise';
 import { FRAME_HEADER_HEIGHT, FRAME_PADDING, areaZoom, computeFrameBounds, installFrameSizeSync, pinFrameElement, syncNodeSize } from './modified-rete/frame-layout';
 import { clampNodePlacement } from './modified-rete/node-placement';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
@@ -468,6 +469,37 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     const selector = new FixSelector();
 
+    // Selected node's incident connections paint above other connections
+    // (z-index -4 vs -5, still below nodes at 0 — see connection-raise.ts).
+    // The views read the shared `selectedNodeIds` ref reactively, so the
+    // only sync needed is publishing the selector's ids on every mutation.
+    // `selectableNodes` mutates selection through `selector.add` (pick /
+    // accumulate) and `selector.unselectAll` (background-click deselect);
+    // wrapping those two instance methods sees every selection change,
+    // including deselection back to empty, which emits no pipe signal.
+    const connectionRaiseHooks = {
+        getSelectedIds: () => Array.from(selector.entities.values())
+            .filter((entity) => entity.label === 'node')
+            .map((entity) => entity.id),
+    };
+    installConnectionRaise(area, connectionRaiseHooks);
+    const syncRaise = (): void => syncConnectionRaise(connectionRaiseHooks);
+    const originalSelectorAdd = selector.add.bind(selector);
+    selector.add = async (...args: Parameters<typeof selector.add>): Promise<void> => {
+        await originalSelectorAdd(...args);
+        syncRaise();
+    };
+    const originalSelectorRemove = selector.remove.bind(selector);
+    selector.remove = async (...args: Parameters<typeof selector.remove>): Promise<void> => {
+        await originalSelectorRemove(...args);
+        syncRaise();
+    };
+    const originalSelectorUnselectAll = selector.unselectAll.bind(selector);
+    selector.unselectAll = async (): Promise<void> => {
+        await originalSelectorUnselectAll();
+        syncRaise();
+    };
+
     AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
             active: () => {
@@ -482,9 +514,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     // `nodepicked` and reorders the DOM itself, which would make it a second
     // owner of the order this app persists as `nodeOrder`.
     const nodeOrder = installNodeOrder(area, {
-        getSelectedIds: () => Array.from(selector.entities.values())
-            .filter((entity) => entity.label === 'node')
-            .map((entity) => entity.id),
+        getSelectedIds: connectionRaiseHooks.getSelectedIds,
         // #13: frames are excluded from the paint order entirely — the
         // pinning pipe above keeps their elements behind their children.
         isExcluded: (id) => editor.getNodes().find((node) => node.id === id) instanceof FrameNode,
@@ -565,46 +595,25 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     };
 
     // #13 frame helpers --------------------------------------------------
-
-    /** True when any frame above `node` in the group chain is collapsed. */
-    const isEffectivelyHidden = (node: OnshapeNode): boolean => {
-        let parentId = node.group;
-        const seen = new Set<string>();
-        while (parentId != null && !seen.has(parentId)) {
-            seen.add(parentId);
-            const parent = editor.getNodes().find((candidate) => candidate.id === parentId);
-            if (parent instanceof FrameNode && parent.collapsed) {
-                return true;
-            }
-            parentId = parent?.group ?? null;
-        }
-        return false;
-    };
-
-    /** Recompute every node's visibility from the frames' collapsed flags. */
-    const applyCollapsedStates = (): void => {
-        for (const node of editor.getNodes()) {
-            const view = area.nodeViews.get(node.id);
-            if (view != null) {
-                view.element.style.display = isEffectivelyHidden(node) ? 'none' : '';
-            }
-        }
-    };
-
-    /** Wire a frame's view toggle to the canvas (the view only flips the flag). */
-    const prepareFrame = (frame: FrameNode): void => {
-        frame.onCollapsedChanged = () => {
-            applyCollapsedStates();
-        };
-    };
+    //
+    // Frame collapsing was removed. Frames always stay expanded, so no code
+    // path here hides descendant node elements: old documents carrying
+    // `collapsed: true` normalize to false in `FrameNode.fromJSON`, and
+    // nothing else ever sets the flag. `toggleFrameCollapsed` is kept as a
+    // no-op for API compatibility and only forces the expanded state.
 
     const toggleFrameCollapsed = async (frameId: string): Promise<void> => {
         const frame = editor.getNodes().find((node) => node.id === frameId);
         if (!(frame instanceof FrameNode)) {
             return;
         }
-        frame.collapsed = !frame.collapsed;
-        applyCollapsedStates();
+        // Collapse is disabled; the frame stays expanded with visible
+        // descendants. Normalizing here covers legacy programmatic callers.
+        frame.collapsed = false;
+        const view = area.nodeViews.get(frame.id);
+        if (view != null) {
+            view.element.style.display = "";
+        }
     };
 
     const createFrameFromSelection = async (): Promise<FrameNode | null> => {
@@ -638,7 +647,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         const frame = new FrameNode();
         frame.width = Math.max(frame.minWidth, bounds.width);
         frame.height = Math.max(80, bounds.height);
-        prepareFrame(frame);
         await editor.addNode(frame);
         // The new element starts on top of the holder; pin it to its
         // paint layer behind its children and the connections (the
@@ -663,7 +671,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         // come from the same code path as drag-to-frame refits. The
         // measured bounds above already give the correct first paint.
         await scopes.update(frame.id);
-        applyCollapsedStates();
         return frame;
     };
 
@@ -710,9 +717,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             await editor.removeNode(node.id);
         }
         for (const node of graph.nodes) {
-            if (node instanceof FrameNode) {
-                prepareFrame(node);
-            }
             await editor.addNode(node);
         }
         for (const connection of graph.connections) {
@@ -736,9 +740,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 await scopes.update(node.id);
             }
         }
-        // Restore collapsed frames after positions exist so hidden children
-        // hide in place rather than flashing on load.
-        applyCollapsedStates();
+        // Old documents may carry collapsed frames; `FrameNode.fromJSON`
+        // already normalized them to expanded, so descendants load visible.
         // #14: adopt the loaded definitions so instances can be re-placed
         // and entered without a reload.
         groupDefinitions.clear();

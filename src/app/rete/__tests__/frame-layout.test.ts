@@ -10,6 +10,7 @@ import {
     syncNodeSize,
     type SizableNode,
 } from "../modified-rete/frame-layout";
+import { CONNECTION_RAISED_Z_INDEX, CONNECTION_Z_INDEX } from "../modified-rete/connection-raise";
 
 function fakeElement(overrides: Record<string, unknown> = {}): HTMLElement {
     return {
@@ -85,10 +86,11 @@ describe("syncNodeSize", () => {
 });
 
 describe("frame layering", () => {
-    it("stacks background < frame < connection < node", () => {
+    it("stacks background < frame < connection < raised connection < node", () => {
         expect(BACKGROUND_Z_INDEX).toBeLessThan(FRAME_Z_INDEX);
-        expect(FRAME_Z_INDEX).toBeLessThan(-5); // OutlineConnection svg z-index
-        expect(FRAME_Z_INDEX).toBeLessThan(0); // node wrappers
+        expect(FRAME_Z_INDEX).toBeLessThan(CONNECTION_Z_INDEX); // OutlineConnection svg z-index
+        expect(CONNECTION_Z_INDEX).toBeLessThan(CONNECTION_RAISED_Z_INDEX); // selected node raise
+        expect(CONNECTION_RAISED_Z_INDEX).toBeLessThan(0); // node wrappers
     });
 
     it("pins the frame element after the background with the frame z-index", () => {
