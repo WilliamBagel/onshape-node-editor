@@ -158,3 +158,59 @@ describe('spec catalog (#7)', () => {
         expect(defaultCatalog.search('   ')).toEqual([]);
     });
 });
+
+describe('standard-library generic definitions', () => {
+    it('chamfer and fillet are node-able via the generic-definition path', () => {
+        for (const name of ['chamfer', 'fillet']) {
+            const entry = defaultCatalog.search(name).find((e) => e.name === name);
+            expect(entry).toBeDefined();
+            expect(entry?.kind).toBe('statement');
+            expect(entry?.nodeable).toBe(true);
+            expect(entry?.genericDefinition).toBe(true);
+            expect(entry?.inputs.map((p) => p.name)).toContain('definition');
+        }
+    });
+
+    it('opChamfer keeps its typed definition parameters', () => {
+        const entry = defaultCatalog.entries.find((e) => e.name === 'opChamfer');
+        expect(entry?.genericDefinition).toBe(true);
+        expect(entry?.inputs).toContainEqual(
+            expect.objectContaining({ name: 'entities', valueType: 'QueryList' }),
+        );
+    });
+
+    it('a statement with an untyped definition child stays not-node-able', () => {
+        const catalog = buildCatalog(
+            {
+                categories: [
+                    {
+                        name: 'Modeling',
+                        files: [
+                            {
+                                fileName: 'f',
+                                entries: [
+                                    {
+                                        name: 'mystery',
+                                        descriptor: '',
+                                        signature: '(context is Context, id is Id, definition is map)',
+                                        parameters: [
+                                            { name: 'context', type: 'Context' },
+                                            { name: 'id', type: 'Id' },
+                                            { name: 'definition', type: 'map' },
+                                            { name: 'blob', type: 'value' },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+            { entries: { 'mystery::': 'statement' } },
+        );
+        const entry = catalog.get('mystery::');
+        expect(entry?.kind).toBe('statement');
+        expect(entry?.nodeable).toBe(false);
+        expect(entry?.genericDefinition).toBeUndefined();
+    });
+});

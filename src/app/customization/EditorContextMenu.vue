@@ -12,8 +12,7 @@
 
     <template v-if="!query">
       <div v-for="item in items" :key="item.key" class="block"
-        :class="{ hasSubitems: hasChildren(item) }"
-        @pointerenter="openSubmenu(item)" @pointerleave="scheduleSubmenuClose">
+        :class="{ hasSubitems: hasChildren(item) }">
         <div class="content" @click.stop="activate(item)">{{ item.label }}</div>
         <div v-if="hasChildren(item) && openKey === item.key" class="subitems subitems-inline">
           <div v-for="sub in item.subitems" :key="sub.key" class="block subitem" @click.stop="activate(sub)">
@@ -106,12 +105,6 @@ function activate(item: ContextMenuItem): void {
   props.onHide?.();
 }
 
-function openSubmenu(item: ContextMenuItem): void {
-  if (!hasChildren(item)) return;
-  cancelSubmenuClose();
-  openKey.value = item.key;
-}
-
 function cancelHide(): void {
   if (submenuTimer != null) {
     clearTimeout(submenuTimer);
@@ -122,18 +115,6 @@ function cancelHide(): void {
 function scheduleHide(): void {
   cancelHide();
   submenuTimer = setTimeout(() => props.onHide?.(), 1200);
-}
-
-function scheduleSubmenuClose(): void {
-  cancelHide();
-  submenuTimer = setTimeout(() => { openKey.value = null; }, 250);
-}
-
-function cancelSubmenuClose(): void {
-  if (submenuTimer != null) {
-    clearTimeout(submenuTimer);
-    submenuTimer = null;
-  }
 }
 
 /** The plugin positions its fixed host at the pointer and never flips it. */

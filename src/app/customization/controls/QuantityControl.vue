@@ -83,6 +83,13 @@ export default {
 .quantity-autocomplete-holder {
   input.os-param-number {
     box-shadow: none !important;
+    // Match the node's value typography (the user asked for the quantity
+    // field to read like the node, not like a separate browser input).
+    font-family: var(--node-font-sans, 'Inter', 'Segoe UI', system-ui, sans-serif) !important;
+    font-size: var(--node-value-size, 13px) !important;
+    font-weight: var(--node-value-weight, 400) !important;
+    line-height: var(--node-value-line-height, 1.35) !important;
+    color: var(--node-ink, var(--text-primary)) !important;
 
     &:focus {
       border-bottom-width: 2px !important;

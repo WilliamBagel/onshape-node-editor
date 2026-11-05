@@ -61,8 +61,12 @@ const VALUE_TYPE_TO_BT: Record<string, string> = {
 
 /** Synthesize a minimal BTFeatureSpec from a statement entry's typed ports. */
 export function synthesizeFeatureSpec(entry: CatalogEntry): BTFeatureSpec129 {
+  // The standard `(context, id, definition is map)` trio is provided by
+  // CustomFeatureNode itself (context/id sockets + the definition map
+  // input), so it is never part of the synthesized parameters.
+  const TRIO = new Set(["context", "id", "definition"]);
   const parameters = entry.inputs
-    .filter(p => VALUE_TYPE_TO_BT[p.valueType] != null)
+    .filter(p => !TRIO.has(p.name) && VALUE_TYPE_TO_BT[p.valueType] != null)
     .map(p => ({
       btType: VALUE_TYPE_TO_BT[p.valueType],
       parameterId: p.name,
@@ -77,6 +81,9 @@ export function synthesizeFeatureSpec(entry: CatalogEntry): BTFeatureSpec129 {
     featureType: entry.name,
     featureTypeName: entry.name,
     parameters,
+    // Marker carried on the spec so the node chrome can warn: a generic
+    // definition map means the child schema is unknown, not empty by design.
+    ...(entry.genericDefinition === true ? { genericDefinition: true } : {}),
   } as unknown as BTFeatureSpec129;
 }
 
@@ -193,7 +200,7 @@ export function nodeableEntries(entries: readonly CatalogEntry[]): CatalogEntry[
  * name matches outrank category matches, which outrank description
  * matches, so the best node sinks to the top.
  */
-interface SearchableFields { name: string; category: string; description: string }
+interface SearchableFields { name: string; category: string; description: string; key?: string }
 
 function isSubsequence(needle: string, haystack: string): boolean {
   let i = 0;
@@ -223,7 +230,11 @@ function ranked<T extends SearchableFields>(items: readonly T[], term: string): 
   return items
     .map(item => ({ item, score: scoreFields(item, tokens) }))
     .filter((r): r is { item: T; score: number } => r.score != null)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) =>
+      b.score - a.score ||
+      a.item.name.localeCompare(b.item.name) ||
+      (a.item.key ?? "").localeCompare(b.item.key ?? ""),
+    )
     .map(r => r.item);
 }
 
@@ -274,7 +285,7 @@ export function buildPaletteInsertables(
     name: entry.name,
     category: entry.category,
     description: entry.description ?? "",
-    meta: entry.utilityId != null ? "utility" : entry.kind,
+    meta: entry.utilityId != null ? "utility" : entry.genericDefinition === true ? "statement · generic definition" : entry.kind,
     entry,
   }));
   const coveredUtilityIds = new Set(items.map(i => i.utilityId ?? i.entry?.utilityId).filter((id): id is string => id != null));

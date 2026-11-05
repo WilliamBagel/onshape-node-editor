@@ -261,6 +261,48 @@ describe("grouping v2 (#14)", () => {
         expect(positions[fixture.define.id]).toEqual({ x: 0, y: 0 });
     });
 
+    it("an instance can be entered, exited, and entered again (Tab round-trip)", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({
+                document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))),
+                positions: { ...positions },
+            }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...fixture.editor.getConnections()]) {
+                    await fixture.editor.removeConnection(connection.id);
+                }
+                for (const node of [...fixture.editor.getNodes()]) {
+                    await fixture.editor.removeNode(node.id);
+                }
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+
+        const outerBefore = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+        for (let round = 0; round < 2; round++) {
+            const instanceId = fixture.editor.getNodes().find((node) => node instanceof GroupNode)?.id;
+            expect(instanceId).toBeTruthy();
+            expect(await controller.toggle(instanceId)).toBe("entered");
+            expect(controller.breadcrumb()).toEqual(["Top level", "Cross to transform"]);
+            expect(fixture.editor.getNodes().map((node) => node.id).sort()).toEqual([fixture.cross.id, fixture.transform.id].sort());
+            expect(await controller.toggle()).toBe("exited");
+            expect(controller.breadcrumb()).toEqual(["Top level"]);
+        }
+        const outerAfter = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+        expect(outerAfter.connections).toEqual(outerBefore.connections);
+        expect(outerAfter.nodes.map((node) => node.id).sort()).toEqual(outerBefore.nodes.map((node) => node.id).sort());
+        expect(outerAfter.groupDefinitions).toEqual(outerBefore.groupDefinitions);
+    });
+
     it("a muted instance is skipped by codegen", async () => {
         const fixture = await buildFixture();
         fixture.instance2.muted = true;

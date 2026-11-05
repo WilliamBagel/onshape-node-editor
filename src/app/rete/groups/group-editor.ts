@@ -23,11 +23,18 @@ import { connectGraphNodes } from "../serialization/graph-serializer";
 import type { GroupDefinition } from "./groupmodel";
 import type { Vec2 } from "../serialization/graph-schema-types";
 
+export interface GroupSnapshot {
+    document: string;
+    positions: Record<string, Vec2 | null>;
+    /** Feature specs referenced by CustomFeature nodes in the snapshot. */
+    specs?: Record<string, unknown>;
+}
+
 export interface GroupEditHost {
     /** Serialize the current editor contents (document + positions). */
-    snapshot: () => { document: string; positions: Record<string, Vec2 | null> };
+    snapshot: () => GroupSnapshot;
     /** Replace the editor contents with a snapshot taken by `snapshot()`. */
-    restore: (snap: { document: string; positions: Record<string, Vec2 | null> }) => Promise<void>;
+    restore: (snap: GroupSnapshot) => Promise<void>;
     /** Current canvas positions, by node id. */
     getPositions: () => Record<string, Vec2 | null>;
     /** Place nodes at the given canvas positions, by node id. */
@@ -37,7 +44,7 @@ export interface GroupEditHost {
 interface EditLevel {
     instanceId: string;
     definition: GroupDefinition;
-    snapshot: { document: string; positions: Record<string, Vec2 | null> };
+    snapshot: GroupSnapshot;
 }
 
 export class GroupEditorController {

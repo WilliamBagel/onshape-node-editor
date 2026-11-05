@@ -7,6 +7,8 @@ import type { BTFeatureSpec129 } from 'onshape-typescript-fetch';
 import { OnshapeSocket } from '../../rete/onshapesockets.js';
 import { OnshapeFeatureSpecInput } from '../../rete/inputoutput/onshapefeaturespecinput.js';
 import {
+    collectCollapsedOutputSockets,
+    collectCollapsedSockets,
     commitTitleEdit,
     expandedFromInput,
     isNestedMapInput,
@@ -122,5 +124,40 @@ describe('collapsible nodes (#72-4)', () => {
     it('toggles the collapsed state', () => {
         expect(nextCollapsed(false)).toBe(true);
         expect(nextCollapsed(true)).toBe(false);
+    });
+});
+
+
+describe('collapsed socket strip (node-chrome)', () => {
+    it('flattens leaf inputs and nested-map children to the expanded socket data', () => {
+        const inner = mapInputWith([quantitySpec('a', 'A'), quantitySpec('b', 'B')]);
+        const outer = mapInputWith([quantitySpec('x', 'X')]);
+        outer.paramInputs['child'] = inner;
+        const entries = visibleParamEntries(outer.paramInputs, outer.hiddenParameters);
+        const sockets = collectCollapsedSockets(entries, 'node-1');
+        expect(sockets.map((s) => s.key)).toEqual(['x', 'a', 'b']);
+        expect(sockets.every((s) => s.side === 'input' && s.nodeId === 'node-1' && s.btType !== '')).toBe(true);
+        expect(sockets[0].payload).toBe(outer.paramInputs['x']);
+    });
+
+    it('respects hidden children and never registers a duplicate socket', () => {
+        const inner = mapInputWith([quantitySpec('a', 'A')]);
+        const outer = mapInputWith([quantitySpec('x', 'X')]);
+        outer.paramInputs['child'] = inner;
+        outer.paramInputs['x2'] = outer.paramInputs['x'];
+        inner.hiddenParameters['a'] = true;
+        const entries = visibleParamEntries(outer.paramInputs, outer.hiddenParameters);
+        const sockets = collectCollapsedSockets(entries, 'node-1');
+        expect(sockets.map((s) => s.key)).toEqual(['x', 'x2']);
+        const keys = sockets.map((s) => `${s.side}:${s.key}`);
+        expect(new Set(keys).size).toBe(keys.length);
+    });
+
+    it('an empty map contributes no sockets', () => {
+        const empty = mapInputWith([]);
+        const entries = visibleParamEntries(empty.paramInputs, empty.hiddenParameters);
+        expect(entries).toEqual([]);
+        expect(collectCollapsedSockets(entries, 'node-1')).toEqual([]);
+        expect(collectCollapsedOutputSockets(null, 'node-1')).toEqual([]);
     });
 });

@@ -12,7 +12,7 @@ describe("action palette registry", () => {
     it("is driven by COMMANDS — every action the palette requires is there", () => {
         const ids = paletteActions().map((a) => a.id);
         expect(ids).toEqual(COMMANDS.map((c) => c.id));
-        for (const required of ["build", "run", "addNode", "save", "open", "settings", "fitView", "deleteSelected", "upload"]) {
+        for (const required of ["build", "run", "addNode", "save", "open", "settings", "fitView", "deleteSelected", "upload", "createGroup"]) {
             expect(ids).toContain(required);
         }
     });
@@ -34,6 +34,8 @@ describe("filterActions", () => {
     it("matches labels and descriptions case-insensitively", () => {
         expect(filterActions("FIT").map((a) => a.id)).toEqual(["fitView"]);
         expect(filterActions("saved graph").map((a) => a.id)).toContain("open");
+        expect(filterActions("group").map((a) => a.id)).toContain("createGroup");
+        expect(filterActions("create group from selection").map((a) => a.id)).toEqual(["createGroup"]);
         expect(filterActions("definitely-not-an-action")).toEqual([]);
     });
 

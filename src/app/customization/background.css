@@ -1,6 +1,8 @@
 .fill-area {
   display: table;
-  z-index: -1;
+  /* Bottom paint layer: frames sit at z-index -6 and connection SVGs
+     at -5, both above this background (see frame-layout.ts). */
+  z-index: -10;
   position: absolute;
   top: -320000px;
   left: -320000px;

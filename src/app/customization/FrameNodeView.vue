@@ -94,6 +94,12 @@ export default defineComponent({
   border-radius: 5px;
   box-sizing: border-box;
   overflow: hidden;
+  /* Paint layer (frame-layout.ts): below the connection SVGs (-5) and
+     above the canvas background (-10), so edges crossing the frame stay
+     visible. The editor also sets this on the node wrapper element,
+     which is the positioned element in the area holder. */
+  position: relative;
+  z-index: -6;
 }
 
 .frame-header {

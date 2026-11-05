@@ -36,6 +36,7 @@ import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
+import { FRAME_HEADER_HEIGHT, FRAME_PADDING, areaZoom, computeFrameBounds, installFrameSizeSync, pinFrameElement, syncNodeSize } from './modified-rete/frame-layout';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
 import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./serialization/graph-serializer";
 import type { SpecResolver } from "./serialization/graph-schema-types";
@@ -332,7 +333,12 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     });
     area.use(contextMenu);
 
-    const scopes = new ScopesPlugin<Schemes>();
+    // Padding matches createFrameFromSelection (16px uniform) so the
+    // scopes plugin's own refits (drag, remove) agree with the initial
+    // measured fit instead of jumping to the plugin's 40/20 defaults.
+    const scopes = new ScopesPlugin<Schemes>({
+        padding: () => ({ top: FRAME_PADDING + FRAME_HEADER_HEIGHT, left: FRAME_PADDING, right: FRAME_PADDING, bottom: FRAME_PADDING }),
+    });
     scopes.addPreset(ScopesPresets.classic.setup());
 
     editor.use(area);
@@ -342,10 +348,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     area.area.setZoomHandler(new Zoom(0.001) as any);
 
     // #13: the scopes plugin's own ordering moves a picked element to the
-    // top of the holder, which would put a picked frame over its children.
-    // This pipe is registered after the plugin's, so it runs after it and
-    // re-pins every frame element to the front of the holder; the order
-    // keeper (below) stacks the regular nodes on top of it.
+    // top of the holder, which would put a picked frame over its children
+    // and over the connections. This pipe is registered after the plugin's,
+    // so it runs after it and re-pins every frame element to its paint
+    // layer — directly after the canvas background, at z-index -6 (below
+    // the connection SVGs at -5, above the background at -10; see
+    // frame-layout.ts). The order keeper (below) stacks regular nodes
+    // (z-index auto/0, DOM last) on top of it.
     area.addPipe((context) => {
         const signal = context as { type?: string };
         if (signal.type === 'nodepicked' || signal.type === 'nodecreated') {
@@ -356,7 +365,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
                 const view = area.nodeViews.get(node.id);
                 if (view != null && view.element.parentNode === holder) {
-                    holder.insertBefore(view.element, holder.firstChild);
+                    pinFrameElement(holder, view.element);
                 }
             }
         }
@@ -480,6 +489,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         isExcluded: (id) => editor.getNodes().find((node) => node.id === id) instanceof FrameNode,
     });
 
+    // Frame sizing: the scopes plugin fits a frame from model
+    // width/height, which go stale when rendered content grows (expanded
+    // Definition/parameters overflow the fixed-height node box). Sync the
+    // model from the rendered view and re-fit the parent frame on change.
+    installFrameSizeSync({
+        area: area as never,
+        editor: editor as never,
+        scopes: scopes as never,
+        isFrame: (id) => editor.getNodes().find((node) => node.id === id) instanceof FrameNode,
+    });
+
 
     // DataflowEngine listens for `nodecreated`, so it must be installed before
     // the editor gets any nodes (createEditor adds them after editorBase returns).
@@ -594,7 +614,15 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             return null;
         }
 
-        const padding = 16;
+        // Measure the rendered views first: model width/height is stale
+        // (220x150 default) until the node is laid out, and expanded
+        // parameter content overflows the fixed-height box, so bounds
+        // from the model come out ~20x80 / too short. Syncing the model
+        // from the DOM also fixes the scopes plugin's later refits,
+        // which read the same model fields.
+        for (const node of selected) {
+            syncNodeSize(node, area.nodeViews.get(node.id), areaZoom(area));
+        }
         const boxes = selected.map((node) => {
             const position = area.nodeViews.get(node.id)?.position ?? { x: 0, y: 0 };
             return {
@@ -604,25 +632,23 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 bottom: position.y + node.height,
             };
         });
-        const left = Math.min(...boxes.map((box) => box.left)) - padding;
-        const top = Math.min(...boxes.map((box) => box.top)) - padding;
-        const right = Math.max(...boxes.map((box) => box.right)) + padding;
-        const bottom = Math.max(...boxes.map((box) => box.bottom)) + padding;
+        const bounds = computeFrameBounds(boxes, FRAME_PADDING, FRAME_HEADER_HEIGHT);
 
         const frame = new FrameNode();
-        frame.width = Math.max(frame.minWidth, right - left);
-        frame.height = Math.max(80, bottom - top);
+        frame.width = Math.max(frame.minWidth, bounds.width);
+        frame.height = Math.max(80, bounds.height);
         prepareFrame(frame);
         await editor.addNode(frame);
-        // The new element starts on top of the holder; pin it behind its
-        // children (the pinning pipe does this on later picks, but a fresh
-        // frame needs it now).
+        // The new element starts on top of the holder; pin it to its
+        // paint layer behind its children and the connections (the
+        // pinning pipe does this on later picks, but a fresh frame
+        // needs it now).
         const holder = area.area.content.holder;
         const frameView = area.nodeViews.get(frame.id);
         if (frameView != null && frameView.element.parentNode === holder) {
-            holder.insertBefore(frameView.element, holder.firstChild);
+            pinFrameElement(holder, frameView.element);
         }
-        await area.translate(frame.id, { x: left, y: top });
+        await area.translate(frame.id, { x: bounds.left, y: bounds.top });
 
         // Group after the frame exists and is positioned: the plugin's
         // validator requires the parent to be in the editor before a
@@ -631,6 +657,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         for (const node of selected) {
             node.group = frame.id;
         }
+        // Re-fit through the scopes plugin (scopeupdated -> resizeParent)
+        // so the frame's final size/position — and any parent frame's —
+        // come from the same code path as drag-to-frame refits. The
+        // measured bounds above already give the correct first paint.
+        await scopes.update(frame.id);
         applyCollapsedStates();
         return frame;
     };
@@ -693,6 +724,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             }
         }
         await nodeOrder.setOrder(graph.nodeOrder);
+        // Serialized sizes are model sizes and can be stale against the
+        // rendered views; sync them and let the scopes plugin re-fit
+        // every loaded frame before first paint settles.
+        for (const node of editor.getNodes()) {
+            syncNodeSize(node, area.nodeViews.get(node.id), areaZoom(area));
+        }
+        for (const node of editor.getNodes()) {
+            if (node instanceof FrameNode) {
+                await scopes.update(node.id);
+            }
+        }
         // Restore collapsed frames after positions exist so hidden children
         // hide in place rather than flashing on load.
         applyCollapsedStates();
@@ -723,10 +765,34 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return positions;
     };
 
+    /**
+     * CustomFeature serialization stores only a spec reference. A group
+     * snapshot/restore removes and re-adds those nodes, so carry the actual
+     * specs alongside the snapshot; otherwise loadGraph cannot rebuild them
+     * and exiting a group wipes the outer graph.
+     */
+    const collectSpecs = (): Record<string, unknown> => {
+        const specs: Record<string, unknown> = {};
+        const add = (node: OnshapeNode): void => {
+            if (!(node instanceof CustomFeatureNode)) return;
+            const spec = node.getFeatureSpec();
+            const key = typeof spec?.featureType === 'string' ? spec.featureType : null;
+            if (key != null) specs[key] = spec;
+        };
+        for (const node of editor.getNodes()) add(node);
+        for (const definition of groupDefinitions.values()) {
+            for (const node of definition.nodes) add(node);
+        }
+        return specs;
+    };
+
     const groupController = new GroupEditorController(editor, {
-        snapshot: () => ({ document: serializeGraph(), positions: canvasPositions() }),
+        snapshot: () => ({ document: serializeGraph(), positions: canvasPositions(), specs: collectSpecs() }),
         restore: async (snap) => {
-            await loadGraph(snap.document, () => undefined);
+            await loadGraph(snap.document, (ref) => {
+                const spec = snap.specs?.[ref.featureType];
+                return spec as never;
+            });
         },
         getPositions: () => canvasPositions(),
         setPositions: async (positions) => {

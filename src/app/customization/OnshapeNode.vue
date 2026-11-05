@@ -42,7 +42,11 @@
           </svg>
         </div> -->
       </div>
-      <div class="dialog-content" v-show="!collapsed">
+      <div class="dialog-content" v-if="!collapsed">
+        <p v-if="(data as any).genericDefinition === true" class="generic-definition-warning"
+          data-testid="generic-definition-warning" role="note">
+          Generic definition — definition map schema not known; generated code uses an empty map.
+        </p>
         <!-- Outputs-->
         <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
           :key="'output' + key + seed" :data-testid="'output-' + key">
@@ -68,6 +72,22 @@
           <OnshapeInput v-else :inputKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
             @value-change="controlValueChange(input, $event)" />
         </template>
+      </div>
+      <!-- Compact Blender-style socket strip while collapsed -->
+      <div class="collapsed-socket-strip" v-if="collapsed" data-testid="collapsed-socket-strip"
+        :aria-label="`Collapsed ${title} — ${collapsedInputs.length + collapsedOutputs.length} sockets`">
+        <span class="collapsed-socket-group collapsed-socket-inputs">
+          <Ref v-for="socket in collapsedInputs" :key="'collapsed-in-' + socket.key + seed" class="collapsed-socket"
+            :emit="proxyEmit"
+            :data="{ type: 'socket', side: 'input', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
+            data-testid="collapsed-input-socket" />
+        </span>
+        <span class="collapsed-socket-group collapsed-socket-outputs">
+          <Ref v-for="socket in collapsedOutputs" :key="'collapsed-out-' + socket.key + seed" class="collapsed-socket"
+            :emit="proxyEmit"
+            :data="{ type: 'socket', side: 'output', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
+            data-testid="collapsed-output-socket" />
+        </span>
       </div>
       <div class="dialog-help-container"><a class="os-help-link os-center-content"
           href="./probably-a-popup-here-instead.error" target="help"><svg class="os-svg-icon os-help-btn"
@@ -95,6 +115,8 @@ import { OnshapeNode } from '../rete/nodes/onshapenode'
 import { OnshapeInput as OnshapeInputType } from '../rete/inputoutput/onshapeinput.js'
 import { OnshapeInput as OnshapeInputClass } from '../rete/inputoutput/onshapeinput.js';
 import {
+  collectCollapsedOutputSockets,
+  collectCollapsedSockets,
   commitTitleEdit,
   nextCollapsed,
   shouldStartTitleEdit,
@@ -151,6 +173,12 @@ export default defineComponent({
         // Regular parameters check against top-level hiddenParameters
         return this.hiddenParameters[key] !== true;
       });
+    },
+    collapsedInputs() {
+      return collectCollapsedSockets(this.visibleInputs.map(([key, input]: any) => ({ key, input })) as any, this.data.id);
+    },
+    collapsedOutputs() {
+      return collectCollapsedOutputSockets(Object.fromEntries(this.outputs()) as any, this.data.id);
     }
   },
   methods: {
@@ -383,10 +411,14 @@ export default defineComponent({
   outline: none;
 }
 
-// Steel-blue accent is reserved for focus (and selection, above).
+// Quiet hairline focus (STYLE_GUIDE: no saturated blue select box). The
+// vendored rule paints `border: 1px solid --os-feature-dialog-…` on focus;
+// replace it with a 1px node hairline and no outline at all.
 .os-dialog-header-rename-textbox:focus {
-  outline: 1px solid var(--node-accent);
-  outline-offset: 1px;
+  outline: none !important;
+  border: 1px solid var(--node-hairline-strong) !important;
+  outline-offset: 0;
+  box-shadow: none !important;
 }
 
 .os-param-wrapper {
@@ -431,9 +463,9 @@ export default defineComponent({
   // Literal values: text/number inputs and textareas are mono 12px/400 at
   // 100% opacity (guide: monospace 12px for literal values) — one step
   // below the 13px sans value size, but legible and digit-aligned.
-  :deep(input[type='text']),
-  :deep(input[type='number']),
-  :deep(input:not([type])),
+  :deep(input[type='text']:not(.node-title-editor)),
+  :deep(input[type='number']:not(.node-title-editor)),
+  :deep(input:not([type]):not(.node-title-editor)),
   :deep(textarea) {
     color: var(--node-ink) !important;
     opacity: 1;
@@ -462,6 +494,18 @@ export default defineComponent({
 
 .dialog-content {
   width: 100%;
+}
+
+// Generic-definition warning: standard-library statements whose definition
+// map schema is unknown carry this banner instead of looking complete.
+.generic-definition-warning {
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--warning);
+  font-family: var(--node-font-sans);
+  font-size: var(--font-size-label);
+  line-height: 1.35;
 }
 
 .dialog-help-container {
@@ -513,6 +557,21 @@ export default defineComponent({
   transform: translate(-50%, -50%);
   width: min(200px, calc(100% - 64px));
   text-align: center;
+  // Same typography as the visible (centered) title, not the mono literal
+  // style and not the vendored 13px textbox size.
+  font-family: var(--node-font-sans) !important;
+  font-size: var(--node-title-size) !important;
+  font-weight: var(--node-title-weight) !important;
+  line-height: var(--node-title-line-height) !important;
+  color: var(--node-ink) !important;
+  border: 1px solid transparent;
+}
+
+.node-title-editor:focus {
+  outline: none !important;
+  border: 1px solid var(--node-hairline-strong) !important;
+  box-shadow: none !important;
+  background: var(--surface);
 }
 
 .node-header-button {
@@ -567,5 +626,28 @@ export default defineComponent({
 .node-title-edit-toggle:focus-visible {
   opacity: 1;
   pointer-events: auto;
+}
+
+// Compact socket strip while collapsed: input sockets hug the left edge,
+// output sockets the right edge, Blender-style, so wires can still attach.
+.collapsed-socket-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  padding: 2px 4px;
+}
+
+.collapsed-socket-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.collapsed-socket {
+  display: inline-flex;
+  align-items: center;
+  min-width: 8px;
+  min-height: 14px;
 }
 </style>

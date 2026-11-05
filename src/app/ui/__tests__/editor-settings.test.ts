@@ -116,8 +116,8 @@ describe('editorSettings: persistence', () => {
 });
 
 describe('editorSettings: shortcut registry', () => {
-  it('lists exactly the nine implemented commands, each with a unique default', () => {
-    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'addNode', 'debugGrid', 'actionPalette']);
+  it('lists exactly the implemented commands, each with a unique default', () => {
+    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'createGroup', 'addNode', 'debugGrid', 'actionPalette']);
     expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(COMMANDS.length);
   });
 
@@ -169,10 +169,10 @@ describe('editorSettings: shortcut registry', () => {
   it('never persists a conflicting pair from hand-edited storage', () => {
     const storage = new MemoryStorage();
     storage.setItem(EDITOR_SETTINGS_KEY, JSON.stringify({
-      bindings: { build: 'Ctrl+K', run: 'Ctrl+K', upload: 'Ctrl+Shift+U' },
+      bindings: { build: 'Shift+A', run: 'Shift+A', upload: 'Ctrl+Shift+U' },
     }));
     const store = new EditorSettingsStore(storage);
-    expect(store.getBinding('build')).toBe('Ctrl+K');
+    expect(store.getBinding('build')).toBe('Shift+A');
     expect(store.getBinding('run')).toBe(DEFAULT_BINDINGS.run);
   });
 });
@@ -200,10 +200,30 @@ describe('editorSettings: combo normalisation and matching', () => {
     const bindings = { ...DEFAULT_BINDINGS };
     expect(matchCommand({ key: 'b', ctrlKey: true }, null, bindings)).toBe('build');
     expect(matchCommand({ key: 'Delete' }, null, bindings)).toBe('deleteSelected');
+    expect(matchCommand({ key: 'G', ctrlKey: true, shiftKey: true }, null, bindings)).toBe('createGroup');
+    expect(matchCommand({ key: 'g', ctrlKey: true }, null, bindings)).toBe('createFrame');
     expect(matchCommand({ key: 'x', ctrlKey: true }, null, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'INPUT' }, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'TEXTAREA' }, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'DIV', isContentEditable: true }, bindings)).toBeNull();
+  });
+
+  it('defaults Add node to Shift+A', () => {
+    expect(DEFAULT_BINDINGS.addNode).toBe('Shift+A');
+    expect(COMMANDS.find((c) => c.id === 'addNode')?.defaultCombo).toBe('Shift+A');
+  });
+
+  it('matchCommand dispatches Shift+A and ignores typing targets', () => {
+    const bindings = { ...DEFAULT_BINDINGS };
+    expect(normalizeCombo({ key: 'A', shiftKey: true })).toBe('Shift+A');
+    expect(normalizeCombo({ key: 'a', shiftKey: true })).toBe('Shift+A');
+    expect(matchCommand({ key: 'A', shiftKey: true }, null, bindings)).toBe('addNode');
+    expect(matchCommand({ key: 'a', shiftKey: true }, null, bindings)).toBe('addNode');
+    expect(matchCommand({ key: 'a' }, null, bindings)).toBeNull();
+    expect(matchCommand({ key: 'A', shiftKey: true, ctrlKey: true }, null, bindings)).toBeNull();
+    expect(matchCommand({ key: 'A', shiftKey: true }, { tagName: 'INPUT' }, bindings)).toBeNull();
+    expect(matchCommand({ key: 'A', shiftKey: true }, { tagName: 'TEXTAREA' }, bindings)).toBeNull();
+    expect(matchCommand({ key: 'A', shiftKey: true }, { tagName: 'DIV', isContentEditable: true }, bindings)).toBeNull();
   });
 
   it('honours a rebound binding in matchCommand', () => {

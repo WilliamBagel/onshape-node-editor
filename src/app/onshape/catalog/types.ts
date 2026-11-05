@@ -73,8 +73,20 @@ export interface CatalogEntry {
     signature: string;
     description: string;
     kind: CatalogKind;
-    /** True only for statement/value entries whose ports are all typed. */
+    /** True only for statement/value entries whose ports are all typed,
+     * or for statement entries node-able via the generic-definition path. */
     nodeable: boolean;
+    /**
+     * True for standard-library `statement` entries whose
+     * `(context, id, definition is map)` signature carries an untyped
+     * generic definition map. Such entries are node-able: the factory
+     * synthesizes a `CustomFeatureNode` from the known definition
+     * parameters (if any) and emits an explicit generic definition map
+     * for the rest. The definition schema is NOT known — the node must
+     * not pretend otherwise (see the generic-definition warning in the
+     * node chrome and palette meta).
+     */
+    genericDefinition?: boolean;
     /** Curated utility identity (issue #11), e.g. `vector`, `opTransform`. */
     utilityId?: string;
     inputs: CatalogPort[];

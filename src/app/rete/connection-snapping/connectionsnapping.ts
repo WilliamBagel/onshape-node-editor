@@ -26,7 +26,7 @@ import { AreaExtra, Connection, OnshapeSocketData, Schemes } from "../types";
 import { OnshapeNode } from "../nodes/onshapenode";
 import { AreaPlugin } from "rete-area-plugin";
 import { getDOMSocketPosition } from "rete-render-utils";
-import { elementsFromPoint, findSocket, sameSocket } from "./utils";
+import { elementsFromPoint, findSocket, findSocketData, pseudoAnchoredSide, sameSocket } from "./utils";
 import { NodeEditor } from "rete";
 
 export class ConnectionSnappingPlugin<Schemes extends ClassicScheme, K> extends ConnectionPlugin<Schemes, K> {
@@ -115,19 +115,48 @@ export function useConnectionSnapping(
                 data.element?.classList.add(classAdd);
                 if (connection.pointerSnapped) {
                     data.element?.classList.add('connection-snapped');
-                    let hangingPosition: Position;
-                    if (data['start'] != null) {
-                        hangingPosition = data['start'];
-                    } else if (data['end'] != null) {
-                        hangingPosition = data['end'];
-                    } else {
+                } else {
+                    data.element?.classList.remove('connection-snapped');
+                }
+                // Anchor the picked-socket end fresh. The Vue preset would
+                // otherwise read it from the socket-position watcher's cache,
+                // which is captured at 'rendered' time -- before the initial
+                // layout settles -- and stays stale (off by the area holder's
+                // page offset) until the node is re-rendered or resized.
+                // calculatePosition() recomputes from the live DOM (offset
+                // chain, zoom/pan independent), so this stays exact at any
+                // zoom and after any pan; pointermove re-emits render, so it
+                // cannot go stale while the pseudo-connection is alive.
+                const anchoredSide = pseudoAnchoredSide(payload);
+                const anchoredNodeId = anchoredSide === 'start' ? payload.source : payload.target;
+                const anchoredKey = anchoredSide === 'start' ? payload.sourceOutput : payload.targetInput;
+                const anchoredSocketSide = anchoredSide === 'start' ? 'output' : 'input';
+                const socketsCache = (connection as unknown as {
+                    socketsCache: Map<Element, SocketData>;
+                }).socketsCache;
+                const anchoredSocket = anchoredNodeId
+                    ? findSocketData(socketsCache, anchoredNodeId, anchoredSocketSide, anchoredKey)
+                    : undefined;
+                if (anchoredSocket) {
+                    const pos = await connection.socketPositionWatcher.calculatePosition(
+                        anchoredNodeId, anchoredSocketSide, anchoredKey, anchoredSocket.element);
+                    const nodeView = area.nodeViews.get(anchoredNodeId);
+                    if (pos && nodeView) {
+                        data[anchoredSide] = {
+                            x: nodeView.position.x + pos.x,
+                            y: nodeView.position.y + pos.y
+                        };
+                    }
+                }
+                if (connection.pointerSnapped) {
+                    const hangingSide = anchoredSide === 'start' ? 'end' : 'start';
+                    const hangingPosition = data[hangingSide];
+                    if (hangingPosition == null) {
                         return context;
                     }
                     hangingPosition.x = connection.snappedPointer.x;
                     hangingPosition.y = connection.snappedPointer.y;
                     onSnapRender(payload);
-                } else {
-                    data.element?.classList.remove('connection-snapped');
                 }
                 connection.active = payload;
             } else {

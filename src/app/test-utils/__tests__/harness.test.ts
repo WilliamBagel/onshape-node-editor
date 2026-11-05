@@ -102,3 +102,112 @@ describe('harness: command dispatch + message assertion', () => {
     wrapper.unmount();
   });
 });
+
+describe('node chrome: empty map, left header, collapsed sockets, title focus', () => {
+  it('shows an empty state with aria label when a map has no child parameters', async () => {
+    const node = makeCustomFeatureNodeWithMap();
+    const definition: any = node.getDefinitionInput();
+    definition.paramInputs = {};
+    definition.hiddenParameters = {};
+    definition.expanded = true;
+    const { wrapper } = await mountNode(node);
+    const empty = wrapper.find('.map-empty-state');
+    expect(empty.exists()).toBe(true);
+    expect(empty.text()).toContain('Definition (empty)');
+    expect(empty.text()).toContain('No parameters');
+    expect(empty.attributes('aria-label')).toContain('Definition (empty)');
+    expect(wrapper.find('.map-header-empty').text()).toBe('(empty)');
+    wrapper.unmount();
+  });
+
+  it('left-aligns the map header caret and title', async () => {
+    const node = makeCustomFeatureNodeWithMap();
+    const { wrapper } = await mountNode(node);
+    const content = wrapper.find('.map-header-content');
+    expect(content.exists()).toBe(true);
+    expect(wrapper.find('.map-header-content.os-center-content').exists()).toBe(false);
+    // jsdom does not cascade SFC scoped styles; pin the stylesheet contract.
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/app/customization/OnshapeInputMap.vue', 'utf8');
+    expect(source).toContain('map-header-content');
+    expect(source).toMatch(/\.map-header-content\s*\{[^}]*display:\s*flex[^}]*justify-content:\s*flex-start[^}]*text-align:\s*left/);
+    wrapper.unmount();
+  });
+
+  it('preserves sockets while collapsed and shows full rows when expanded', async () => {
+    const node = makeCustomFeatureNodeWithMap();
+    const expectedInputs = wrapperInputKeys(node);
+    const { wrapper } = await mountNode(node);
+    // Expanded: full rows, no strip.
+    expect(wrapper.find('[data-testid="collapsed-socket-strip"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="input-socket"]').length).toBeGreaterThan(0);
+    // Expand the definition so nested leaves are mounted.
+    const map = wrapper.findComponent({ name: 'OnshapeInputMap' } as any);
+    expect(map.exists()).toBe(true);
+    await map.find('.node-expander').trigger('click');
+    await wrapper.vm.$nextTick();
+    const expandedInputs = wrapper.findAll('[data-testid="input-socket"]').length;
+    expect(expandedInputs).toBeGreaterThan(0);
+    // Collapse the node.
+    await wrapper.find('.node-collapse-toggle').trigger('click');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.dialog-content').exists()).toBe(false);
+    const strip = wrapper.find('[data-testid="collapsed-socket-strip"]');
+    expect(strip.exists()).toBe(true);
+    expect(strip.attributes('aria-label')).toContain('sockets');
+    const collapsedInputs = wrapper.findAll('[data-testid="collapsed-input-socket"]');
+    const collapsedOutputs = wrapper.findAll('[data-testid="collapsed-output-socket"]');
+    expect(collapsedInputs.length).toBe(expandedInputs);
+    expect(collapsedOutputs.length).toBe(Object.keys(node.outputs).length);
+    // No duplicate registrations, correct side/key/data. Read the descriptors
+    // from the component (the Ref stub does not expose props in jsdom).
+    const descriptors = [...(wrapper.vm as any).collapsedInputs, ...(wrapper.vm as any).collapsedOutputs];
+    expect(descriptors.length).toBe(collapsedInputs.length + collapsedOutputs.length);
+    const keys = (wrapper.vm as any).collapsedInputs.map((d: any) => d.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect([...keys].sort()).toEqual([...new Set(expectedInputs.filter((k) => k !== 'definition'))].sort());
+    for (const d of descriptors) {
+      expect(['input', 'output']).toContain(d.side);
+      expect(d.nodeId).toBe(node.id);
+      expect(d.payload).toBeDefined();
+    }
+    expect((wrapper.vm as any).collapsedOutputs.length).toBe(collapsedOutputs.length);
+    // Re-expand restores the full rows and removes the strip.
+    await wrapper.find('.node-collapse-toggle').trigger('click');
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="collapsed-socket-strip"]').exists()).toBe(false);
+    expect(wrapper.find('.dialog-content').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('title editor uses title typography and a quiet hairline focus, not a blue outline', async () => {
+    const node = makeFunctionNode();
+    const { wrapper } = await mountNode(node);
+    const editor = wrapper.find('.node-title-editor');
+    expect(editor.exists()).toBe(true);
+    expect(editor.classes()).toContain('os-dialog-header-rename-textbox');
+    // jsdom does not cascade SFC scoped styles; pin the stylesheet contract.
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync('src/app/customization/OnshapeNode.vue', 'utf8');
+    expect(source).toMatch(/\.node-title-editor\s*\{[^}]*font-size:\s*var\(--node-title-size\)/);
+    expect(source).toMatch(/\.node-title-editor:focus\s*\{[^}]*outline:\s*none/);
+    expect(source).toMatch(/\.node-title-editor:focus\s*\{[^}]*var\(--node-hairline-strong\)/);
+    expect(source).not.toMatch(/\.os-dialog-header-rename-textbox:focus\s*\{[^}]*--node-accent/);
+    wrapper.unmount();
+  });
+});
+
+function wrapperInputKeys(node: any): string[] {
+  const keys: string[] = [];
+  const visit = (entries: [string, any][]) => {
+    for (const [key, input] of entries) {
+      if (input && (input.paramInputs || input.type === 'map')) {
+        visit(Object.entries(input.paramInputs ?? {}).filter(([k]) => input.hiddenParameters?.[k] !== true) as any);
+      } else {
+        keys.push(key);
+      }
+    }
+  };
+  visit(Object.entries(node.inputs ?? {}));
+  return keys;
+}
