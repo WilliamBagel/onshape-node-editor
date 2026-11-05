@@ -404,6 +404,24 @@ export default defineComponent({
       await this.runCommand(command);
     },
     /**
+     * #14: turn the selected nodes into a node group. The registry shortcut
+     * (Ctrl+Shift+G), the action palette and the toolbar all land here; the
+     * editor reports failures (no selection, ungroupable kind, cycle) through
+     * the status bar, never a browser dialog.
+     */
+    async runCreateGroup() {
+      try {
+        const instance = await this.controls?.createGroupFromSelection();
+        if (instance != null) {
+          this.featureStudioHost()?.reportMessage(`Created group \u201c${instance.getTitle()}\u201d from the selection. Select it and press Tab to edit it.`);
+        } else {
+          this.featureStudioHost()?.reportMessage('Nothing to group: select at least one node first (frames and define/output features cannot be grouped).', 'warning', 'group');
+        }
+      } catch (error) {
+        this.featureStudioHost()?.reportMessage(error instanceof Error ? error.message : String(error), 'warning', 'group');
+      }
+    },
+    /**
      * #73: dispatch a command by id — the one path shortcuts and the
      * action palette share. No-ops while a dialog is open.
      */
@@ -433,6 +451,7 @@ export default defineComponent({
           }
           break;
         }
+        case 'createGroup': await this.runCreateGroup(); break;
         // #73: F3 / the bottom Search button opens the action palette.
         case 'actionPalette': this.actionsOpen = true; break;
       }
@@ -479,7 +498,7 @@ export default defineComponent({
 <template>
   <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
-    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" />
+    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" />
   <main class="rete" ref="rete"></main>
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
