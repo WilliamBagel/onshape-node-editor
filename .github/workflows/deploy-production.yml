@@ -106,12 +106,17 @@ jobs:
         run: |
           pnpm run explore:ui -- \
             --url http://127.0.0.1:5173/onshape-node-editor/ \
-            --out dist/app/qa \
+            --out tmp/qa-runs/${{ github.run_id }} \
             --task make-filleted-cylinder \
             --max-actions 80 \
             --advisory
-          cp dist/app/qa/dashboard.html dist/app/qa/index.html
-          node -e "const r=require('./dist/app/qa/report.json'); console.log('UI QA: '+r.summary.issues+' issues ('+r.summary.high+' high), task='+r.task.status)" >> "$GITHUB_STEP_SUMMARY"
+          pnpm run build:qa-dashboard
+          mkdir -p dist/app/qa/data
+          cp -r dist/qa-dashboard/. dist/app/qa/
+          cp tmp/qa-runs/${{ github.run_id }}/report.json dist/app/qa/data/report.json
+          cp -r tmp/qa-runs/${{ github.run_id }}/screenshots dist/app/qa/data/screenshots
+          if [ -d tmp/qa-runs/${{ github.run_id }}/annotated ]; then cp -r tmp/qa-runs/${{ github.run_id }}/annotated dist/app/qa/data/annotated; fi
+          node -e "const r=require('./dist/app/qa/data/report.json'); console.log('UI QA: '+r.summary.issues+' issues ('+r.summary.high+' high), task='+r.task.status)" >> "$GITHUB_STEP_SUMMARY"
           echo 'UI QA dashboard: https://williambagel.github.io/onshape-node-editor/qa/' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stop the UI QA server

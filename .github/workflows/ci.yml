@@ -71,8 +71,9 @@ jobs:
 
       - name: Dashboard controls smoke test
         run: |
-          node scripts/ui-report.mjs --report scripts/ui-report.sample.json --out /tmp/ui-dashboard-smoke
-          node scripts/ui-report.smoke.mjs --dashboard /tmp/ui-dashboard-smoke/dashboard.html
+          node --check qa/dashboard/dashboard.smoke.mjs
+          pnpm run build:qa-dashboard
+          node qa/dashboard/dashboard.smoke.mjs
 
       - name: Build application
         run: pnpm run build:app
@@ -139,18 +140,25 @@ jobs:
         run: |
           pnpm run explore:ui -- \
             --url http://127.0.0.1:5173/onshape-node-editor/ \
-            --out dist/app/qa \
+            --out tmp/qa-runs/${{ github.run_id }} \
             --task make-filleted-cylinder \
             --max-actions 40 \
             --advisory
-          cp dist/app/qa/dashboard.html dist/app/qa/index.html
+          pnpm run build:qa-dashboard
+          mkdir -p dist/app/qa/data
+          cp -r dist/qa-dashboard/. dist/app/qa/
+          cp tmp/qa-runs/${{ github.run_id }}/report.json dist/app/qa/data/report.json
+          cp -r tmp/qa-runs/${{ github.run_id }}/screenshots dist/app/qa/data/screenshots
+          if [ -d tmp/qa-runs/${{ github.run_id }}/annotated ]; then cp -r tmp/qa-runs/${{ github.run_id }}/annotated dist/app/qa/data/annotated; fi
 
       - name: Upload UI QA report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ui-qa-report-${{ github.run_id }}
-          path: dist/app/qa
+          path: |
+            dist/app/qa
+            tmp/qa-runs/${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 14
 
