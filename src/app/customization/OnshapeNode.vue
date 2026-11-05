@@ -421,6 +421,13 @@ export default defineComponent({
   box-shadow: none !important;
 }
 
+// Selecting the title to replace it must not flash the browser's saturated
+// blue selection box either; use the node's own quiet hairline/ink.
+.os-dialog-header-rename-textbox::selection {
+  background: var(--node-hairline-strong);
+  color: var(--node-ink);
+}
+
 .os-param-wrapper {
   flex-wrap: nowrap;
   overflow: visible;
