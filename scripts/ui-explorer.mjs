@@ -110,8 +110,8 @@ async function reload() {
   await sleep(400);
 }
 
-async function addIssue({ title, severity = 'medium', category, area, description, expected, actual, steps, suggestion, bbox, actionId, console: cons = [] }) {
-  const key = `${category}|${area}|${title.toLowerCase()}|${bbox ? `${bbox.x},${bbox.y}` : ''}`;
+async function addIssue({ title, severity = 'medium', category, area, description, expected, actual, steps, suggestion, bbox, actionId, console: cons = [], dedupLabel = '' }) {
+  const key = `${category}|${area}|${title.toLowerCase()}|${dedupLabel || title}`;
   if (issueKeys.has(key)) return null;
   if ((catCounts[category] || 0) >= 20) return null;
   issueKeys.add(key); catCounts[category] = (catCounts[category] || 0) + 1;
@@ -140,7 +140,8 @@ const DETECTOR_JS = `(function(){
     const r = el.getBoundingClientRect(); const cx = r.x + r.width/2, cy = r.y + r.height/2;
     if (cx >= 0 && cy >= 0 && cx < vw && cy < vh) {
       const top = document.elementFromPoint(cx, cy);
-      if (top && top !== el && !el.contains(top) && !top.contains(el))
+      const inOverlay = top && top.closest && top.closest('[data-testid="context-menu"], [role=dialog], .actions, .palette, .app-dialog-backdrop, .actions-backdrop, .palette-backdrop');
+      if (top && top !== el && !el.contains(top) && !top.contains(el) && !inOverlay)
         out.obscured.push({ title: 'Control is covered by another element', selector: sel(el), label: (el.getAttribute('aria-label')||el.textContent||'').trim().slice(0,60), bbox: bbox(el), covering: sel(top) });
     }
     if (r.x < -2 || r.y < -2 || r.right > vw + 2 || r.bottom > vh + 2)
@@ -153,11 +154,27 @@ const DETECTOR_JS = `(function(){
       if (!isToolbarIcon) out.tiny.push({ title: 'Clickable target is smaller than 16x16px', selector: sel(el), label: (el.getAttribute('aria-label')||el.textContent||'').trim().slice(0,60), bbox: bbox(el) });
     }
   }
-  // text clipping
+  // text clipping: glyph rects (Range) vs element content box — scrollWidth
+  // alone over-counts padding/letter-spacing for fitted short labels.
   for (const el of [...document.querySelectorAll('*')].filter(vis).slice(0, 1500)) {
     const s = getComputedStyle(el);
-    if ((s.overflow === 'hidden' || s.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 2 && el.clientHeight > 0 && (el.textContent||'').trim())
-      out.clipped.push({ title: 'Text is clipped by its own box', selector: sel(el), label: (el.textContent||'').trim().slice(0,60), bbox: bbox(el) });
+    if (!((s.overflow === 'hidden' || s.textOverflow === 'ellipsis') && el.scrollWidth > el.clientWidth + 2 && el.clientHeight > 0)) continue;
+    const txt = (el.textContent || '').trim(); if (!txt) continue;
+    // only flag when an actual glyph overflows the element's own box
+    let glyphOverflow = false;
+    try {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const er = el.getBoundingClientRect();
+      let tn; while ((tn = walker.nextNode())) {
+        if (!tn.textContent.trim()) continue;
+        const range = document.createRange(); range.selectNodeContents(tn);
+        for (const gr of range.getClientRects()) {
+          if (gr.width > 0 && (gr.right > er.right + 2 || gr.left < er.left - 2)) { glyphOverflow = true; break; }
+        }
+        range.detach(); if (glyphOverflow) break;
+      }
+    } catch (e) { glyphOverflow = false; }
+    if (glyphOverflow) out.clipped.push({ title: 'Text is clipped by its own box', selector: sel(el), label: txt.slice(0,60), bbox: bbox(el) });
   }
   // broken svg use / images
   for (const u of document.querySelectorAll('use')) {
@@ -193,7 +210,7 @@ async function runDetectors(area, actionId, consoleErrors) {
   const mk = async (items, category, severity, description, expected, actualFn, suggestion, steps) => {
     for (const it of (items || []).slice(0, 20)) {
       await addIssue({ title: it.title, severity, category, area, description,
-        expected, actual: actualFn(it), steps, suggestion, bbox: it.bbox, actionId, console: consoleErrors });
+        expected, actual: actualFn(it), steps, suggestion, bbox: it.bbox, actionId, console: consoleErrors, dedupLabel: `${it.selector}|${it.label || ''}` });
     }
   };
   await mk(found.obscured, 'visual', 'high', 'A visible control cannot be clicked because another element sits on top of it.',
@@ -209,7 +226,7 @@ async function runDetectors(area, actionId, consoleErrors) {
     'Reposition or resize the control so it fits fully inside the window.',
     ['Open the area under test', 'Look for a control cut off at the window edge']);
   await mk(found.noname, 'accessibility', 'medium', 'A control has no name that assistive technology or a tooltip can announce.',
-    'Every control has visible text, an aria-label, or a title.', (it) => 'No text, aria-label, title, or labelled child found on the control.',
+    'Every control has visible text, an aria-label, or a title.', (it) => `No text, aria-label, title, or labelled child found on ${it.selector}.`,
     'Give the control a short label describing what it does (visible text or aria-label).',
     ['Tab through the controls', 'Notice this control announces nothing']);
   await mk(found.tiny, 'accessibility', 'low', 'A clickable target is very small and hard to hit.',
@@ -224,8 +241,9 @@ async function runDetectors(area, actionId, consoleErrors) {
     'Normal text has a contrast ratio of at least 4.5:1.', (it) => `"${it.label}" has contrast ${it.ratio}:1 (color ${it.color}).`,
     'Darken the text or lighten the background until the text is easy to read.',
     ['Read the faint text', 'Notice it is hard to make out against its background']);
-  // console errors
+  // console errors (resource-load lines are tracked separately with URLs)
   for (const e of (consoleErrors || [])) {
+    if (/Failed to load resource/i.test(e)) continue;
     await addIssue({ title: 'Console error during interaction', severity: 'high', category: 'console', area,
       description: 'The app logged an error while this area was used.',
       expected: 'No console errors during normal use.', actual: e.slice(0, 300),
@@ -236,11 +254,15 @@ async function runDetectors(area, actionId, consoleErrors) {
 }
 
 async function assertDialogClosed(label, actionId) {
-  const open = await page.evaluate(() => ({
-    dialog: !!document.querySelector('[role=dialog]'),
-    backdrop: !!document.querySelector('.app-dialog-backdrop, .actions-backdrop, .palette-backdrop'),
-    palette: !!document.querySelector('.actions, .palette'),
-  })).catch(() => ({ dialog: false, backdrop: false, palette: false }));
+  const open = await page.evaluate(() => {
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+    return {
+      // only modal dialogs count: node headers also carry role="dialog"
+      dialog: [...document.querySelectorAll('[role=dialog][aria-modal="true"]')].some(visible),
+      backdrop: [...document.querySelectorAll('.app-dialog-backdrop, .actions-backdrop, .palette-backdrop')].some(visible),
+      palette: [...document.querySelectorAll('.actions, .palette')].some(visible),
+    };
+  }).catch(() => ({ dialog: false, backdrop: false, palette: false }));
   if (open.dialog || open.backdrop || open.palette) {
     await addIssue({ title: 'Dialog still open after close', severity: 'medium', category: 'functional', area: 'settings',
       description: `After ${label}, a dialog or palette overlay is still on screen.`,
@@ -336,10 +358,18 @@ async function tourPalettes() {
 
 async function tourContextMenu() {
   await record('Context menu: right-click canvas', 'context-menu', async () => {
-    const holder = await page.$('.rete-area, [class*="area"]');
-    const box = holder ? await holder.boundingBox() : { x: 720, y: 450, width: 10, height: 10 };
-    await page.mouse.click((box?.x || 720) + 60, (box?.y || 450) + 60, { button: 'right' });
-    await page.waitForSelector('[data-testid="context-menu"]', { timeout: 5000 }).catch(() => { throw new Error('context menu did not open'); });
+    // empty canvas below the node row (nodes end ~y=400 in the sample graph)
+    const points = [[720, 600], [720, 500], [1200, 650], [200, 600]];
+    let opened = false;
+    for (const [x, y] of points) {
+      await page.mouse.click(x, y, { button: 'right' });
+      await sleep(500);
+      const m = await page.$('[data-testid="context-menu"]');
+      const hasSearch = m ? await m.$('[data-testid="context-menu-search-input"]') : null;
+      if (m && hasSearch) { opened = true; break; }
+      await page.keyboard.press('Escape').catch(() => {}); await sleep(200);
+    }
+    if (!opened) throw new Error('canvas context menu with search did not open');
   });
   const cats = await page.$$('[data-testid="context-menu"] .block.hasSubitems .content');
   for (let i = 0; i < Math.min(cats.length, 5); i++) {
@@ -369,13 +399,17 @@ async function tourNodes() {
   const count = Math.min(nodes.length, 4);
   for (let i = 0; i < count; i++) {
     const idx = i;
+    const hasHeader = await page.evaluate((n) => {
+      const node = document.querySelectorAll('.node')[n];
+      return node ? !!node.querySelector('.map-input-header') : false;
+    }, idx).catch(() => false);
     await record(`Node ${idx + 1}: expand/collapse Definition`, 'node', async () => {
       const node = (await page.$$('.node'))[idx];
       const header = await node.$('.map-input-header');
       if (!header) throw new Error('no Definition header');
       await header.click({ timeout: 3000 }); await sleep(400);
       await header.click({ timeout: 3000 }); await sleep(400);
-    });
+    }, { skipReason: hasHeader ? null : 'Skipped: this node has no Definition map' });
     await record(`Node ${idx + 1}: collapse node, sockets visible`, 'node', async () => {
       const node = (await page.$$('.node'))[idx];
       const toggle = await node.$('.node-collapse-toggle');
@@ -407,15 +441,42 @@ async function tourNodes() {
 }
 
 async function tourSockets() {
+  await reload(); // node tour may leave collapsed/expanded state; start clean
   await record('Sockets: click output then input to connect', 'node', async () => {
-    const out = await page.$('[data-testid="output-socket"] .socket-container, [data-testid="output-socket"]');
-    const inp = await page.$('[data-testid="input-socket"] .socket-container, [data-testid="input-socket"]');
-    if (!out || !inp) throw new Error('sockets not found');
-    const before = await page.$$eval('[data-testid="connection"]', (els) => els.length).catch(() => 0);
-    await out.click({ timeout: 3000 }); await sleep(300);
-    await inp.click({ timeout: 3000 }); await sleep(500);
-    const after = await page.$$eval('[data-testid="connection"]', (els) => els.length).catch(() => 0);
-    if (after <= before) throw new Error('no connection path created');
+    const pts = await page.evaluate(() => {
+      const pick = (sel) => [...document.querySelectorAll(sel)]
+        .map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, visible: r.width > 0 && r.height > 0, node: e.closest('.node')?.dataset?.id || e.closest('.node')?.querySelector('.node-title')?.textContent?.trim() || '' }; })
+        .filter((p) => p.visible);
+      const outs = pick('[data-testid="output-socket"] .socket-container');
+      const ins = pick('[data-testid="input-socket"] .socket-container');
+      if (!outs.length || !ins.length) return null;
+      const pairs = [];
+      for (const out of outs.slice(0, 4)) for (const inp of ins.slice(0, 6)) {
+        if (out.node !== inp.node) pairs.push({ out, inp });
+        if (pairs.length >= 6) break;
+      }
+      return { pairs };
+    });
+    if (!pts) throw new Error('no visible sockets found');
+    const count = () => page.$$eval('[data-testid="connection"]', (els) => els.length).catch(() => 0);
+    let connected = false, pendingSeen = false;
+    for (const pair of pts.pairs) {
+      const before = await count();
+      await page.mouse.click(pair.out.x, pair.out.y); await sleep(250);
+      const pending = await count();
+      if (pending > before) pendingSeen = true;
+      await page.mouse.click(pair.inp.x, pair.inp.y); await sleep(400);
+      const after = await count();
+      // a completed connection persists; a pending wire is also counted, so
+      // require the wire to still exist after a neutral click elsewhere
+      if (after > before) {
+        await page.mouse.click(640, 820); await sleep(300);
+        if ((await count()) > before) { connected = true; break; }
+      }
+      await page.mouse.click(640, 820); await sleep(250); // cancel pending wire
+    }
+    if (!pendingSeen) throw new Error('clicking an output socket did not start a connection path');
+    if (!connected) throw new Error('no compatible output/input pair connected (tried ' + pts.pairs.length + ' pairs)');
   }, { mutate: true });
 }
 
@@ -486,6 +547,9 @@ async function main() {
   context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   page = await context.newPage();
   page.on('filechooser', async (fc) => { try { await fc.cancel(); } catch {} });
+  const failedRequests = new Set();
+  page.on('response', (r) => { if (r.status() >= 400) failedRequests.add(`${r.status()} ${r.url()}`); });
+  page.on('requestfailed', (r) => failedRequests.add(`FAILED ${r.url()}`));
   page.on('console', (m) => { if (m.type() === 'error') currentConsoleErrors.push(m.text().slice(0, 500)); });
   page.on('pageerror', (e) => currentConsoleErrors.push(String(e).slice(0, 500)));
 
@@ -530,6 +594,16 @@ async function main() {
   for (const t of tours) {
     if (actions.length >= maxActions) break;
     try { await t(); } catch (e) { console.warn(`tour ${t.name} error: ${e.message}`); }
+  }
+
+  // failed network requests (e.g. 404 assets) as low-severity console issues
+  for (const req of [...failedRequests].slice(0, 10)) {
+    await addIssue({ title: 'Resource failed to load', severity: 'low', category: 'console', area: 'canvas',
+      description: 'A network request made by the page failed.',
+      expected: 'All resources load successfully.', actual: req,
+      steps: ['Open the app', 'Watch the network tab for a failed request'],
+      suggestion: 'Fix the missing resource or its URL so it loads.',
+      bbox: { x: 0, y: 0, width: 10, height: 10 }, actionId: null, console: [req] });
   }
 
   const report = {
