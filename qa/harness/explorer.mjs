@@ -102,7 +102,10 @@ async function record(name, area, fn, { mutate = false, skipReason = null } = {}
   }
   const rec = { id, name, area, status, durationMs: Date.now() - t0, changed, error, consoleErrors: [...currentConsoleErrors], screenshot };
   actions.push(rec);
-  console.log(`${status.toUpperCase()} ${id} ${name} (${rec.durationMs}ms)`);
+  // Live agent progress: one line per action so a human watching the run
+  // sees what the explorer did, in order, as it happens (mirrors the
+  // Activity timeline in the dashboard + report).
+  console.log(`[QA ${String(actSeq).padStart(3, '0')}/${maxActions}] ${id} ${name} [${area}] ${status} ${rec.durationMs}ms changed=${changed}${error ? ` — ${error}` : ''} shot=${screenshot}`);
   if (mutate && !skipReason) await reload();
   return rec;
 }
@@ -503,7 +506,8 @@ async function tourFrameGroup() {
     if (nodes.length < 2) throw new Error('fewer than 2 nodes');
     await nodes[0].click({ timeout: 3000 }); await sleep(200);
     await page.keyboard.down('Shift'); await nodes[1].click({ timeout: 3000 }); await page.keyboard.up('Shift');
-    await page.keyboard.press('Control+g'); await sleep(500);
+    await page.click('button[aria-label="Create group from selection"]', { timeout: 5000 }).catch(() => { throw new Error('TopBar "Create group from selection" button not found'); });
+    await sleep(800);
     await page.keyboard.press('Tab'); await sleep(400);
     await page.keyboard.press('Escape'); await sleep(300);
   }, { mutate: true });
@@ -520,6 +524,156 @@ async function tourKeyboard() {
     });
     if (actions.length >= maxActions) return;
   }
+}
+
+async function tourDefectGroup() {
+  // User-reported defect: two restored external wires sit ~47px below their
+  // sockets after Tab out of a two-Chamfer group. Wire, group (TopBar button),
+  // Tab in/out, then measure every path endpoint (getScreenCTM) vs live socket
+  // centres. Screenshots: the action screenshots (before/inside/after).
+  await record('Group: wire, create group, Tab in/out, measure restored wires', 'group', async () => {
+    const pairs = await page.evaluate(() => {
+      const nodes = [...document.querySelectorAll('.node')];
+      const idxOf = (n) => nodes.findIndex((el) => (el.querySelector('.node-title')?.textContent?.trim() || '') === n);
+      const info = (sel) => [...document.querySelectorAll(sel)]
+        .map((el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, node: el.closest('.node')?.querySelector('.node-title')?.textContent?.trim() || '' }; })
+        .filter((p) => p.w > 0 && p.x >= 0 && p.y >= 0);
+      const outs = info('[data-testid="output-socket"]'), ins = info('[data-testid="input-socket"]');
+      for (const p of [...outs, ...ins]) p.inGroup = idxOf(p.node) >= 0 && idxOf(p.node) < 2;
+      const list = [];
+      for (const o of outs.slice(0, 8)) for (const i of ins.slice(0, 10)) {
+        if (o.node === i.node) continue;
+        list.push({ out: { x: o.x, y: o.y }, inp: { x: i.x, y: i.y }, external: o.inGroup !== i.inGroup });
+        if (list.length >= 12) break;
+      }
+      return { pairs: list.sort((a, b) => Number(b.external) - Number(a.external)), nodeCount: nodes.length };
+    });
+    if (!pairs.pairs?.length || (pairs.nodeCount ?? 0) < 2) throw new Error(`fewer than 2 nodes/sockets (nodes=${pairs.nodeCount})`);
+    const count = () => page.$$eval('[data-testid="connection"]', (els) => els.length).catch(() => 0);
+    let wired = 0;
+    for (const pr of pairs.pairs) {
+      if (wired >= 2) break;
+      const before = await count();
+      await page.mouse.move(pr.out.x, pr.out.y); await page.mouse.down();
+      await page.mouse.move((pr.out.x + pr.inp.x) / 2, pr.out.y, { steps: 8 }); await page.waitForTimeout(250);
+      await page.mouse.move(pr.inp.x, pr.inp.y, { steps: 30 }); await page.waitForTimeout(300);
+      await page.mouse.up(); await page.waitForTimeout(400);
+      if ((await count()) > before) wired++;
+    }
+    if (!wired) throw new Error('could not create any wire by dragging sockets');
+    const measure = async () => page.evaluate(() => {
+      let paths = [...document.querySelectorAll('[data-testid="connection"] path.path')];
+      if (!paths.length) paths = [...document.querySelectorAll('.rete-connection path, path.connection, svg path')].filter((p) => p.getAttribute('d'));
+      const c = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+      const outs = [...document.querySelectorAll('[data-testid="output-socket"], [data-testid="collapsed-output-socket"]')].map(c);
+      const ins = [...document.querySelectorAll('[data-testid="input-socket"], [data-testid="collapsed-input-socket"]')].map(c);
+      const ts = (p, x, y) => { const pt = new DOMPoint(x, y).matrixTransform(p.getScreenCTM?p.getScreenCTM():p.getCTM()); return { x: pt.x, y: pt.y }; };
+      const near = (p, list) => list.length ? Math.min(...list.map((q) => Math.hypot(p.x - q.x, p.y - q.y))) : -1;
+      return paths.map((p) => { const nums = [...(p.getAttribute('d') ?? '').matchAll(/-?\d+\.?\d*/g)].map((m) => Number(m[0])); const s = ts(p, nums[0], nums[1]), e = ts(p, nums[nums.length - 2], nums[nums.length - 1]); return { startErr: Math.round(near(s, outs) * 10) / 10, endErr: Math.round(near(e, ins) * 10) / 10 }; });
+    });
+    const before = await measure();
+    const chamferIdx = await page.$$eval('.node', (els) => els.map((el, i) => ({ i, title: (el.querySelector('.node-title')?.textContent || '').trim() })).filter((n) => /chamfer/i.test(n.title)).slice(0, 2).map((n) => n.i)).catch(() => [0, 1]);
+    const pick = chamferIdx.length >= 2 ? chamferIdx : [0, 1];
+    const nodes = await page.$$('.node');
+    await nodes[pick[0]].click({ timeout: 3000 }); await sleep(200);
+    await page.keyboard.down('Shift'); await nodes[pick[1]].click({ timeout: 3000 }); await page.keyboard.up('Shift'); await sleep(300);
+    await page.click('button[aria-label="Create group from selection"]', { timeout: 5000 }).catch(() => { throw new Error('TopBar "Create group from selection" button not found'); });
+    await sleep(1000);
+    const afterGroup = await page.$$eval('.node', (els) => els.map((el, i) => ({ i, title: (el.querySelector('.node-title')?.textContent || '').trim() }))).catch(() => [{ i: 0, title: '' }]);
+    const groupIdx = (afterGroup.find((n) => /group/i.test(n.title))?.i ?? afterGroup.find((n) => !/chamfer|feature type|output/i.test(n.title))?.i) ?? 0;
+    const first = (await page.$$('.node'))[groupIdx ?? 0];
+    if (first) await first.click({ timeout: 3000 }).catch(() => {});
+    await sleep(200);
+    await page.keyboard.press('Tab'); await sleep(1000);
+    let insideTitles = await page.$$eval('.node', (els) => els.map((el) => (el.querySelector('.node-title')?.textContent || '').trim())).catch(() => []);
+    console.log(`group defect: after Tab titles=${JSON.stringify(insideTitles)}`);
+    if (!insideTitles.some((t) => /chamfer/i.test(t))) {
+      const retryNodes = await page.$$('.node');
+      if (retryNodes[groupIdx ?? 0]) await retryNodes[groupIdx ?? 0].click({ timeout: 3000 }).catch(() => {});
+      await page.keyboard.press('Tab'); await sleep(1000);
+      insideTitles = await page.$$eval('.node', (els) => els.map((el) => (el.querySelector('.node-title')?.textContent || '').trim())).catch(() => []);
+      console.log(`group defect: after retry Tab titles=${JSON.stringify(insideTitles)}`);
+    }
+    await page.keyboard.press('Tab'); await sleep(1000);
+    const after = await measure();
+    const maxErr = Math.max(0, ...after.map((c) => Math.max(c.startErr || 0, c.endErr || 0)));
+    console.log(`group defect: wired=${wired} before=${before.length} after=${after.length} max offset=${maxErr}px`);
+    if (maxErr > 5) {
+      await addIssue({
+        title: 'Restored wires offset after exiting node group', severity: 'high', category: 'visual', area: 'group',
+        description: `After creating a group from the two Chamfer nodes via the TopBar button and Tab in/out, restored connection endpoints miss their sockets (max offset ${maxErr}px via getScreenCTM endpoints vs socket centres). Reference probe on master a4e5d62: two external wires offset ~47-48px down.`,
+        expected: 'Every connection endpoint sits on its live socket centre (offset <= 5px) after exiting a group.',
+        actual: `Max endpoint offset ${maxErr}px across ${after.length} wires; per-wire ${JSON.stringify(after)}`,
+        steps: ['Boot the sample graph', 'Drag to create wires (incl. external around the two Chamfer nodes)', 'Select both Chamfer nodes, click TopBar "Create group from selection"', 'Select the group instance, Tab to enter, Tab to exit', 'Measure restored endpoints vs socket centres'],
+        suggestion: 'Rebuild external connections from the snapshot after positions settle on group restore; the restore currently paints paths before sockets are laid out.',
+        actionId: null, console: [],
+      });
+    }
+  }, { mutate: true });
+}
+
+async function tourDefectPalette() {
+  // User-reported defects: palette descriptors faint (opacity 0.4) and far
+  // right of names (gap 170-331px); Standard Library names lowercase.
+  // Assert contrast >= 4.5:1, gap <= 24px, readable, capitalized display
+  // while lowercase queries still match. Screenshots per query.
+  await record('Palette: chamfer/fillet descriptor contrast, adjacency and capitalization', 'palette', async () => {
+    const failures = [];
+    for (const kind of ['nodes', 'actions']) {
+      const sel = kind === 'nodes' ? '.palette' : '.actions';
+      const searchSel = kind === 'nodes' ? '.palette-search' : '.actions-search';
+      const itemSel = kind === 'nodes' ? '.palette-item' : '.actions-item';
+      const nameSel = kind === 'nodes' ? '.palette-item-name' : '.actions-item-name';
+      const metaSel = kind === 'nodes' ? '.palette-item-meta' : '.actions-item-desc';
+      await page.mouse.click(720, 860).catch(() => {}); await sleep(200);
+      await page.keyboard.press(kind === 'nodes' ? 'Shift+A' : 'F3'); await sleep(500);
+      await page.waitForSelector(sel, { timeout: 5000 }).catch(() => { throw new Error(`${kind} palette did not open`); });
+      for (const q of ['chamfer', 'fillet']) {
+        await page.fill(searchSel, q, { timeout: 3000 }); await sleep(500);
+        const items = await page.evaluate(({ itemSel, nameSel, metaSel }) => {
+          const parse = (c) => { const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(',').map(Number); return { r: p[0], g: p[1], b: p[2], a: p[3] === undefined ? 1 : p[3] }; };
+          const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+          return [...document.querySelectorAll(itemSel)].slice(0, 8).map((item, i) => {
+            const n = item.querySelector(nameSel), m = item.querySelector(metaSel);
+            if (!n || !m) return { i, skip: true };
+            const nr = n.getBoundingClientRect(), mr = m.getBoundingClientRect();
+            const cs = getComputedStyle(m);
+            const fg = parse(cs.color) || { r: 0, g: 0, b: 0, a: 1 };
+            const op = parseFloat(cs.opacity) || 1;
+            let bg = null, nd = item;
+            while (nd) { const cb = parse(getComputedStyle(nd).backgroundColor); if (cb && cb.a > 0.95) { bg = cb; break; } nd = nd.parentElement; }
+            if (!bg) bg = { r: 255, g: 255, b: 255, a: 1 };
+            const eff = { r: fg.r * op + bg.r * (1 - op), g: fg.g * op + bg.g * (1 - op), b: fg.b * op + bg.b * (1 - op) };
+            const ratio = (Math.max(lum(eff), lum(bg)) + 0.05) / (Math.min(lum(eff), lum(bg)) + 0.05);
+            return { i, name: (n.textContent || '').trim(), meta: (m.textContent || '').trim(), gap: Math.round((mr.left - nr.right) * 10) / 10, fontSize: parseFloat(cs.fontSize) || 0, opacity: op, ratio: Math.round(ratio * 100) / 100, metaWidth: Math.round(mr.width) };
+          });
+        }, { itemSel, nameSel, metaSel });
+        console.log(`palette defect ${kind}/"${q}": ${items.filter((x) => !x.skip).map((x) => `"${x.name}" gap=${x.gap} ratio=${x.ratio}`).join(' | ') || 'no items'}`);
+        for (const it of items.filter((x) => !x.skip && x.meta)) {
+          if (it.ratio < 4.5) failures.push(`descriptor contrast ${it.ratio}:1 < 4.5:1 for "${it.name}" (${kind}/"${q}")`);
+          if (it.gap > 24) failures.push(`descriptor ${Math.round(it.gap)}px right of "${it.name}" (${kind}/"${q}") — expected <= 24px`);
+          if (it.fontSize < 10 || it.metaWidth === 0) failures.push(`descriptor unreadable for "${it.name}" (${kind}/"${q}")`);
+        }
+        const named = items.filter((x) => !x.skip && new RegExp(q, 'i').test(x.name));
+        if (!named.length) failures.push(`lowercase query "${q}" matched no "${q}" item (${kind})`);
+        for (const it of named) if (!/^[A-Z]/.test(it.name)) failures.push(`standard-library name "${it.name}" displayed lowercase (${kind}/"${q}")`);
+      }
+      await page.keyboard.press('Escape'); await sleep(400);
+    }
+    if (failures.length) {
+      await addIssue({
+        title: 'Palette descriptors faint/far from names; Standard Library names lowercase', severity: 'high', category: 'accessibility', area: 'palette',
+        description: 'Searching "chamfer"/"fillet": descriptors sit far right of names at faint opacity and names render lowercase (reference: gap 170-331px, opacity 0.4).',
+        expected: 'Descriptor contrast >= 4.5:1, gap <= ~24px adjacent to the name, descriptor readable; displayed Standard Library names capitalized while lowercase queries still match.',
+        actual: `${failures.length} failure(s): ${failures.slice(0, 8).join(' | ')}`,
+        steps: ['Open Shift+A palette', 'Search "chamfer" lowercase', 'Check descriptor position/contrast and name case', 'Repeat for "fillet" and F3'],
+        suggestion: 'Store/display capitalized Standard Library names with case-insensitive search; place the descriptor adjacent to the name (gap <= 24px) and raise effective contrast to >= 4.5:1.',
+        actionId: null, console: [],
+      });
+      throw new Error(`${failures.length} palette failure(s): ${failures.slice(0, 3).join('; ')}`);
+    }
+    console.log('palette defect: PASS contrast/adjacency/capitalization');
+  });
 }
 
 async function tourSweep() {
@@ -609,7 +763,7 @@ async function main() {
     await reload().catch(() => {});
   }
 
-  const tours = [tourToolbar, tourSettings, tourPalettes, tourContextMenu, tourNodes, tourSockets, tourFrameGroup, tourKeyboard, tourSweep];
+  const tours = [tourToolbar, tourSettings, tourPalettes, tourContextMenu, tourNodes, tourSockets, tourFrameGroup, tourDefectGroup, tourDefectPalette, tourKeyboard, tourSweep];
   for (const t of tours) {
     if (actions.length >= maxActions) break;
     try { await t(); } catch (e) { console.warn(`tour ${t.name} error: ${e.message}`); }

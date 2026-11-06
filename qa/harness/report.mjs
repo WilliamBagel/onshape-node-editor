@@ -30,6 +30,12 @@ const counts = {}; for (const s of SEVS) counts[s] = summary[s] !== undefined ? 
 const totalIssues = summary.issues !== undefined ? num(summary.issues) : issues.length;
 const task = report.task && typeof report.task === 'object' ? report.task : null;
 const dur = report.durationMs ? `${(num(report.durationMs) / 1000).toFixed(1)}s` : '—';
+const actions = arr(report.actions);
+const mdTimeline = actions.length
+  ? ['## Activity timeline (agent actions, in order)', '', '| # | Action | Area | Status | Duration | Changed | Screenshot |', '|---|---|---|---|---|---|---|',
+     ...actions.map((a) => `| ${a.id ?? ''} | ${String(a.name ?? '').replace(/\|/g, '\\|')} | ${a.area ?? ''} | ${a.status ?? ''} | ${Number.isFinite(Number(a.durationMs)) ? `${(Number(a.durationMs) / 1000).toFixed(1)}s` : '—'} | ${a.changed ? 'yes' : 'no'} | ${a.screenshot ? `![${a.id ?? 'action'}](${a.screenshot})` : '—'}${a.error ? ` — ${String(a.error).replace(/\|/g, '\\|').slice(0, 120)}` : ''} |`),
+     ''].join('\n')
+  : '';
 const mdIssues = issues.map((i, k) => [
   `## ${k + 1}. [${i.severity ?? '?'}] ${i.title ?? '(untitled)'} (${i.area ?? '?'}/${i.category ?? '?'})`, '',
   i.description ?? '',
@@ -40,6 +46,6 @@ const mdIssues = issues.map((i, k) => [
   ...(arr(i.console).length ? ['', 'Console:', '```', ...arr(i.console).map((c) => String(c?.message ?? c)), '```'] : []),
   ...(i.suggestion ? ['', `**Suggested fix:** ${i.suggestion}`] : []),
 ].join('\n')).join('\n\n');
-const md = `# UI explorer report\n\n- URL: ${report.url ?? '—'}\n- Generated: ${report.generatedAt ?? '—'}\n- Duration: ${dur}\n- Issues: ${totalIssues} (critical ${counts.critical}, high ${counts.high}, medium ${counts.medium}, low ${counts.low})\n- Actions: ${num(summary.actions, arr(report.actions).length)}\n- Task: ${task ? `${task.name ?? task.id ?? ''} — ${task.status ?? ''}${task.error ? ` (${task.error})` : ''}` : 'none'}\n${task ? `\nTask steps:\n${arr(task.steps).map((s) => `- [${s.status ?? 'skipped'}] ${s.label ?? ''}${s.detail ? ` — ${s.detail}` : ''}`).join('\n') || '- (none)'}` : ''}\n\n${mdIssues || 'No issues found.'}\n`;
+const md = `# UI explorer report\n\n- URL: ${report.url ?? '—'}\n- Generated: ${report.generatedAt ?? '—'}\n- Duration: ${dur}\n- Issues: ${totalIssues} (critical ${counts.critical}, high ${counts.high}, medium ${counts.medium}, low ${counts.low})\n- Actions: ${num(summary.actions, arr(report.actions).length)}\n- Task: ${task ? `${task.name ?? task.id ?? ''} — ${task.status ?? ''}${task.error ? ` (${task.error})` : ''}` : 'none'}\n${task ? `\nTask steps:\n${arr(task.steps).map((s) => `- [${s.status ?? 'skipped'}] ${s.label ?? ''}${s.detail ? ` — ${s.detail}` : ''}`).join('\n') || '- (none)'}` : ''}\n${mdTimeline ? `\n${mdTimeline}\n` : ''}\n${mdIssues || 'No issues found.'}\n`;
 writeFileSync(path.join(outDir, 'report.md'), md);
 console.log(`report: wrote ${path.join(outDir, 'report.md')} (${issues.length} issue(s))`);

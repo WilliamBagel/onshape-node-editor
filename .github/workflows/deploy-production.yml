@@ -107,6 +107,11 @@ jobs:
           QA_URL: http://127.0.0.1:5173/onshape-node-editor/
         run: pnpm run qa:node-chrome
 
+      - name: Defect checks (group wires + palette; advisory)
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:defects -- --advisory --out tmp/qa-runs/defects-${{ github.run_id }}
+
       - name: Explore the UI and build the QA dashboard
         run: |
           pnpm run explore:ui -- \

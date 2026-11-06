@@ -81,6 +81,26 @@ function main(): void {
       const rows = arr(task.steps).map((s: any) => `<tr><td>${esc(s.label ?? '')}</td><td><span class="status status-${esc(s.status ?? 'skipped')}">${esc(s.status ?? 'skipped')}</span></td><td>${esc(s.detail ?? '')}</td></tr>`).join('');
       return `<section class="task"><h2>Task: ${esc(task.name ?? task.id ?? 'Task')} <span class="status status-${esc(task.status ?? 'skipped')}">${esc(task.status ?? 'skipped')}</span></h2>${task.error ? `<p class="error">${esc(task.error)}</p>` : ''}${rows ? `<table><thead><tr><th>Step</th><th>Status</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table>` : '<p class="muted">No steps recorded.</p>'}</section>`;
     };
+    // Activity / agent timeline: what the explorer did, in order. Thumbnail is
+    // the action screenshot; broken images degrade to a placeholder.
+    const timelineSection = (): string => {
+      const items = arr(report.actions);
+      if (!items.length) return `<section class="timeline"><h2>Activity timeline</h2><p class="muted">No actions were recorded for this run.</p></section>`;
+      const rows = items.map((a: any) => {
+        const src = a.screenshot;
+        const thumb = src
+          ? `<figure class="tl-shot"><img decoding="async" loading="lazy" src="${esc(resolveRel(reportUrl, src))}" alt="Screenshot for ${esc(a.id ?? 'action')}"><figcaption>${esc(src)}</figcaption></figure>`
+          : `<div class="img-placeholder" aria-label="Screenshot not available">Screenshot not available</div>`;
+        return `<article class="tl-row" data-search="${esc([a.id, a.name, a.area, a.status].filter(Boolean).join(' ').toLowerCase())}">
+          ${thumb}
+          <div class="tl-body"><div class="badges"><span class="badge">${esc(a.id ?? '')}</span><span class="badge">${esc(a.area ?? '')}</span><span class="badge status-${esc(a.status ?? 'skipped')}">${esc(a.status ?? '')}</span></div>
+          <h3>${esc(a.name ?? '(action)')}</h3>
+          <p class="meta">Duration: ${a.durationMs != null ? `${(num(a.durationMs) / 1000).toFixed(1)}s` : '—'} &middot; Changed: ${a.changed ? 'yes' : 'no'}</p>
+          ${a.error ? `<p class="error">${esc(a.error)}</p>` : ''}
+          </div></article>`;
+      }).join('');
+      return `<section class="timeline"><h2>Activity timeline — what the agent did (${items.length} action${items.length === 1 ? '' : 's'}, in order)</h2><div class="timeline-list">${rows}</div></section>`;
+    };
     const chipGroup = (name: string, values: string[]): string =>
       values.map((v) => `<button type="button" class="chip${v === 'all' ? ' on' : ''}" data-filter-group="${name}" data-filter-value="${esc(v)}" aria-pressed="${v === 'all'}">${v === 'all' ? 'All' : esc(v)}</button>`).join('');
 
@@ -89,10 +109,11 @@ function main(): void {
     <section class="legend"><b>How to read this:</b> issues are sorted critical → low, then area and title. “Annotated” means the red-box screenshot; otherwise the raw screenshot is shown. Use the filters/search above to narrow the list. Report loaded from <code>${esc(reportUrl)}</code> (override with <code>?report=&lt;url&gt;</code>).</section>
     <div class="filters"><div class="group"><span>Severity</span>${chipGroup('severity', ['all', ...SEVS])}</div>${cats.length ? `<div class="group"><span>Category</span>${chipGroup('category', ['all', ...cats])}</div>` : ''}<label class="search">Search <span class="search-wrap"><input id="q" type="search" placeholder="Filter issues…" autocomplete="off" aria-label="Search issues"><button type="button" id="clear-q" class="clear-q" aria-label="Clear search" hidden>×</button></span></label><span id="result-count" class="result-count" aria-live="polite">Showing ${issues.length} of ${issues.length} issues</span><button type="button" class="chip" id="clear-all">Clear all</button></div>
     ${issues.length ? `<section class="issue-list" id="issues">${issues.map(issueCard).join('')}</section><div class="empty" id="no-match" hidden><p>No issues match the current filters.</p><button type="button" class="chip" id="clear-filters">Clear filters</button></div>` : `<p class="empty">No issues found in this run. 🎉</p>`}
+    ${timelineSection()}
     ${taskSection()}`;
 
     // Broken images degrade to the placeholder (no broken-image icon).
-    app.querySelectorAll('.card img').forEach((img) => {
+    app.querySelectorAll('.card img, .tl-shot img').forEach((img) => {
       img.addEventListener('error', () => {
         const ph = document.createElement('div');
         ph.className = 'img-placeholder'; ph.setAttribute('aria-label', 'Screenshot not available'); ph.textContent = 'Screenshot not available';
