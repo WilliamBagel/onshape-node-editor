@@ -31,7 +31,7 @@ describe("createNodeFromCatalogEntry", () => {
   it("creates a CustomFeatureNode for a statement entry with a synthesized spec", () => {
     const node = createNodeFromCatalogEntry(statementEntry);
     expect(node).toBeInstanceOf(CustomFeatureNode);
-    expect((node as CustomFeatureNode).getTitle()).toBe("box");
+    expect((node as CustomFeatureNode).getTitle()).toBe("Box");
     expect(synthesizeFeatureSpec(statementEntry).parameters[0].btType).toBe("BTParameterSpecQuantity-173");
   });
   it("returns null for non-nodeable entries", () => {
@@ -115,12 +115,16 @@ describe("ranked search (#73)", () => {
 
   it("ranks name-prefix above category/description matches", () => {
     const found = searchPaletteInsertables(items, "cross");
-    expect(found[0].name).toBe("cross");
+    // The catalog "Cross" (capitalized display) outranks description-only hits;
+    // the utility "cross" keeps its deliberately lowercase FS-name display and
+    // may tie on a synthetic fixture that includes both.
+    expect(found[0].name.toLowerCase()).toBe("cross");
+    expect(found.map(i => i.name)).toContain("Cross");
   });
 
   it("matches category and description; empty term returns all", () => {
-    expect(searchPaletteInsertables(items, "part")[0].name).toBe("box");
-    expect(searchPaletteInsertables(items, "cross product")[0].name).toBe("cross");
+    expect(searchPaletteInsertables(items, "part")[0].name).toBe("Box");
+    expect(searchPaletteInsertables(items, "cross product")[0].name).toBe("Cross");
     expect(searchPaletteInsertables(items, "")).toHaveLength(items.length);
     expect(searchPaletteInsertables(items, "zzz")).toEqual([]);
   });
@@ -150,7 +154,8 @@ describe("standard-library generic definitions", () => {
     expect(nodeableEntries(defaultCatalog.entries)).toContain(chamfer);
     const items = buildPaletteInsertables(defaultCatalog.entries);
     const found = searchPaletteInsertables(items, "chamfer");
-    expect(found[0].name).toBe("chamfer");
+    expect(found[0].name).toBe("Chamfer");
+    expect(found[0].entry?.name).toBe("chamfer");
     expect(found[0].meta).not.toContain("generic definition");
     const node = createNodeFromCatalogEntry(chamfer!, cachedSpecResolver) as CustomFeatureNode;
     expect(node).toBeInstanceOf(CustomFeatureNode);
@@ -168,6 +173,7 @@ describe("standard-library generic definitions", () => {
   it("opChamfer synthesizes its typed definition parameters", () => {
     const node = createNodeFromCatalogEntry(opChamfer!) as CustomFeatureNode;
     expect(node.genericDefinition).toBe(true);
+    expect(node.getTitle()).toBe("OpChamfer");
     expect(synthesizeFeatureSpec(opChamfer!).parameters.map(p => p.parameterId)).toContain("entities");
     expect(node.inputs.entities).toBeDefined();
   });
@@ -181,6 +187,6 @@ describe("standard-library generic definitions", () => {
     expect(filterCatalogEntries([a, b], "math").map(e => e.name)).toEqual(["alpha", "zeta"]);
     const items = buildPaletteInsertables([a, b]);
     const catalogHits = searchPaletteInsertables(items, "math").filter(i => i.entry != null);
-    expect(catalogHits.map(i => i.name)).toEqual(["alpha", "zeta"]);
+    expect(catalogHits.map(i => i.name)).toEqual(["Alpha", "Zeta"]);
   });
 });
