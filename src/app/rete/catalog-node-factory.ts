@@ -17,6 +17,7 @@
  */
 import type { BTFeatureSpec129 } from "onshape-typescript-fetch";
 import type { CatalogEntry } from "../onshape/catalog/types";
+import { cachedFeatureTypes } from "../onshape/feature-spec-cache";
 import { UTILITY_BY_ID, type UtilityOverride } from "../onshape/catalog/utility-overrides";
 import type { FeatureSpecReference } from "./serialization/graph-schema-types";
 import { CustomFeatureNode } from "./nodes/customfeaturenode";
@@ -280,12 +281,13 @@ export function buildPaletteInsertables(
   entries: readonly CatalogEntry[],
   groupDefinitions: readonly PaletteGroupDefinitionLike[] = [],
 ): PaletteInsertable[] {
+  const cachedTypes = new Set(cachedFeatureTypes());
   const items: PaletteInsertable[] = nodeableEntries(entries).map(entry => ({
     key: entry.key,
     name: entry.name,
     category: entry.category,
     description: entry.description ?? "",
-    meta: entry.utilityId != null ? "utility" : entry.genericDefinition === true ? "statement · generic definition" : entry.kind,
+    meta: entry.utilityId != null ? "utility" : entry.genericDefinition === true && !cachedTypes.has(entry.name) ? "statement · generic definition" : entry.kind,
     entry,
   }));
   const coveredUtilityIds = new Set(items.map(i => i.utilityId ?? i.entry?.utilityId).filter((id): id is string => id != null));

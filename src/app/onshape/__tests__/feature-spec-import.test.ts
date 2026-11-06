@@ -21,7 +21,7 @@ import {
 
 import { makeSpecResolver } from '../feature-spec-cache';
 import { defaultCatalog } from '../catalog/spec-catalog';
-import { createNodeFromCatalogEntry } from '../../rete/catalog-node-factory';
+import { buildPaletteInsertables, createNodeFromCatalogEntry } from '../../rete/catalog-node-factory';
 import { CustomFeatureNode } from '../../rete/nodes/customfeaturenode';
 
 /** A realistic raw BTFeatureSpec for chamfer (entities + radius + width). */
@@ -219,6 +219,15 @@ describe('end-to-end import with mock HTTP', () => {
       client,
       writeCacheFile: async () => {},
     })).rejects.toThrow(/No Feature Studio elements/);
+  });
+});
+
+describe('palette metadata with cached real specs', () => {
+  it('does not label a cached statement as a generic definition', () => {
+    const items = buildPaletteInsertables(defaultCatalog.entries);
+    const chamfer = items.find((item) => item.name === 'chamfer');
+    expect(chamfer).toBeDefined();
+    expect(chamfer?.meta).not.toContain('generic definition');
   });
 });
 

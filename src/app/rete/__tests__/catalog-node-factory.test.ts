@@ -4,6 +4,7 @@ import { ARRAY_NODE_VARIANTS, buildPaletteInsertables, createNodeFromCatalogEntr
 import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { FunctionNode } from "../nodes/functionnode";
 import { defaultCatalog } from "../../onshape/catalog/spec-catalog";
+import { cachedSpecResolver } from "../../onshape/feature-spec-cache";
 import type { CatalogEntry } from "../../onshape/catalog/types";
 
 const valueEntry: CatalogEntry = {
@@ -150,11 +151,12 @@ describe("standard-library generic definitions", () => {
     const items = buildPaletteInsertables(defaultCatalog.entries);
     const found = searchPaletteInsertables(items, "chamfer");
     expect(found[0].name).toBe("chamfer");
-    expect(found[0].meta).toContain("generic definition");
-    const node = createNodeFromCatalogEntry(chamfer!) as CustomFeatureNode;
+    expect(found[0].meta).not.toContain("generic definition");
+    const node = createNodeFromCatalogEntry(chamfer!, cachedSpecResolver) as CustomFeatureNode;
     expect(node).toBeInstanceOf(CustomFeatureNode);
-    expect(node.genericDefinition).toBe(true);
-    expect(node.getTitle()).toBe("chamfer");
+    expect(node.genericDefinition).toBe(false);
+    expect(node.inputs.entities).toBeDefined();
+    expect(node.getTitle()).toBe("Chamfer");
     expect(node.getFeaturescript({ context: "context", id: "id" })).toContain("chamfer(context, id,");
     // context/id sockets exist; the generic map has no synthesized children
     expect(node.inputs.context).toBeDefined();
