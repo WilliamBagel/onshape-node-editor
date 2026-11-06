@@ -92,7 +92,7 @@ describe('auth header construction', () => {
     expect(buildAuthHeader('ak', 'sk')).toBe(`Basic ${Buffer.from('ak:sk', 'utf8').toString('base64')}`);
   });
   it('sends the auth header on requests', async () => {
-    const url = 'https://cad.onshape.com/api/v10/documents/d/d1/w/w1/elements';
+    const url = 'https://cad.onshape.com/api/v16/documents/d/d1/w/w1/elements';
     const { fn, calls } = fakeFetch({ [url]: [] });
     const client = makeOnshapeClient({ accessKey: 'ak', secretKey: 'sk', fetchImpl: fn });
     await client.getJson('/documents/d/d1/w/w1/elements');
@@ -109,12 +109,12 @@ describe('auth header construction', () => {
 });
 
 describe('API version/base', () => {
-  it('defaults to the versioned v10 API base', () => {
-    expect(resolveApiBase({})).toBe('https://cad.onshape.com/api/v10');
+  it('defaults to the versioned v16 API base', () => {
+    expect(resolveApiBase({})).toBe('https://cad.onshape.com/api/v16');
   });
   it('honors a company-stack base and does not duplicate the version', () => {
-    expect(resolveApiBase({ ONSHAPE_API_BASE: 'https://acme.onshape.com/api/' })).toBe('https://acme.onshape.com/api/v10');
-    expect(resolveApiBase({ ONSHAPE_API_BASE: 'https://acme.onshape.com/api/v10' })).toBe('https://acme.onshape.com/api/v10');
+    expect(resolveApiBase({ ONSHAPE_API_BASE: 'https://acme.onshape.com/api/' })).toBe('https://acme.onshape.com/api/v16');
+    expect(resolveApiBase({ ONSHAPE_API_BASE: 'https://acme.onshape.com/api/v16' })).toBe('https://acme.onshape.com/api/v16');
     expect(resolveApiBase({ ONSHAPE_API_BASE: 'https://acme.onshape.com', ONSHAPE_API_VERSION: 'v11' })).toBe('https://acme.onshape.com/api/v11');
   });
 });
@@ -133,7 +133,7 @@ describe('element filtering', () => {
     ]);
   });
   it('lists elements through the client', async () => {
-    const url = 'https://cad.onshape.com/api/v10/documents/d/d1/w/w1/elements';
+    const url = 'https://cad.onshape.com/api/v16/documents/d/d1/w/w1/elements';
     const { fn } = fakeFetch({ [url]: [{ elementType: 'FEATURESTUDIO', id: 'e1' }] });
     const client = makeOnshapeClient({ accessKey: 'a', secretKey: 'b', fetchImpl: fn });
     expect(await listFeatureStudioElements(client, { did: 'd1', wvm: 'w', wvmid: 'w1' })).toEqual([
@@ -187,7 +187,7 @@ describe('missing config', () => {
 
 describe('end-to-end import with mock HTTP', () => {
   it('writes a deterministic cache keyed by featureType', async () => {
-    const base = 'https://cad.onshape.com/api/v10';
+    const base = 'https://cad.onshape.com/api/v16';
     const { fn } = fakeFetch({
       [`${base}/documents/d/d1/w/w1/elements`]: [
         { elementType: 'FEATURESTUDIO', id: 'e2', name: 'Two' },
@@ -211,7 +211,7 @@ describe('end-to-end import with mock HTTP', () => {
     expect(written).not.toContain('a:b');
   });
   it('fails when no Feature Studio elements exist', async () => {
-    const url = 'https://cad.onshape.com/api/v10/documents/d/d1/w/w1/elements';
+    const url = 'https://cad.onshape.com/api/v16/documents/d/d1/w/w1/elements';
     const { fn } = fakeFetch({ [url]: [{ elementType: 'PARTSTUDIO', id: 'e9' }] });
     const client = makeOnshapeClient({ accessKey: 'a', secretKey: 'b', fetchImpl: fn });
     await expect(runImport({
