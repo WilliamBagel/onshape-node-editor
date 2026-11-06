@@ -13,7 +13,8 @@
 //   GET /documents/d/{did}/{wvm}/{wvmid}/elements          (DocumentApi.getElementsInDocument)
 //   GET /featurestudios/d/{did}/{wvm}/{wvmid}/e/{eid}/featurespecs
 //        (FeatureStudioApi.getFeatureStudioSpecs — path params, not query params)
-// Auth: HTTP Basic base64(accessKey:secretKey), base https://cad.onshape.com/api.
+// Auth: HTTP Basic base64(accessKey:secretKey); base defaults to
+// https://cad.onshape.com/api/v10 and is configurable for company stacks.
 //
 // Secrets are never printed, logged, or written to the cache. All failure
 // messages name the missing variable/file without echoing any value.
@@ -25,7 +26,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const ONSHAPE_API_BASE = 'https://cad.onshape.com/api';
+export const ONSHAPE_API_ROOT = 'https://cad.onshape.com/api';
+export const ONSHAPE_API_VERSION = 'v10';
+export const ONSHAPE_API_BASE = `${ONSHAPE_API_ROOT}/${ONSHAPE_API_VERSION}`;
 export const QA_ENV_FILE = '.env.qa.local';
 export const CACHE_RELATIVE_PATH = 'src/app/onshape/feature-specs.json';
 
@@ -74,6 +77,7 @@ export function loadQaConfig(env) {
     accessKey: String(env.ONSHAPE_ACCESS_KEY).trim(),
     secretKey: String(env.ONSHAPE_SECRET_KEY).trim(),
     sourceLabel: env.ONSHAPE_STD_SOURCE_LABEL?.trim() || 'Onshape Standard Library (copied document)',
+    apiBase: resolveApiBase(env),
     ...target,
   };
 }
@@ -139,6 +143,17 @@ export function buildAuthHeader(accessKey, secretKey) {
   return `Basic ${Buffer.from(`${accessKey}:${secretKey}`, 'utf8').toString('base64')}`;
 }
 
+/** Resolve the versioned API base, including company-stack support. */
+export function resolveApiBase(env = {}) {
+  let base = String(env.ONSHAPE_API_BASE ?? ONSHAPE_API_ROOT).trim().replace(/\/+$/, '');
+  if (!/\/api(\/v\d+)?$/.test(base)) base += '/api';
+  if (!/\/v\d+$/.test(base)) {
+    const version = String(env.ONSHAPE_API_VERSION ?? ONSHAPE_API_VERSION).trim();
+    base += `/${version.replace(/^\/+|\/+$/g, '')}`;
+  }
+  return base;
+}
+
 /** Absolute URL for an API path (paths in this module start with `/`). */
 export function apiUrl(basePath, path) {
   return `${String(basePath).replace(/\/+$/, '')}${path}`;
@@ -160,7 +175,8 @@ export function makeOnshapeClient({ accessKey, secretKey, basePath = ONSHAPE_API
         headers: { Authorization: authorization, Accept: 'application/json' },
       });
       if (!res.ok) {
-        throw new Error(`Onshape API request failed: GET ${path} -> HTTP ${res.status}. Check the document URL, workspace/version ids, and that the API key has access to the document.`);
+        const origin = new URL(apiUrl(basePath, path)).origin;
+        throw new Error(`Onshape API request failed: GET ${path} -> HTTP ${res.status} at ${origin}. Check the API base/version, the document URL, the workspace/version ids, and that the API key belongs to the same Onshape stack as the document.`);
       }
       return res.json();
     },
@@ -289,7 +305,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     );
   }
   const config = loadQaConfig(parseEnvFile(envText));
-  const client = makeOnshapeClient({ accessKey: config.accessKey, secretKey: config.secretKey });
+  const client = makeOnshapeClient({ accessKey: config.accessKey, secretKey: config.secretKey, basePath: config.apiBase });
   const outPath = join(root, CACHE_RELATIVE_PATH);
   const cache = await runImport({
     config,
