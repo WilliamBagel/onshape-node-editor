@@ -26,11 +26,13 @@ function realMenuItems() {
 }
 
 describe("stdlib search (chamfer)", () => {
-  it("palette search finds chamfer first with the generic-definition meta", () => {
+  it("palette search finds chamfer first with the statement meta", () => {
     const items = buildPaletteInsertables(defaultCatalog.entries);
     const found = searchPaletteInsertables(items, "chamfer");
-    expect(found[0].name).toBe("chamfer");
-    expect(found[0].meta).toContain("generic definition");
+    expect(found[0].name).toBe("Chamfer");
+    expect(found[0].entry?.name).toBe("chamfer");
+    // Cached real spec: meta is the bare kind, not the generic warning.
+    expect(found[0].meta).toBe("statement");
     expect(createNodeFromCatalogEntry(found[0].entry!)).toBeInstanceOf(CustomFeatureNode);
   });
 

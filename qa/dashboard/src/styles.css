@@ -30,6 +30,11 @@ h1{font-size:20px;line-height:1.2;margin:0 0 4px}h2{font-size:14px;margin:28px 0
 .result-count{font-size:12px;color:var(--ink2);min-width:140px}
 .issue-list{display:grid;gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:6px;display:grid;grid-template-columns:minmax(240px,340px) 1fr;gap:16px;padding:14px}
+.timeline{margin:28px 0 8px}.timeline-list{display:grid;gap:10px}
+.tl-row{background:var(--card);border:1px solid var(--line);border-radius:6px;display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:14px;padding:12px}
+.tl-shot{margin:0}.tl-shot img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:4px}
+.tl-shot figcaption{font-size:11px;color:var(--ink2);margin-top:4px;word-break:break-all}
+.tl-body h3{margin:4px 0 6px}
 .shot{margin:0}.shot img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:4px}
 .shot figcaption{font-size:11px;color:var(--ink2);margin-top:4px;word-break:break-all}
 .img-placeholder{border:1px dashed var(--line);border-radius:4px;color:var(--ink2);font-size:12px;padding:28px 12px;text-align:center}

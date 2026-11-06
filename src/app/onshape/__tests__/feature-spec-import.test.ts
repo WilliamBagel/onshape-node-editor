@@ -225,7 +225,7 @@ describe('end-to-end import with mock HTTP', () => {
 describe('palette metadata with cached real specs', () => {
   it('does not label a cached statement as a generic definition', () => {
     const items = buildPaletteInsertables(defaultCatalog.entries);
-    const chamfer = items.find((item) => item.name === 'chamfer');
+    const chamfer = items.find((item) => item.name === 'Chamfer');
     expect(chamfer).toBeDefined();
     expect(chamfer?.meta).not.toContain('generic definition');
   });
@@ -274,6 +274,6 @@ describe('factory resolution with cached real specs', () => {
     const resolveSpec = makeSpecResolver({ ...fixtureCache, specs: {} } as never);
     const node = createNodeFromCatalogEntry(chamferEntry!, resolveSpec) as CustomFeatureNode;
     expect(node.genericDefinition).toBe(true);
-    expect(node.getTitle()).toBe('chamfer');
+    expect(node.getTitle()).toBe('Chamfer');
   });
 });

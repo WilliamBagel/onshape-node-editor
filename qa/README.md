@@ -27,7 +27,8 @@ pnpm run explore:ui -- --url http://localhost:5173/onshape-node-editor/ --out tm
 pnpm run build:qa-dashboard          # -> dist/qa-dashboard
 pnpm run smoke:qa-dashboard          # http + Playwright, sample report
 pnpm run qa:node-chrome              # node chrome regression check (needs a dev server; QA_URL optional)
-pnpm run qa:report -- --report tmp/qa-runs/<id>/report.json --out qa/runs/<id>   # report.md
+pnpm run qa:defects -- --url http://127.0.0.1:5173/onshape-node-editor/   # group-wire + palette defect checks (exits 1 on defects; --advisory to stay green)
+pnpm run qa:report -- --report tmp/qa-runs/<id>/report.json --out qa/runs/<id>   # report.md (includes the Activity timeline)
 pnpm run qa:review -- --report tmp/qa-runs/<id>/report.json   # -> qa/runs/<id>/review-packet.md
 ```
 
@@ -49,6 +50,44 @@ clear, `Showing N of M`, Clear all / Clear filters, images (broken -> placeholde
 
 Serve locally: `pnpm exec vite preview --config qa/dashboard/vite.config.ts` or any
 static server over `dist/qa-dashboard` plus a `data/` folder.
+
+## Watching the agent run
+
+- **Live console:** `explorer.mjs` and `defect-checks.mjs` print one line per
+  action as it happens, e.g.
+  `[QA 012/80] act-012 Group: wire, create group, Tab in/out … [group] failed 412ms changed=true shot=screenshots/actions/012-….png`.
+  That is the whole tour in order — if a step fails, the line says why; the
+  `PASS` / `FAIL` / `ISSUE` lines underneath give the human-readable detail.
+- **Afterwards:** open the dashboard (`dist/qa-dashboard` + `data/report.json`
+  as below). Below the issue cards, the **Activity timeline** lists every
+  action in order: action id, human label, area, status, duration, changed,
+  and the action screenshot thumbnail. `qa:report` (`report.md`) carries the
+  same timeline as a markdown table.
+- **Where files live:** `tmp/qa-runs/<id>/report.json` + `screenshots/actions/…`
+  + `screenshots/issues/…` (only `report.json` + PNGs — never HTML). The
+  dashboard is the Vite app; `qa/runs/<id>/review-packet.md` is the optional
+  vision-review packet. In CI the same layout is copied to `dist/app/qa/` and
+  the run dir is uploaded as an artifact. Live site:
+  `https://williambagel.github.io/onshape-node-editor/qa/`.
+
+## Defect checks (`qa:defects`, also inside `explore:ui`)
+
+Three user-reported defects, each filed as an issue with screenshots — never
+skipped, and exits 1 when found (pass `--advisory` to report without failing):
+
+1. **Group restored wires:** with real wires around the two Chamfer nodes, TopBar
+   *Create group from selection*,
+   `Tab` in / out, then every restored `path.path` endpoint (`getScreenCTM`) is
+   measured against its live socket centre. Offset > 5px (master probe saw
+   ~47–48px down on external wires) files *Restored wires offset after
+   exiting node group*, with before/inside/after screenshots.
+2. **Palette descriptors:** search `chamfer` / `fillet` (Shift+A and F3).
+   Each `.palette-item-meta` / `.actions-item-desc` must have computed
+   contrast ≥ 4.5:1, gap ≤ 24px from the name (not far-right), and be
+   readable. Failures file *Palette descriptors faint/far from names*.
+3. **Standard Library case:** the same lowercase searches must return the
+   match while its displayed name is capitalized (`Chamfer`, not `chamfer`).
+   Violations join the palette issue above.
 
 ## Review packet (free subagents)
 
