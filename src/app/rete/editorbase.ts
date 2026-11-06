@@ -720,14 +720,18 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         for (const node of graph.nodes) {
             await editor.addNode(node);
         }
-        for (const connection of graph.connections) {
-            await editor.addConnection(connection);
-        }
+        // Place nodes before creating their connections. rete-render-utils
+        // snapshots socket centres when a connection is added; adding the
+        // connections first left every restored wire at the node's
+        // default/pre-translation position until a drag forced a re-render.
         for (const node of graph.nodes) {
             const position = graph.positions[node.id];
             if (position != null) {
                 await area.translate(node.id, position);
             }
+        }
+        for (const connection of graph.connections) {
+            await editor.addConnection(connection);
         }
         await nodeOrder.setOrder(graph.nodeOrder);
         // Serialized sizes are model sizes and can be stale against the
@@ -740,6 +744,19 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             if (node instanceof FrameNode) {
                 await scopes.update(node.id);
             }
+        }
+        // Repaint every restored connection from settled socket geometry
+        // (node sizes, expanded controls and fonts can change after
+        // addConnection). recalcAll emits the per-socket updates that the
+        // connection views listen to; without it a restored wire can stay
+        // offset until a node drag re-renders it.
+        if (typeof document !== "undefined") {
+            if (typeof requestAnimationFrame === "function") {
+                await new Promise<void>((resolve) => {
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+                });
+            }
+            await connection.socketPositionWatcher.recalcAll();
         }
         // Old documents may carry collapsed frames; `FrameNode.fromJSON`
         // already normalized them to expanded, so descendants load visible.
