@@ -1,7 +1,7 @@
 // node-chrome-check: browser regression check for node chrome fixes. Drives real UI (mouse drag to wire sockets, map expand does NOT
 // apply to the wired pairs here so sockets survive, node collapse) and
 // measures rendered geometry — connection endpoints vs live socket centers
-// (screen px, path endpoint projected via getCTM), title weight, quantity
+// (screen px, path endpoint projected via getScreenCTM), title weight, quantity
 // font, caret offset, collapsed strip layout.
 // Writes measurements + screenshots to tmp/qa-nodechrome/.
 //
@@ -45,7 +45,8 @@ async function measureConnections() {
         const outs = outSockets.map(center);
         const ins = inSockets.map(center);
         const toScreen = (pathEl, x, y) => {
-            const pt = new DOMPoint(x, y).matrixTransform(pathEl.getCTM());
+            const m = pathEl.getScreenCTM ? pathEl.getScreenCTM() : pathEl.getCTM();
+            const pt = new DOMPoint(x, y).matrixTransform(m);
             return { x: pt.x, y: pt.y };
         };
         const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
