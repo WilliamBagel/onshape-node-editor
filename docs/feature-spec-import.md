@@ -25,6 +25,8 @@ feature type is not cached (`src/app/onshape/feature-spec-cache.ts`).
    | `ONSHAPE_STD_WVM` | Optional workspace/version kind override (`w`, `v`, `m`) |
    | `ONSHAPE_STD_WVMID` | Optional workspace/version/microversion id (needed for bare document ids) |
    | `ONSHAPE_STD_SOURCE_LABEL` | Optional `source` label recorded in the cache |
+   | `ONSHAPE_API_VERSION` | API version segment, default `v10` |
+   | `ONSHAPE_API_BASE` | API base, default `https://cad.onshape.com/api`; set the company-stack host if the document lives there |
 
    `.env.qa.local` is gitignored. Never commit it; the importer never
    prints or writes credential values.
@@ -50,8 +52,8 @@ feature type is not cached (`src/app/onshape/feature-spec-cache.ts`).
   `FEATURESTUDIO` tabs.
 - Fetches `getFeatureStudioSpecs` per element via
   `GET /featurestudios/d/{did}/{wvm}/{wvmid}/e/{eid}/featurespecs`
-  (base `https://cad.onshape.com/api`, Basic `base64(accessKey:secretKey)`
-  auth — paths verified against
+  (base `https://cad.onshape.com/api/v10` by default, configurable for
+  company stacks; Basic `base64(accessKey:secretKey)` auth — paths verified against
   `node_modules/onshape-typescript-fetch/apis/`).
 - Writes a deterministic cache keyed by `featureType` (element ids
   processed in ascending order, duplicate types resolved first-wins,
@@ -65,7 +67,7 @@ feature type is not cached (`src/app/onshape/feature-spec-cache.ts`).
 - Document URL without a workspace/version id and no `ONSHAPE_STD_WVMID`:
   error asking for one.
 - No Feature Studio elements: error naming the document target.
-- Non-2xx API responses: error with status and path only.
+- Non-2xx API responses: error with status, path and API origin. A 401 means the key is not valid on that stack; a 403 means the key authenticated but cannot see the document. Regenerate the key on the same stack as the document and check its permissions.
 
 ## Tests
 
