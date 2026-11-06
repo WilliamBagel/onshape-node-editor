@@ -14,7 +14,7 @@
 //   GET /featurestudios/d/{did}/{wvm}/{wvmid}/e/{eid}/featurespecs
 //        (FeatureStudioApi.getFeatureStudioSpecs — path params, not query params)
 // Auth: HTTP Basic base64(accessKey:secretKey); base defaults to
-// https://cad.onshape.com/api/v10 and is configurable for company stacks.
+// https://cad.onshape.com/api/v16 and is configurable for company stacks.
 //
 // Secrets are never printed, logged, or written to the cache. All failure
 // messages name the missing variable/file without echoing any value.
@@ -27,7 +27,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ONSHAPE_API_ROOT = 'https://cad.onshape.com/api';
-export const ONSHAPE_API_VERSION = 'v10';
+export const ONSHAPE_API_VERSION = 'v16';
 export const ONSHAPE_API_BASE = `${ONSHAPE_API_ROOT}/${ONSHAPE_API_VERSION}`;
 export const QA_ENV_FILE = '.env.qa.local';
 export const CACHE_RELATIVE_PATH = 'src/app/onshape/feature-specs.json';

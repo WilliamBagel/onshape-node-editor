@@ -25,7 +25,7 @@ feature type is not cached (`src/app/onshape/feature-spec-cache.ts`).
    | `ONSHAPE_STD_WVM` | Optional workspace/version kind override (`w`, `v`, `m`) |
    | `ONSHAPE_STD_WVMID` | Optional workspace/version/microversion id (needed for bare document ids) |
    | `ONSHAPE_STD_SOURCE_LABEL` | Optional `source` label recorded in the cache |
-   | `ONSHAPE_API_VERSION` | API version segment, default `v10` |
+   | `ONSHAPE_API_VERSION` | API version segment, default `v16` |
    | `ONSHAPE_API_BASE` | API base, default `https://cad.onshape.com/api`; set the company-stack host if the document lives there |
 
    `.env.qa.local` is gitignored. Never commit it; the importer never
@@ -52,7 +52,7 @@ feature type is not cached (`src/app/onshape/feature-spec-cache.ts`).
   `FEATURESTUDIO` tabs.
 - Fetches `getFeatureStudioSpecs` per element via
   `GET /featurestudios/d/{did}/{wvm}/{wvmid}/e/{eid}/featurespecs`
-  (base `https://cad.onshape.com/api/v10` by default, configurable for
+  (base `https://cad.onshape.com/api/v16` by default, configurable for
   company stacks; Basic `base64(accessKey:secretKey)` auth — paths verified against
   `node_modules/onshape-typescript-fetch/apis/`).
 - Writes a deterministic cache keyed by `featureType` (element ids
