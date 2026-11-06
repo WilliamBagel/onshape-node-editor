@@ -7,6 +7,7 @@ import { ValueExpression } from "../../onshape-utils/expressioncodegen";
 import { parseValueType, ValueType } from "../../onshape-utils/valuetypes";
 import type { CatalogEntry, CatalogPort } from "../../onshape/catalog/types";
 import { UTILITY_BY_ID } from "../../onshape/catalog/utility-overrides";
+import { formatDisplayName } from "../display-name";
 import type { SerializedFunctionNode, SerializedNodeBase } from "../serialization/graph-schema-types";
 
 export interface FunctionNodeMeta {
@@ -36,7 +37,9 @@ export class FunctionNode extends OnshapeNode {
   private literals: Record<string, string> = {};
 
   constructor(entry: CatalogEntry, meta: FunctionNodeMeta = {}) {
-    super("function", meta.displayName ?? entry.name);
+    // Display-only capitalization when the title comes from the catalog
+    // entry name; functionName/codegen identifiers stay lowercase.
+    super("function", meta.displayName ?? formatDisplayName(entry.name));
     this.functionName = entry.name;
     this.ports = entry.inputs;
     this.outputPorts = [...entry.outputs];

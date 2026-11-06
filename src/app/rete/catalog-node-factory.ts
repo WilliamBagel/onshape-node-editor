@@ -28,7 +28,9 @@ import type { ArrayNodeVariant } from "./nodes/arraynodes";
 import { MathExpressionNode } from "./nodes/mathexpressionnode";
 import type { ValueType } from "../onshape-utils/valuetypes";
 import { OnshapeNode } from "./nodes/onshapenode";
+import { formatDisplayName } from "./display-name";
 
+export { formatDisplayName };
 export { ARRAY_NODE_VARIANTS };
 export type { ArrayNodeVariant };
 
@@ -284,7 +286,7 @@ export function buildPaletteInsertables(
   const cachedTypes = new Set(cachedFeatureTypes());
   const items: PaletteInsertable[] = nodeableEntries(entries).map(entry => ({
     key: entry.key,
-    name: entry.name,
+    name: formatDisplayName(entry.name),
     category: entry.category,
     description: entry.description ?? "",
     meta: entry.utilityId != null ? "utility" : entry.genericDefinition === true && !cachedTypes.has(entry.name) ? "statement · generic definition" : entry.kind,
