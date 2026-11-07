@@ -15,8 +15,8 @@
  * They deliberately emit no FeatureScript: group expansion rewires the
  * instance's external connections directly to the cloned member sockets.
  */
-import { ClassicPreset } from "rete";
 import { OnshapeOutput } from "../inputoutput/onshapeoutput";
+import { OnshapeInput } from "../inputoutput/onshapeinput";
 import { OnshapeSocket } from "../onshapesockets";
 import { parseValueType } from "../../onshape-utils/valuetypes";
 import { OnshapeNode } from "./onshapenode";
@@ -122,21 +122,26 @@ export class GroupOutputNode extends GroupBoundaryNode {
             this.removeInput(key);
         }
         for (const socket of this.definition.outputs) {
-            this.addInput(
-                socket.id,
-                new ClassicPreset.Input(
-                    new OnshapeSocket(socket.label, socketValueType(socket.valueType)),
-                    socket.label,
-                ),
+            const input = new OnshapeInput(
+                new OnshapeSocket(socket.label, socketValueType(socket.valueType)),
+                socket.label,
+                socket.valueType ?? "unknown",
             );
+            // A boundary output is a destination port, not an editable
+            // feature parameter: show its label but no control.
+            input.showControl = false;
+            input.showLabel = true;
+            this.addInput(socket.id, input);
         }
-        // Drag-to-create placeholder (not a saved interface socket).
-        this.addInput(
-            GROUP_OUTPUT_PLACEHOLDER_KEY,
-            new ClassicPreset.Input(
-                new OnshapeSocket(GROUP_OUTPUT_PLACEHOLDER_LABEL, parseValueType("unknown")),
-                GROUP_OUTPUT_PLACEHOLDER_LABEL,
-            ),
+        // Drag-to-create placeholder, rendered like a feature input with
+        // its label visible (no control).
+        const placeholder = new OnshapeInput(
+            new OnshapeSocket(GROUP_OUTPUT_PLACEHOLDER_LABEL, parseValueType("unknown")),
+            GROUP_OUTPUT_PLACEHOLDER_LABEL,
+            "unknown",
         );
+        placeholder.showControl = false;
+        placeholder.showLabel = true;
+        this.addInput(GROUP_OUTPUT_PLACEHOLDER_KEY, placeholder);
     }
 }

@@ -17,7 +17,8 @@ import {
     serializeGraph,
 } from "../../serialization/graph-serializer";
 import { GroupNode } from "../../nodes/groupinstancenode";
-import { GroupInputNode, GroupOutputNode, GROUP_INPUT_PLACEHOLDER_KEY, GROUP_OUTPUT_PLACEHOLDER_KEY } from "../../nodes/groupboundarynode";
+import { GroupInputNode, GroupOutputNode, GROUP_INPUT_PLACEHOLDER_KEY, GROUP_OUTPUT_PLACEHOLDER_KEY, GROUP_OUTPUT_PLACEHOLDER_LABEL } from "../../nodes/groupboundarynode";
+import { OnshapeInput } from "../../inputoutput/onshapeinput";
 import {
     bindGroupSocket,
     createAnyGroupSocket,
@@ -154,6 +155,13 @@ describe("group interface drag behaviour", () => {
         const { inputNode, outputNode } = await buildController(fixture);
         expect(Object.keys(inputNode.outputs)).toContain(GROUP_INPUT_PLACEHOLDER_KEY);
         expect(Object.keys(outputNode.inputs)).toContain(GROUP_OUTPUT_PLACEHOLDER_KEY);
+        // The End card must render its label/port the same way a feature
+        // input does; a bare ClassicPreset.Input rendered as a blank card.
+        const placeholder = outputNode.inputs[GROUP_OUTPUT_PLACEHOLDER_KEY] as unknown as OnshapeInput<never>;
+        expect(placeholder).toBeInstanceOf(OnshapeInput);
+        expect(placeholder.label).toBe(GROUP_OUTPUT_PLACEHOLDER_LABEL);
+        expect(placeholder.showControl).toBe(false);
+        expect(placeholder.showLabel).toBe(true);
         expect(fixture.definition.inputs.some((socket) => socket.id === GROUP_INPUT_PLACEHOLDER_KEY)).toBe(false);
         expect(fixture.definition.outputs.some((socket) => socket.id === GROUP_OUTPUT_PLACEHOLDER_KEY)).toBe(false);
     });
