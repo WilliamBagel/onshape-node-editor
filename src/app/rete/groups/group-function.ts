@@ -96,9 +96,12 @@ export interface GroupFunctionPlan {
  * function. Muted instances (and muted nested members) emit no call, so
  * their definitions are neither emitted nor checked.
  */
-export function planGroupFunctions(editor: NodeEditor<Schemes>): GroupFunctionPlan {
+export function planGroupFunctions(editor: NodeEditor<Schemes>, reachableIds?: Set<string>): GroupFunctionPlan {
     const instances = editor.getNodes().filter(
-        (node): node is GroupNode => node instanceof GroupNode && !node.muted,
+        (node): node is GroupNode =>
+            node instanceof GroupNode &&
+            !node.muted &&
+            (reachableIds == null || reachableIds.has(node.id)),
     );
     const definitions: GroupDefinition[] = [];
     const seen = new Set<string>();

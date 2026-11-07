@@ -81,14 +81,20 @@ export async function generateFeatureStudioSource(
     editor: NodeEditor<Schemes>,
     engine: DataflowEngine<Schemes>
 ): Promise<string | undefined> {
+    const nodeProcessor = new ReteOnshapeNodeProcessor(editor);
+    const nodeArray = nodeProcessor.processNodes();
+
     // #14: each group definition compiles to one reusable FeatureScript
     // function and each instance emits a call (see groups/group-function.ts).
     // When a reachable definition cannot compile to a function, the whole
     // graph falls back to inline expansion (groups/group-expand.ts), which
-    // inlines correctly or refuses with its existing error.
+    // inlines correctly or refuses with its existing error. Only
+    // instances the pipeline will actually emit (`nodeArray` prunes
+    // unreachable nodes) cause a function to be emitted, so no generated
+    // function is ever left uncalled.
     let groupFunctionInfos: NodeFeaturescriptInfo[] = [];
     if (editor.getNodes().some((node) => node instanceof GroupNode)) {
-        const plan = planGroupFunctions(editor);
+        const plan = planGroupFunctions(editor, new Set(nodeArray ?? []));
         if (plan.supported) {
             assignGroupFunctionNames(editor, plan);
             groupFunctionInfos = buildGroupFunctionInfos(plan);
@@ -99,8 +105,6 @@ export async function generateFeatureStudioSource(
             }
         }
     }
-    const nodeProcessor = new ReteOnshapeNodeProcessor(editor);
-    const nodeArray = nodeProcessor.processNodes();
 
     if (!nodeArray) {
         console.warn('No nodes to process');

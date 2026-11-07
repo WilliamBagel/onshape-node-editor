@@ -1,16 +1,12 @@
 /**
- * #14: inline expansion of group instances for codegen.
+ * #14: inline expansion of group instances for codegen — the FALLBACK.
  *
- * Choice (documented per the issue): **inline the subgraph at each
- * instance**, rather than emitting one FeatureScript function per group
- * definition. Trade-off: inlining duplicates the subgraph's FeatureScript
- * once per placement (more bytes, and FeatureScript has no way to share it),
- * but it needs no typed function signatures — the existing expression
- * planner already types every value — and it composes with the statement
- * pipeline unchanged. Emitting a function per definition would be smaller
- * for heavily reused groups, at the cost of inventing a typed signature
- * (parameter types, `var`/`let` scoping, and statement-order rules) for
- * every boundary socket.
+ * Each group definition normally compiles to one reusable FeatureScript
+ * function and each instance to a call (see ./group-function.ts). Inline
+ * expansion is used only when a reachable definition cannot compile to a
+ * function — today, when it contains a member kind outside the
+ * cloneable set below — in which case the whole graph is expanded and
+ * codegen either inlines correctly or refuses with its existing error.
  *
  * Expansion builds a fresh editor: non-instance nodes are shared, each
  * instance's member nodes are cloned with instance-scoped ids
