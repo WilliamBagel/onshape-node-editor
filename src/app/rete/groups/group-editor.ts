@@ -19,6 +19,7 @@ import type { Schemes } from "../types";
 import { GroupNode } from "../nodes/groupinstancenode";
 import { GroupInputNode, GroupOutputNode } from "../nodes/groupboundarynode";
 import type { OnshapeNode } from "../nodes/onshapenode";
+import { FrameNode } from "../nodes/framenode";
 import { Connection } from "../types";
 import { StyleSettings } from "../stylesettings";
 import { connectGraphNodes } from "../serialization/graph-serializer";
@@ -119,7 +120,12 @@ export class GroupEditorController {
         for (const connection of [...this.editor.getConnections()]) {
             await this.editor.removeConnection(connection.id);
         }
-        for (const current of [...this.editor.getNodes()]) {
+        // Frames must be removed last: the scopes plugin refuses to remove a
+        // parent while it still has children. A group instance inside a frame
+        // is a child, so it must leave first.
+        for (const current of [...this.editor.getNodes()].sort(
+            (a, b) => Number(a instanceof FrameNode) - Number(b instanceof FrameNode),
+        )) {
             await this.editor.removeNode(current.id);
         }
         for (const member of definition.nodes) {

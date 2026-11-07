@@ -933,6 +933,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         const external = allConnections.filter(
             (connection) => memberIds.has(connection.source) !== memberIds.has(connection.target),
         );
+        // Detach the members from their frames before removal. rete-scopes
+        // refuses to remove a parent node that still has children; and an
+        // empty frame would otherwise collapse to its header. The instance
+        // inherits the shared parent frame below.
+        for (const node of selected) {
+            node.group = null;
+        }
         for (const connection of [...editor.getConnections()]) {
             if (memberIds.has(connection.source) || memberIds.has(connection.target)) {
                 await editor.removeConnection(connection.id);
