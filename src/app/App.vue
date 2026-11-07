@@ -193,6 +193,12 @@ export default defineComponent({
       editorControls = await createEditor(this.$refs.rete as HTMLElement);
     }
     this.controls = editorControls;
+    // Live group I/O: wire binds/rebinds/unbinds refresh the open panel
+    // state immediately (read-only — refreshGroupBoundaryState never opens
+    // the panel or writes back, so this cannot loop).
+    editorControls.setGroupBoundaryChangedCallback?.(() => {
+      if (this.groupEditing) this.refreshGroupBoundaryState();
+    });
     // #6: the App's save path reads the open graph through this provider.
     const host = this.featureStudioHost();
     if (host != null) {
@@ -401,8 +407,19 @@ export default defineComponent({
       const target = event.target as HTMLElement | null;
       const typing = target != null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if (!typing && event.key === 'Tab') {
-        event.preventDefault();
-        await this.runToggleGroupEdit();
+        // Group enter/exit is a canvas gesture only. Tab on toolbar,
+        // panel, dialog or any other chrome must stay normal browser
+        // focus navigation — intercepting it there used to enter/exit
+        // the group (and can literally empty the canvas).
+        const onCanvas = target === document.body || target?.closest?.('main.rete') != null;
+        const chrome =
+          target?.closest?.(
+            'button, a, input, textarea, select, [contenteditable], [role="button"], dialog, [role="dialog"], .group-config-panel, .action-palette',
+          ) != null;
+        if (onCanvas && !chrome) {
+          event.preventDefault();
+          await this.runToggleGroupEdit();
+        }
         return;
       }
       if (!typing && (event.key === 'm' || event.key === 'M')) {
@@ -492,16 +509,17 @@ export default defineComponent({
       }
     },
     /**
-     * Group config: Tab enter/exit lands here. Entering a group refreshes the
-     * boundary state and opens the Start/End Feature panel; leaving to the top
-     * level closes it. The canvas is never blocked.
+     * Group config: Tab enter/exit lands here. Entering a group refreshes
+     * the boundary state but does NOT open the panel — it opens on Start /
+     * End Feature selection (onBoundarySelected) or the TopBar toggle.
+     * Leaving to the top level closes it. The canvas is never blocked.
      */
     async runToggleGroupEdit() {
       this.groupBreadcrumb = await this.controls?.toggleGroupEdit() ?? [];
       this.groupEditing = this.groupBreadcrumb.length > 1;
       if (this.groupEditing) {
         this.refreshGroupBoundaryState();
-        this.groupPanelOpen = true;
+        this.groupPanelOpen = false;
         // The Start/End cards sit outside the member bounds; fit so the user
         // actually sees the group boundary instead of off-screen chrome.
         await this.controls?.fitView();
@@ -523,11 +541,6 @@ export default defineComponent({
     /** Group config: rename/retype a boundary socket, then refresh. */
     async onGroupConfigUpdate(payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }) {
       await this.controls?.updateGroupBoundarySocket(payload.socketId, payload.patch, payload.direction);
-      this.refreshGroupBoundaryState();
-    },
-    /** Group config: bind a candidate member socket, then refresh. */
-    async onGroupConfigAdd(payload: { direction: 'input' | 'output'; nodeId: string; socketKey: string }) {
-      await this.controls?.addGroupBoundarySocket(payload.direction, payload.nodeId, payload.socketKey);
       this.refreshGroupBoundaryState();
     },
     /** Group config: create an arbitrary (unbound) socket, then refresh. */
@@ -588,7 +601,6 @@ export default defineComponent({
     v-if="groupPanelOpen && groupEditing"
     :state="groupBoundaryState"
     @update="onGroupConfigUpdate"
-    @add="onGroupConfigAdd"
     @add-any="onGroupConfigAddAny"
     @remove="onGroupConfigRemove"
     @close="closeGroupConfigPanel"

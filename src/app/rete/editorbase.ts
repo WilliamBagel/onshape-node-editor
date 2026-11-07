@@ -130,6 +130,8 @@ export type EditorControls = {
     updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
     /** #14: remove a group boundary socket. */
     removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
+    /** #14: register the callback fired on live boundary changes. */
+    setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
@@ -189,6 +191,8 @@ type EditorBaseInfo = {
     updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
     /** #14: remove a group boundary socket. */
     removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
+    /** #14: register the callback fired on live boundary changes. */
+    setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry. */
@@ -832,6 +836,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return specs;
     };
 
+    let boundaryChangedCb: (() => void) | null = null;
     const groupController = new GroupEditorController(editor, {
         snapshot: () => ({ document: serializeGraph(), positions: canvasPositions(), specs: collectSpecs() }),
         restore: async (snap) => {
@@ -853,7 +858,12 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 await area.update("node", nodeId);
             }
         },
+        onBoundaryChanged: () => boundaryChangedCb?.(),
     });
+
+    const setGroupBoundaryChangedCallback = (cb: (() => void) | null): void => {
+        boundaryChangedCb = cb;
+    };
 
     const selectedInstanceId = (): string | undefined => {
         const selected = editor.getNodes().find((node) => node.selected && node instanceof GroupNode);
@@ -1171,6 +1181,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         addGroupBoundarySocketAny,
         updateGroupBoundarySocket,
         removeGroupBoundarySocket,
+        setGroupBoundaryChangedCallback,
         applyPreferences,
         addNodeFromCatalog,
         addArrayNode,

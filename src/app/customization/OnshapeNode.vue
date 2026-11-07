@@ -50,8 +50,8 @@
           data-testid="generic-definition-warning" role="note">
           Generic definition — definition map schema not known; generated code uses an empty map.
         </p>
-        <p v-if="boundaryEmptyText != null" class="boundary-empty-hint" data-testid="boundary-empty-hint">
-          {{ boundaryEmptyText }}
+        <p v-if="boundaryEmptyText() != null" class="boundary-empty-hint" data-testid="boundary-empty-hint">
+          {{ boundaryEmptyText() }}
         </p>
         <!-- Outputs-->
         <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
@@ -72,7 +72,7 @@
         <Ref class="control" v-for="[key, control] in controls()" :key="'control' + key + seed" :emit="proxyEmit"
           :data="{ type: 'control', payload: control }" :data-testid="'control-' + key" />
         <!-- Inputs-->
-        <template v-for="[key, input] in visibleInputs" :key="'input' + key + seed">
+        <template v-for="[key, input] in visibleInputs()" :key="'input' + key + seed">
           <OnshapeInputMap v-if="isMapInput(input)" :mapKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
             :seed="seed" @value-change="controlValueChange(input, $event)" />
           <OnshapeInput v-else :inputKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
@@ -83,13 +83,13 @@
       <div class="collapsed-socket-strip" v-if="collapsed" data-testid="collapsed-socket-strip"
         :aria-label="`Collapsed ${title} — ${collapsedInputs.length + collapsedOutputs.length} sockets`">
         <span class="collapsed-socket-group collapsed-socket-inputs">
-          <Ref v-for="socket in collapsedInputs" :key="'collapsed-in-' + socket.key + seed" class="collapsed-socket"
+          <Ref v-for="socket in collapsedInputs()" :key="'collapsed-in-' + socket.key + seed" class="collapsed-socket"
             :emit="proxyEmit"
             :data="{ type: 'socket', side: 'input', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
             data-testid="collapsed-input-socket" />
         </span>
         <span class="collapsed-socket-group collapsed-socket-outputs">
-          <Ref v-for="socket in collapsedOutputs" :key="'collapsed-out-' + socket.key + seed" class="collapsed-socket"
+          <Ref v-for="socket in collapsedOutputs()" :key="'collapsed-out-' + socket.key + seed" class="collapsed-socket"
             :emit="proxyEmit"
             :data="{ type: 'socket', side: 'output', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
             data-testid="collapsed-output-socket" />
@@ -162,10 +162,13 @@ export default defineComponent({
       updateComponent: 0
     }
   },
-  computed: {
-    visibleInputs() {
-      // make updateComponent changes update this computed property
-      this.updateComponent;
+  methods: {
+    visibleInputs(): Array<[string, OnshapeInputType<any>]> {
+      // Method, not computed: graph nodes are raw model objects (markRaw),
+      // so socket mutations are not reactive. `area.update('node')` rerenders
+      // the component, and a method re-reads the live input map. A computed
+      // here cached the initially mounted sockets and hid newly added
+      // boundary ports until the group was exited and re-entered.
       return this.inputs().filter(([key, input]) => {
         // Arguments (context, id) are always visible
         const inputType = (input as any).type;
@@ -180,10 +183,10 @@ export default defineComponent({
         return this.hiddenParameters[key] !== true;
       });
     },
-    collapsedInputs() {
-      return collectCollapsedSockets(this.visibleInputs.map(([key, input]: any) => ({ key, input })) as any, this.data.id);
+    collapsedInputs(): any[] {
+      return collectCollapsedSockets(this.visibleInputs().map(([key, input]: any) => ({ key, input })) as any, this.data.id);
     },
-    collapsedOutputs() {
+    collapsedOutputs(): any[] {
       return collectCollapsedOutputSockets(Object.fromEntries(this.outputs()) as any, this.data.id);
     },
     /** Explain an empty Start/End card instead of leaving a blank body. */
@@ -203,9 +206,7 @@ export default defineComponent({
         return "No inputs or outputs exposed — open the group to configure.";
       }
       return null;
-    }
-  },
-  methods: {
+    },
     proxyEmit(...args: any[]) {
       this.emit?.(...args);
     },

@@ -1,7 +1,8 @@
 /**
  * Group boundary selection -> panel (Blender-style). Selecting a group's
  * Start/End card opens the GroupConfigPanel; selecting an unrelated node
- * does not. Uses the shared `selectedNodeIds` ref and fake editor controls.
+ * does not. The panel is NOT auto-opened on group entry. Tab is a canvas
+ * gesture only: Tab on chrome (buttons/panel/dialog) stays focus navigation.
  */
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { shallowMount } from "@vue/test-utils";
@@ -15,15 +16,22 @@ const boundaryState = {
   boundaryNodeIds: { input: "boundary-input-1", output: "boundary-output-1" },
 };
 
+const mockToggleGroupEdit = vi.fn(async () => ["Top level", "Group 1"] as string[]);
+let mockControls: Record<string, unknown> | null = null;
+
 vi.mock("../../rete", () => ({
-  createEditor: vi.fn(async () => ({
-    listGroupDefinitions: () => [],
-    getGroupBoundaryState: () => ({ ...boundaryState }),
-    isGroupBoundaryNode: (id: string) => id === "boundary-input-1" || id === "boundary-output-1",
-    toggleGroupEdit: async () => ["Top level", "Group 1"],
-    fitView: async () => {},
-    serializeGraph: () => "",
-  })),
+  createEditor: vi.fn(async () => {
+    mockControls = {
+      listGroupDefinitions: () => [],
+      getGroupBoundaryState: () => ({ ...boundaryState }),
+      isGroupBoundaryNode: (id: string) => id === "boundary-input-1" || id === "boundary-output-1",
+      toggleGroupEdit: mockToggleGroupEdit,
+      fitView: async () => {},
+      serializeGraph: () => "",
+      setGroupBoundaryChangedCallback: () => {},
+    };
+    return mockControls;
+  }),
   createEditorDev: vi.fn(async () => ({ listGroupDefinitions: () => [] })),
 }));
 vi.mock("../../rete/editorbase.js", () => ({ editorBase: {} }));
@@ -47,6 +55,7 @@ function enterGroupEdit(wrapper: ReturnType<typeof shallowMount>): void {
 afterEach(() => {
   document.body.innerHTML = "";
   setSelectedNodeIds([]);
+  mockToggleGroupEdit.mockClear();
 });
 
 describe("Group boundary selection opens the config panel", () => {
@@ -117,5 +126,70 @@ describe("Group boundary selection opens the config panel", () => {
   it("selectedNodeIds ref carries the boundary selection", () => {
     setSelectedNodeIds(["boundary-input-1"]);
     expect(selectedNodeIds.value).toEqual(["boundary-input-1"]);
+  });
+
+  it("entering a group does not auto-open the panel", async () => {
+    const wrapper = shallowMount(App);
+    await flush();
+    const vm = wrapper.vm as unknown as Record<string, unknown> & {
+      runToggleGroupEdit: () => Promise<void>;
+    };
+    // Initial (pre-entry) state is closed.
+    expect(vm.groupPanelOpen).toBe(false);
+    await vm.runToggleGroupEdit();
+    expect(vm.groupEditing).toBe(true);
+    expect(vm.groupPanelOpen).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("Tab on a panel control does not enter/exit the group", async () => {
+    const wrapper = shallowMount(App);
+    await flush();
+    enterGroupEdit(wrapper);
+    const button = document.createElement("button");
+    button.className = "group-config-panel";
+    document.body.appendChild(button);
+    mockToggleGroupEdit.mockClear();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    await flush();
+    await wrapper.vm.$nextTick();
+    expect(mockToggleGroupEdit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("Tab on a toolbar button does not enter/exit the group", async () => {
+    const wrapper = shallowMount(App);
+    await flush();
+    enterGroupEdit(wrapper);
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    mockToggleGroupEdit.mockClear();
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    await flush();
+    await wrapper.vm.$nextTick();
+    expect(mockToggleGroupEdit).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it("Tab on the canvas toggles the group", async () => {
+    const wrapper = shallowMount(App, { attachTo: document.body });
+    await flush();
+    enterGroupEdit(wrapper);
+    const canvas = document.createElement("div");
+    canvas.className = "rete";
+    document.body.appendChild(canvas);
+    mockToggleGroupEdit.mockClear();
+    // Dispatch through a canvas element child of the attached main.rete
+    // so the event reaches the window listener like a real canvas Tab.
+    const main = document.querySelector("main.rete");
+    expect(main).not.toBeNull();
+    const inner = document.createElement("div");
+    main!.appendChild(inner);
+    inner.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    await flush();
+    await wrapper.vm.$nextTick();
+    expect(mockToggleGroupEdit).toHaveBeenCalledTimes(1);
+    wrapper.unmount();
+    document.body.innerHTML = "";
   });
 });

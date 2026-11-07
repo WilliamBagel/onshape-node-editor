@@ -573,6 +573,38 @@ describe("grouping v2 (#14)", () => {
         expect(await controller.exit()).toBe(true);
     });
 
+    it("onBoundaryChanged fires on live boundary mutations so App can refresh the panel", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        let changed = 0;
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...fixture.editor.getConnections()]) await fixture.editor.removeConnection(connection.id);
+                for (const node of [...fixture.editor.getNodes()]) await fixture.editor.removeNode(node.id);
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+            onBoundaryChanged: () => { changed += 1; },
+        });
+        expect(await controller.enter(fixture.instance1.id)).toBe(true);
+        const afterEnter = changed;
+        expect(await controller.addBoundarySocketAny("input", "live-in", "Query")).toBe(true);
+        expect(changed).toBeGreaterThan(afterEnter);
+        const live = fixture.definition.inputs.at(-1)!;
+        expect(live.label).toBe("live-in");
+        expect(live.valueType).toBe("Query");
+        // The boundary state the panel reads reflects the live socket.
+        expect(controller.boundaryState()?.inputs.some((socket) => socket.id === live.id && socket.label === "live-in")).toBe(true);
+        expect(await controller.exit()).toBe(true);
+    });
+
     it("commonGroupParent returns the shared frame only when all members share it", () => {
         expect(commonGroupParent([{ group: "f1" }, { group: "f1" }])).toBe("f1");
         expect(commonGroupParent([{ group: "f1" }, { group: null }])).toBeNull();

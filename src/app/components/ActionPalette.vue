@@ -19,7 +19,7 @@
         aria-label="Search actions"
         @keydown="onKeydown"
       />
-      <div class="actions-list" role="listbox" aria-label="Actions and nodes">
+      <div ref="list" class="actions-list" role="listbox" aria-label="Actions and nodes">
         <button
           v-for="result in results"
           :key="result.key"
@@ -63,6 +63,7 @@ const emit = defineEmits<{
 const term = ref('')
 const activeKey = ref<string | null>(null)
 const search = ref<HTMLInputElement | null>(null)
+const list = ref<HTMLElement | null>(null)
 const itemRefs = new Map<string, unknown>()
 
 function registerItem(key: string, el: unknown) {
@@ -129,9 +130,21 @@ watch(results, () => {
   scrollActiveIntoView()
 })
 
+/**
+ * Keep the active row inside the list by scrolling the list only.
+ * scrollIntoView() can also scroll the document/backdrop, which made
+ * arrow navigation shake the dialog; adjusting list.scrollTop from the
+ * row rects never touches any other scroll container.
+ */
 function scrollActiveIntoView() {
   const el = activeKey.value != null ? itemRefs.get(activeKey.value) : null
-  if (el instanceof HTMLElement) el.scrollIntoView({ block: 'nearest' })
+  const container = list.value
+  if (!(el instanceof HTMLElement) || container == null) return
+  const pad = 4
+  const listRect = container.getBoundingClientRect()
+  const itemRect = el.getBoundingClientRect()
+  if (itemRect.top < listRect.top + pad) container.scrollTop -= listRect.top + pad - itemRect.top
+  else if (itemRect.bottom > listRect.bottom - pad) container.scrollTop += itemRect.bottom - (listRect.bottom - pad)
 }
 
 function close() { emit('close') }
@@ -168,9 +181,21 @@ void ACTION_PALETTE_SHORTCUT
 .actions-keycap { font-family: var(--font-mono); font-size: var(--font-size-keycap); border: 1px solid var(--hairline); border-radius: var(--radius-keycap); padding: 1px 4px; background: var(--surface-sunken); color: var(--text-secondary); opacity: 1; }
 .actions-search { flex: none; width: calc(100% - 24px); margin: 0 12px 8px; padding: 6px 8px; font-size: var(--font-size-value); font-family: var(--font-sans); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-sunken); color: var(--ink); box-sizing: border-box; }
 .actions-search:focus { outline: 1px solid var(--accent-steel); border-color: var(--accent-steel); }
-.actions-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
+/* Thin, always-visible classic scrollbar: overlay scrollbars render at
+   width 0 and read as "no scrollbar" (user-reported: scrollbar doesn't
+   work). */
+.actions-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+.actions-list::-webkit-scrollbar { width: 8px; }
+.actions-list::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 4px; }
+.actions-list::-webkit-scrollbar-track { background: transparent; }
 .actions-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 4px; border: none; background: transparent; cursor: pointer; font-family: var(--font-sans); text-align: left; }
-.actions-item--active { background: var(--surface-sunken); }
+/* See NodePalette: the active row needs a visibly darker tint than the
+   white panel plus full-opacity text, not a one-step-off-white wash. */
+.actions-item--active { background: var(--active-tint); box-shadow: inset 3px 0 0 var(--accent-steel); }
+.actions-item--active .actions-item-name { opacity: 1; }
+.actions-item--active .actions-item-desc { color: var(--text-secondary); opacity: 1; }
+.actions-item--active .actions-item-meta { opacity: 1; }
+.actions-item--active .actions-keycap { opacity: 1; }
 .actions-item-name { font-size: var(--font-size-value); font-weight: 600; color: var(--ink); }
 .actions-item-desc { flex: 1 1 auto; font-size: var(--font-size-label); color: var(--ink); opacity: var(--opacity-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions-item-meta { flex: none; font-family: var(--font-mono); font-size: var(--font-size-keycap); border: 1px solid var(--hairline); border-radius: var(--radius-keycap); padding: 1px 4px; color: var(--text-secondary); }

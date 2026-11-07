@@ -1,196 +1,195 @@
 /**
- * GroupConfigPanel: Blender-style Start/End Feature configuration.
- * Rows render editable names + type selects; rename/retype emit `update`,
- * remove emits `remove`, the candidate selects + add buttons emit `add`.
- * No browser dialogs are used anywhere in the panel.
+ * GroupConfigPanel (Blender-style). The panel edits the group's interface
+ * — the function signature — feature-spec style: label + type + source
+ * state + remove per socket, plus an Add row per direction. Users bind by
+ * dragging wires on the canvas; there is no member-socket dropdown.
  */
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import GroupConfigPanel from "../../components/GroupConfigPanel.vue";
-import type { GroupBoundaryState } from "../../rete/groups/group-editor";
 
-const fakeState: GroupBoundaryState = {
-  definitionId: "def-1",
-  name: "Group 1",
-  inputs: [
-    {
-      id: "n1.depth",
-      label: "depth",
-      direction: "input",
-      nodeId: "n1",
-      socketKey: "depth",
-      valueType: "number",
-    },
-  ],
-  outputs: [
-    {
-      id: "n1.result",
-      label: "result",
-      direction: "output",
-      nodeId: "n1",
-      socketKey: "result",
-      valueType: "Id",
-    },
-  ],
-  candidates: {
+import GroupConfigPanel from "../../components/GroupConfigPanel.vue";
+
+const VALUE_TYPES = ["unknown", "number", "ValueWithUnits", "boolean", "string", "Query", "Id", "Context", "Vector", "Matrix", "Transform", "CoordSystem", "map", "Enum", "array"];
+
+function buildState() {
+  return {
+    definitionId: "def-1",
+    name: "Group 1",
     inputs: [
       {
-        direction: "input",
-        nodeId: "n2",
-        nodeTitle: "Extrude",
-        socketKey: "distance",
-        label: "Distance",
-        valueType: "ValueWithUnits",
+        id: "in-1",
+        label: "in one",
+        direction: "input" as const,
+        valueType: "Query",
+        nodeId: "node-a",
+        socketKey: "query",
+      },
+      {
+        id: "in-2",
+        label: "in two",
+        direction: "input" as const,
+        valueType: "unknown",
       },
     ],
     outputs: [
       {
-        direction: "output",
-        nodeId: "n2",
-        nodeTitle: "Extrude",
-        socketKey: "face",
-        label: "Face",
-        valueType: "Query",
+        id: "out-1",
+        label: "out one",
+        direction: "output" as const,
+        valueType: "ValueWithUnits",
+        nodeId: "node-a",
+        socketKey: "result",
       },
     ],
-  },
-  boundaryNodeIds: { input: "start-node", output: "end-node" },
-};
+    candidates: { inputs: [], outputs: [] },
+    boundaryNodeIds: { input: "boundary-input-1", output: "boundary-output-1" },
+  };
+}
 
-function mountPanel(state: GroupBoundaryState | null = fakeState) {
-  return mount(GroupConfigPanel, {
-    props: { state },
-    global: {
-      stubs: { SvgIcon: { template: "<svg />" } },
-    },
-  });
+function mountPanel(state: ReturnType<typeof buildState> = buildState()) {
+  return mount(GroupConfigPanel, { props: { state: state as never } });
+}
+
+function findByTestId(wrapper: ReturnType<typeof mountPanel>, testId: string) {
+  return wrapper.find(`[data-testid="${testId}"]`);
 }
 
 describe("GroupConfigPanel", () => {
-  it("renders input and output rows with names and type options", () => {
+  it("renders the group name and all existing boundary sockets", () => {
     const wrapper = mountPanel();
-    expect(wrapper.find('[data-testid="group-config-panel"]').exists()).toBe(true);
     expect(wrapper.text()).toContain("Group 1");
-    expect(wrapper.text()).toContain("Inputs");
-    expect(wrapper.text()).toContain("Outputs");
-    expect(wrapper.findAll('[data-testid="group-input-row"]')).toHaveLength(1);
-    expect(wrapper.findAll('[data-testid="group-output-row"]')).toHaveLength(1);
-
-    const nameInput = wrapper.find('[data-testid="group-input-row"] input');
-    expect((nameInput.element as HTMLInputElement).value).toBe("depth");
-
-    const typeSelect = wrapper.find('[data-testid="group-input-row"] select');
-    const optionValues = typeSelect.findAll("option").map((o) => (o.element as HTMLOptionElement).value);
-    for (const expected of ["unknown", "number", "ValueWithUnits", "boolean", "string", "Query", "Id", "Context", "Vector", "Matrix", "Transform", "CoordSystem", "map", "Enum", "array"]) {
-      expect(optionValues).toContain(expected);
-    }
-    expect((typeSelect.element as HTMLSelectElement).value).toBe("number");
-
-    // Source: bound member socket key is displayed.
-    expect(wrapper.find('[data-testid="group-input-row"] .source-label').text()).toContain("depth");
+    const inputRows = wrapper.findAll('[data-testid="group-input-row"]');
+    const outputRows = wrapper.findAll('[data-testid="group-output-row"]');
+    expect(inputRows).toHaveLength(2);
+    expect(outputRows).toHaveLength(1);
+    const nameInputs = wrapper.findAll(".name-input");
+    expect(nameInputs.map((input) => (input.element as HTMLInputElement).value)).toContain("in one");
+    expect(nameInputs.map((input) => (input.element as HTMLInputElement).value)).toContain("in two");
+    expect(nameInputs.map((input) => (input.element as HTMLInputElement).value)).toContain("out one");
     wrapper.unmount();
   });
 
-  it("emits update with the new label on blur", async () => {
+  it("has no member-socket candidate dropdown", () => {
     const wrapper = mountPanel();
-    const nameInput = wrapper.find('[data-testid="group-input-row"] input');
-    await nameInput.setValue("thickness");
-    await nameInput.trigger("blur");
-    expect(wrapper.emitted("update")).toEqual([
-      [{ socketId: "n1.depth", direction: "input", patch: { label: "thickness" } }],
-    ]);
+    expect(wrapper.html()).not.toContain("Select a member socket");
+    expect(wrapper.findAll(".candidate-select")).toHaveLength(0);
+    expect(wrapper.findAll("optgroup")).toHaveLength(0);
     wrapper.unmount();
   });
 
-  it("emits update with the new type on change", async () => {
-    const wrapper = mountPanel();
-    const typeSelect = wrapper.find('[data-testid="group-input-row"] select');
-    await typeSelect.setValue("ValueWithUnits");
-    expect(wrapper.emitted("update")).toEqual([
-      [{ socketId: "n1.depth", direction: "input", patch: { valueType: "ValueWithUnits" } }],
-    ]);
+  it("is hidden when there is no boundary state", () => {
+    const wrapper = mount(GroupConfigPanel, { props: { state: null } });
+    expect(wrapper.exists()).toBe(true);
+    expect(wrapper.find('[data-testid="group-config-panel"]').exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it("emits remove when the remove button is clicked", async () => {
-    const wrapper = mountPanel();
-    const removeBtn = wrapper.find('[data-testid="group-output-row"] button[aria-label="Remove output result"]');
-    expect(removeBtn.exists()).toBe(true);
-    await removeBtn.trigger("click");
-    expect(wrapper.emitted("remove")).toEqual([[{ socketId: "n1.result", direction: "output" }]]);
-    wrapper.unmount();
-  });
-
-  it("emits add for the selected input and output candidates", async () => {
-    const wrapper = mountPanel();
-
-    const inputSelect = wrapper.find('select[aria-label="Member socket to expose as a group input"]');
-    await inputSelect.setValue("n2 distance");
-    await wrapper.find('[data-testid="group-add-input"]').trigger("click");
-    expect(wrapper.emitted("add")).toEqual([
-      [{ direction: "input", nodeId: "n2", socketKey: "distance" }],
-    ]);
-
-    const outputSelect = wrapper.find('select[aria-label="Member socket to expose as a group output"]');
-    await outputSelect.setValue("n2 face");
-    await wrapper.find('[data-testid="group-add-output"]').trigger("click");
-    expect(wrapper.emitted("add")).toHaveLength(2);
-    expect(wrapper.emitted("add")?.[1]).toEqual([
-      { direction: "output", nodeId: "n2", socketKey: "face" },
-    ]);
-    wrapper.unmount();
-  });
-
-  it("shows an empty state explaining how to add when there are no sockets", () => {
-    const empty: GroupBoundaryState = {
-      ...fakeState,
-      inputs: [],
-      outputs: [],
-    };
-    const wrapper = mountPanel(empty);
-    expect(wrapper.findAll('[data-testid="group-input-row"]')).toHaveLength(0);
-    expect(wrapper.findAll('[data-testid="group-output-row"]')).toHaveLength(0);
-    expect(wrapper.text()).toContain("No inputs yet.");
-    expect(wrapper.text()).toContain("No outputs yet.");
-    wrapper.unmount();
-  });
-
-  it("emits close from the close button", async () => {
+  it("close button emits close", async () => {
     const wrapper = mountPanel();
     await wrapper.find('[data-testid="group-config-close"]').trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
     expect(wrapper.emitted("close")).toHaveLength(1);
     wrapper.unmount();
   });
 
-  it("renders an unbound socket row and emits add-any for a new arbitrary socket", async () => {
-    const unbound: GroupBoundaryState = {
-      ...fakeState,
-      inputs: [{ id: "def-1.input.threshold", label: "threshold", direction: "input", valueType: "unknown" }],
-      outputs: [{ id: "def-1.output.result", label: "result", direction: "output", valueType: "unknown" }],
+  it("collapse button emits close (explicit collapse affordance)", async () => {
+    const wrapper = mountPanel();
+    const collapse = wrapper.find('[data-testid="group-config-collapse"]');
+    expect(collapse.exists()).toBe(true);
+    expect(collapse.attributes("aria-label")).toMatch(/collapse/i);
+    await collapse.trigger("click");
+    expect(wrapper.emitted("close")).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it("type selects offer the full value-type list and keep their values", () => {
+    const wrapper = mountPanel();
+    const selects = wrapper.findAll(".type-select");
+    // Two existing inputs, one existing output, one Add row per direction.
+    expect(selects).toHaveLength(5);
+    for (const select of selects) {
+      const options = select.findAll("option");
+      expect(options.map((option) => (option.element as HTMLOptionElement).value)).toEqual(VALUE_TYPES);
     }
-    const wrapper = mountPanel(unbound)
-    const rows = wrapper.findAll('[data-testid="group-input-row"]')
-    expect(rows).toHaveLength(1)
-    expect(rows[0].attributes('data-bound')).toBe('false')
-    expect(rows[0].text()).toContain('Unbound')
+    expect((selects[0].element as HTMLSelectElement).value).toBe("Query");
+    wrapper.unmount();
+  });
 
-    const labelInput = wrapper.find('input[aria-label="Label for a new arbitrary group input"]')
-    await labelInput.setValue('depth')
-    await wrapper.find('[data-testid="group-add-any-input"]').trigger('click')
-    expect(wrapper.emitted('add-any')).toEqual([
-      [{ direction: 'input', label: 'depth', valueType: 'unknown' }],
-    ])
+  it("update event fires for retype and rename", async () => {
+    const wrapper = mountPanel();
+    const state = buildState();
+    await wrapper.setProps({ state: state as never });
 
-    await wrapper.find('[data-testid="group-add-any-output"]').trigger('click')
-    expect(wrapper.emitted('add-any')?.[1]).toEqual([
-      { direction: 'output', label: 'output', valueType: 'unknown' },
-    ])
-    wrapper.unmount()
-  })
+    const typeSelect = wrapper.findAll(".type-select")[0];
+    await typeSelect.setValue("Id");
+    expect(wrapper.emitted("update")).toHaveLength(1);
+    expect(wrapper.emitted("update")?.[0]?.[0]).toMatchObject({
+      socketId: "in-1",
+      direction: "input",
+      patch: { valueType: "Id" },
+    });
 
-  it("renders nothing when state is null (top level)", () => {
-    const wrapper = mountPanel(null);
-    expect(wrapper.find('[data-testid="group-config-panel"]').exists()).toBe(false);
+    const nameInput = wrapper.find(".name-input");
+    await nameInput.setValue("renamed");
+    await nameInput.trigger("blur");
+    const rename = wrapper.emitted("update")?.filter((event) => (event[0] as { patch?: { label?: string } }).patch?.label === "renamed");
+    expect(rename).toHaveLength(1);
+    expect((rename?.[0]?.[0] as { patch: { label: string } }).patch.label).toBe("renamed");
+    wrapper.unmount();
+  });
+
+  it("remove button emits remove for the right socket", async () => {
+    const wrapper = mountPanel();
+    const button = wrapper.find('[aria-label="Remove input in one"]');
+    expect(button.exists()).toBe(true);
+    await button.trigger("click");
+    expect(wrapper.emitted("remove")).toHaveLength(1);
+    expect(wrapper.emitted("remove")?.[0]?.[0]).toMatchObject({ socketId: "in-1", direction: "input" });
+    wrapper.unmount();
+  });
+
+  it("Add input emits add-any (primary Add path, no candidate selection)", async () => {
+    const wrapper = mountPanel();
+    const addButton = findByTestId(wrapper, "group-add-input");
+    expect(addButton.exists()).toBe(true);
+    expect(addButton.attributes("disabled")).toBeUndefined();
+    await wrapper.find('input[placeholder="New input name…"]').setValue("fresh");
+    await addButton.trigger("click");
+    expect(wrapper.emitted("add-any")).toHaveLength(1);
+    expect(wrapper.emitted("add-any")?.[0]?.[0]).toMatchObject({ direction: "input", label: "fresh", valueType: "unknown" });
+    expect(wrapper.emitted("add")).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it("Add output emits add-any with the chosen type", async () => {
+    const wrapper = mountPanel();
+    await wrapper.find('input[placeholder="New output name…"]').setValue("result");
+    await wrapper.findAll(".type-select").at(-1)!.setValue("Query");
+    await findByTestId(wrapper, "group-add-output").trigger("click");
+    expect(wrapper.emitted("add-any")).toHaveLength(1);
+    expect(wrapper.emitted("add-any")?.[0]?.[0]).toMatchObject({ direction: "output", label: "result", valueType: "Query" });
+    wrapper.unmount();
+  });
+
+  it("type dots use the socket palette for the selected type", () => {
+    const wrapper = mountPanel();
+    // Add-input row starts as unknown -> socket ink; choosing Query swaps
+    // the dot to --socket-query, the Query socket colour.
+    const inputDot = findByTestId(wrapper, "group-add-input-type-dot");
+    expect(inputDot.attributes("style")).toContain("var(--socket-ink)");
+    // The in-one row is Query-typed already.
+    const rowDots = wrapper.findAll('[data-testid="group-row-type-dot"]');
+    expect(rowDots[0].attributes("style")).toContain("var(--socket-query)");
+    wrapper.unmount();
+  });
+
+  it("bound rows show the bound key and unbound rows explain the drag", () => {
+    const wrapper = mountPanel();
+    const rows = wrapper.findAll('[data-testid="group-input-row"]');
+    expect(rows[0].attributes("data-bound")).toBe("true");
+    expect(rows[0].text()).toContain("query");
+    expect(rows[1].attributes("data-bound")).toBe("false");
+    expect(rows[1].text()).toMatch(/drag it onto a member node/i);
     wrapper.unmount();
   });
 });

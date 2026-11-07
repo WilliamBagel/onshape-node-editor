@@ -4,7 +4,7 @@
      This replacement keeps the same item shape but searches every leaf. -->
 <template>
   <div ref="root" class="menu" data-testid="context-menu" rete-context-menu
-    @mouseover="cancelHide" @mouseleave="scheduleHide">
+    @mouseover="cancelHide" @mouseleave="scheduleHide" @wheel.stop="onWheel">
     <div v-if="searchBar" class="block">
       <input ref="search" v-model="term" class="search" data-testid="context-menu-search-input"
         aria-label="Search context menu" placeholder="Search…" />
@@ -95,6 +95,15 @@ const hits = computed<Hit[]>(() => {
   }
   return out.slice(0, 80);
 });
+
+/**
+ * The menu lives inside MAIN.rete, where the canvas zoom handler sits on
+ * an ancestor and preventDefaults wheel events — so without this the
+ * search results could never wheel-scroll (user-reported: "scrollbar
+ * doesn't work"). Stopping propagation lets the menu's own overflow
+ * scroll natively; the rest of the menu interaction is unchanged.
+ */
+function onWheel(): void {}
 
 function activate(item: ContextMenuItem): void {
   if (hasChildren(item)) {
