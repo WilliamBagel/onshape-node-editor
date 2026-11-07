@@ -175,6 +175,23 @@ report.palettes.actions = await paletteCheck('ActionPalette', '.actions-list', '
     await sleep(600);
   });
 
+// Extra: a command row (empty query = actions only) carries a keycap chip;
+// measure its contrast too, since the 'query' rows above were node results.
+await page.keyboard.press('F3');
+await sleep(700);
+const cmdActive = await page.evaluate(new Function('args', `return (${measureSource})(args)`), {
+  listSel: '.actions-list', activeSel: '.actions-item--active',
+  parts: { name: '.actions-item-name', desc: '.actions-item-desc', keycap: '.actions-keycap' },
+});
+check('ActionPalette(command): active keycap present', !!cmdActive.contrasts?.keycap,
+  cmdActive.contrasts?.keycap ? `"${cmdActive.contrasts.keycap.text}"` : 'none');
+for (const [name, c] of Object.entries(cmdActive.contrasts ?? {})) {
+  check(`ActionPalette(command): active ${name} contrast >= 4.5`, c.ratio >= 4.5, `${c.ratio} ("${c.text}")`);
+  check(`ActionPalette(command): active ${name} opacity 1`, c.opacity === '1', `opacity=${c.opacity}`);
+}
+await page.keyboard.press('Escape');
+await sleep(350);
+
 // Context menu: search with many hits must overflow visibly + scroll.
 await page.mouse.click(700, 450, { button: 'right' });
 await sleep(800);
