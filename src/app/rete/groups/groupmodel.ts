@@ -33,6 +33,23 @@ export interface GroupSocketDefinition {
     defaultLiteral?: string;
 }
 
+/** A member socket that can still become a group boundary socket. */
+export interface GroupSocketCandidate {
+    direction: "input" | "output";
+    nodeId: string;
+    nodeTitle: string;
+    socketKey: string;
+    label: string;
+    valueType?: string;
+}
+
+/** Editable fields of an existing boundary socket. */
+export interface GroupSocketPatch {
+    label?: string;
+    valueType?: string;
+}
+
+
 export interface GroupDefinition {
     id: string;
     name: string;
@@ -53,6 +70,138 @@ export function createGroupDefinition(id: string, name: string): GroupDefinition
 export function groupSocketId(nodeId: string, socketKey: string): string {
     return `${nodeId}.${socketKey}`;
 }
+
+function memberSocketValueType(node: OnshapeNode, socketKey: string, direction: "input" | "output"): string | undefined {
+    const side = direction === "input" ? node.inputs : node.outputs;
+    return (side?.[socketKey]?.socket as { valueType?: { name: string } } | undefined)?.valueType?.name;
+}
+
+/**
+ * Member sockets that are not yet exposed as boundary sockets. The group
+ * editor's input/output menu uses this to offer only real, bindable targets.
+ */
+export function listGroupSocketCandidates(definition: GroupDefinition): {
+    inputs: GroupSocketCandidate[];
+    outputs: GroupSocketCandidate[];
+} {
+    const boundInputs = new Set(definition.inputs.map((socket) => socket.id));
+    const boundOutputs = new Set(definition.outputs.map((socket) => socket.id));
+    const inputs: GroupSocketCandidate[] = [];
+    const outputs: GroupSocketCandidate[] = [];
+    for (const node of definition.nodes) {
+        for (const [socketKey, input] of Object.entries(node.inputs)) {
+            const id = groupSocketId(node.id, socketKey);
+            if (boundInputs.has(id)) continue;
+            const socket = input.socket as { name?: string; valueType?: { name: string } };
+            inputs.push({
+                direction: "input",
+                nodeId: node.id,
+                nodeTitle: node.getTitle(),
+                socketKey,
+                label: input.label ?? socket.name ?? socketKey,
+                valueType: socket.valueType?.name,
+            });
+        }
+        for (const [socketKey, output] of Object.entries(node.outputs)) {
+            const id = groupSocketId(node.id, socketKey);
+            if (boundOutputs.has(id)) continue;
+            const socket = output.socket as { name?: string; valueType?: { name: string } };
+            outputs.push({
+                direction: "output",
+                nodeId: node.id,
+                nodeTitle: node.getTitle(),
+                socketKey,
+                label: output.label ?? socket.name ?? socketKey,
+                valueType: socket.valueType?.name,
+            });
+        }
+    }
+    return { inputs, outputs };
+}
+
+/**
+ * Expose one member socket as a boundary socket. The binding is by member
+ * node id + socket key, so it survives reordering and display renames.
+ */
+export function addGroupSocket(
+    definition: GroupDefinition,
+    direction: "input" | "output",
+    nodeId: string,
+    socketKey: string,
+    label?: string,
+    valueType?: string,
+): GroupSocketDefinition | null {
+    const node = definition.nodes.find((member) => member.id === nodeId);
+    if (node == null) return null;
+    const side = direction === "input" ? node.inputs : node.outputs;
+    const socket = side?.[socketKey];
+    if (socket == null) return null;
+    const id = groupSocketId(nodeId, socketKey);
+    const list = direction === "input" ? definition.inputs : definition.outputs;
+    if (list.some((entry) => entry.id === id)) return null;
+    const candidate = listGroupSocketCandidates(definition)[direction === "input" ? "inputs" : "outputs"]
+        .find((entry) => entry.nodeId === nodeId && entry.socketKey === socketKey);
+    const result: GroupSocketDefinition = {
+        id,
+        label: (label ?? candidate?.label ?? socketKey).trim() || socketKey,
+        direction,
+        nodeId,
+        socketKey,
+        valueType: valueType ?? memberSocketValueType(node, socketKey, direction),
+    };
+    list.push(result);
+    return result;
+}
+
+/** Rename and/or retype an existing boundary socket. */
+export function updateGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    patch: GroupSocketPatch,
+): boolean {
+    const socket = [...definition.inputs, ...definition.outputs].find((entry) => entry.id === socketId);
+    if (socket == null) return false;
+    if (patch.label != null) {
+        const label = patch.label.trim();
+        if (label === "") return false;
+        socket.label = label;
+    }
+    if (patch.valueType != null) {
+        socket.valueType = patch.valueType;
+    }
+    return true;
+}
+
+/** Remove a boundary socket. Member wiring is untouched. */
+export function removeGroupSocket(definition: GroupDefinition, socketId: string): boolean {
+    const direction = definition.inputs.some((entry) => entry.id === socketId)
+        ? "input"
+        : definition.outputs.some((entry) => entry.id === socketId)
+            ? "output"
+            : null;
+    if (direction == null) return false;
+    if (direction === "input") {
+        definition.inputs = definition.inputs.filter((entry) => entry.id !== socketId);
+    } else {
+        definition.outputs = definition.outputs.filter((entry) => entry.id !== socketId);
+    }
+    return true;
+}
+
+/**
+ * The frame a group instance should inherit: the one shared parent frame of
+ * every selected member, or null when the selection is not wholly inside one
+ * frame. Grouping must not orphan a frame's contents (an empty frame collapses
+ * to its header and the user loses the visual grouping).
+ */
+export function commonGroupParent(nodes: readonly { group: string | null }[]): string | null {
+    if (nodes.length === 0) return null;
+    const parent = nodes[0].group;
+    if (parent == null) return null;
+    return nodes.every((node) => node.group === parent) ? parent : null;
+}
+
+
 
 /**
  * Derive boundary sockets from a member set: every connection from outside

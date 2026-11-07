@@ -135,6 +135,9 @@ export function serializeGraph(
     // also stay out of `nodeOrder`: the canvas pins frame elements behind
     // their children instead of stacking them with the nodes.
     const frames: SerializedFrame[] = [];
+    const transientIds = new Set(
+        editor.getNodes().filter((node) => node.transient).map((node) => node.id),
+    );
     const nodes = editor.getNodes().filter((node) => {
         if (node instanceof FrameNode) {
             frames.push({
@@ -143,7 +146,9 @@ export function serializeGraph(
             });
             return false;
         }
-        return true;
+        // Group Start/End cards are editor-only chrome; snapshots and saved
+        // graphs must not contain them (they are recreated on group entry).
+        return !node.transient;
     }).map((node) => {
         const serialized = node.toJSON() as SerializedNode;
         if (!SUPPORTED_KINDS.includes(serialized.kind)) {
@@ -158,12 +163,14 @@ export function serializeGraph(
         } as SerializedNode;
     });
 
-    const connections: SerializedConnection[] = editor.getConnections().map((connection) => ({
-        source: connection.source,
-        sourceOutput: connection.sourceOutput,
-        target: connection.target,
-        targetInput: connection.targetInput,
-    }));
+    const connections: SerializedConnection[] = editor.getConnections()
+        .filter((connection) => !transientIds.has(connection.source) && !transientIds.has(connection.target))
+        .map((connection) => ({
+            source: connection.source,
+            sourceOutput: connection.sourceOutput,
+            target: connection.target,
+            targetInput: connection.targetInput,
+        }));
 
     // #14: definitions are stored once per graph, collected from every
     // instance in the editor (recursively, for nested instances). Member

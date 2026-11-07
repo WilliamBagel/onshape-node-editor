@@ -19,6 +19,7 @@ import {
     serializeGraph,
 } from "../../serialization/graph-serializer";
 import { GroupNode } from "../../nodes/groupinstancenode";
+import { GroupInputNode, GroupOutputNode } from "../../nodes/groupboundarynode";
 import {
     createGroupDefinition,
     extractBoundarySockets,
@@ -243,9 +244,14 @@ describe("grouping v2 (#14)", () => {
 
         expect(await controller.enter(fixture.instance1.id)).toBe(true);
         expect(controller.breadcrumb()).toEqual(["Top level", "Cross to transform"]);
-        // Inside: only the two member nodes, with their internal connection.
-        expect(fixture.editor.getNodes().map((node) => node.id).sort()).toEqual([fixture.cross.id, fixture.transform.id].sort());
-        expect(fixture.editor.getConnections()).toHaveLength(1);
+        // Inside: the member nodes plus the visible Start Feature / End Feature
+        // boundary cards. Boundary wiring is created for each exposed socket.
+        const insideIds = fixture.editor.getNodes().map((node) => node.id).sort();
+        expect(insideIds).toContain(fixture.cross.id);
+        expect(insideIds).toContain(fixture.transform.id);
+        expect(fixture.editor.getNodes().some((node) => node instanceof GroupInputNode && node.getTitle() === "Start Feature")).toBe(true);
+        expect(fixture.editor.getNodes().some((node) => node instanceof GroupOutputNode && node.getTitle() === "End Feature")).toBe(true);
+        expect(fixture.editor.getConnections()).toHaveLength(3);
 
         // Move a member while inside; the new position is captured on exit.
         positions[fixture.cross.id] = { x: 777, y: 888 };
@@ -293,7 +299,10 @@ describe("grouping v2 (#14)", () => {
             expect(instanceId).toBeTruthy();
             expect(await controller.toggle(instanceId)).toBe("entered");
             expect(controller.breadcrumb()).toEqual(["Top level", "Cross to transform"]);
-            expect(fixture.editor.getNodes().map((node) => node.id).sort()).toEqual([fixture.cross.id, fixture.transform.id].sort());
+            expect(fixture.editor.getNodes().map((node) => node.id)).toContain(fixture.cross.id);
+            expect(fixture.editor.getNodes().map((node) => node.id)).toContain(fixture.transform.id);
+            expect(fixture.editor.getNodes().some((node) => node instanceof GroupInputNode)).toBe(true);
+            expect(fixture.editor.getNodes().some((node) => node instanceof GroupOutputNode)).toBe(true);
             expect(await controller.toggle()).toBe("exited");
             expect(controller.breadcrumb()).toEqual(["Top level"]);
         }
@@ -404,4 +413,40 @@ describe("grouping v2 (#14)", () => {
         // The outer group inlines both inner instances: two crosses in total.
         expect(source?.match(/cross\(/g)).toHaveLength(2);
     });
+
+    it("exposes boundary sockets and lets the editor add, rename, retype and remove them", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...fixture.editor.getConnections()]) await fixture.editor.removeConnection(connection.id);
+                for (const node of [...fixture.editor.getNodes()]) await fixture.editor.removeNode(node.id);
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.enter(fixture.instance1.id)).toBe(true);
+        const state = controller.boundaryState();
+        expect(state?.name).toBe("Cross to transform");
+        expect(state?.candidates?.inputs.some((candidate) => candidate.socketKey === "vector2")).toBe(true);
+        expect(await controller.addBoundarySocket("input", fixture.cross.id, "vector2")).toBe(true);
+        const added = fixture.definition.inputs.find((socket) => socket.socketKey === "vector2");
+        expect(added).toBeDefined();
+        expect(await controller.updateBoundarySocket(added!.id, { label: "direction", valueType: "Vector" })).toBe(true);
+        expect(added?.label).toBe("direction");
+        expect(added?.valueType).toBe("Vector");
+        const inputNode = fixture.editor.getNodes().find((node) => node instanceof GroupInputNode) as GroupInputNode;
+        expect(Object.keys(inputNode.outputs)).toContain(added!.id);
+        expect(await controller.removeBoundarySocket(added!.id)).toBe(true);
+        expect(fixture.definition.inputs.some((socket) => socket.id === added!.id)).toBe(false);
+        expect(await controller.exit()).toBe(true);
+    });
 });
+
