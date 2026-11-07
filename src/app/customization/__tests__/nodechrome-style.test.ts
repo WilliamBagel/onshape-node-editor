@@ -69,4 +69,18 @@ describe('collapsed socket strip is vertical columns', () => {
         expect(nodeSrc).toMatch(/data-testid="collapsed-output-socket"/);
         expect(nodeSrc).toMatch(/class="collapsed-socket"/);
     });
+    it('collapsed row height is fixed at 14px, not a min-height the 24px port box re-inflates', () => {
+        // Regression: `.collapsed-socket { min-height: 14px }` measured 24px
+        // per socket (the OnshapeSocket port box), so a 7-socket Chamfer
+        // collapsed to 229px — only 38px under its expanded frame, and
+        // taller than small expanded cards.
+        expect(nodeSrc).toMatch(/\.collapsed-socket\s*\{[^}]*height:\s*14px/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket\s*\{[^}]*min-height:\s*0/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket :deep\(\.socket-container\)\s*\{[^}]*height:\s*14px/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket :deep\(\.socket\)\s*\{[^}]*height:\s*14px/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket :deep\(\.snap-target\)\s*\{[^}]*height:\s*14px/);
+    });
+    it('collapsed card does not pin the expanded height inline', () => {
+        expect(nodeSrc).toMatch(/'height':\s*!collapsed && Number\.isFinite\(height\)/);
+    });
 });

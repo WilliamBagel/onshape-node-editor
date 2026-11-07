@@ -51,4 +51,37 @@ describe('collapsed socket strip', () => {
     expect((wrapper.vm.$data as { collapsed: boolean }).collapsed).toBe(false);
     wrapper.unmount();
   });
+
+  it('collapsed card is content-sized (no pinned expanded height) and expands back', async () => {
+    const node = makeCustomFeatureNodeWithMap();
+    const { wrapper } = await mountNode(node);
+    const root = wrapper.find('[data-testid="node"]');
+    const expandedHeight = root.attributes('style') ?? '';
+    expect(expandedHeight).toContain('height: 150px');
+
+    await wrapper.find('.node-collapse-toggle').trigger('click');
+    await wrapper.vm.$nextTick();
+
+    // Collapsed: the expanded height is not pinned inline, so the card is
+    // sized by its content (header + compact socket strip) — i.e. shorter
+    // than the expanded 150px box, with no empty expanded body reserved.
+    expect(wrapper.classes()).toContain('collapsed');
+    expect(root.attributes('style') ?? '').not.toContain('height: 150px');
+    expect(wrapper.find('.dialog-content').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="collapsed-socket-strip"]').exists()).toBe(true);
+    const collapsedSockets = wrapper.findAll(
+      '[data-testid="collapsed-input-socket"], [data-testid="collapsed-output-socket"]',
+    );
+    expect(collapsedSockets.length).toBeGreaterThan(0);
+
+    await wrapper.find('.node-collapse-toggle').trigger('click');
+    await wrapper.vm.$nextTick();
+
+    // Expanding restores the prior height and the full inputs.
+    expect(wrapper.classes()).not.toContain('collapsed');
+    expect(root.attributes('style') ?? '').toContain('height: 150px');
+    expect(wrapper.find('[data-testid="collapsed-socket-strip"]').exists()).toBe(false);
+    expect(wrapper.find('.dialog-content').exists()).toBe(true);
+    wrapper.unmount();
+  });
 });
