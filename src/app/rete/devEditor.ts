@@ -10,7 +10,7 @@ const socket = new ClassicPreset.Socket('socket');
 
 export async function createEditor(container: HTMLElement): Promise<EditorControls> {
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, debugSources } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, sanitizeGraph, debugSources } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -61,6 +61,14 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
   area.translate(chamferNode2.id, { x: 600, y: 50 });
   area.translate(featureEndNode.id, { x: 900, y: 50 });
 
+  // The default sample must open clean: prune genuinely invalid/orphaned
+  // nodes (transient boundary cards, unresolved specs, ...) and log what
+  // was removed. No-op when the sample is valid.
+  const sanitizeReport = await sanitizeGraph();
+  if (sanitizeReport.pruned.length > 0) {
+    console.warn(`[graph-sanitize] pruned ${sanitizeReport.pruned.length} invalid node(s) from the default sample`);
+  }
+
 
   (window as unknown as any)['editor'] = editor;
 
@@ -72,6 +80,7 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
     studioEvents,
     serializeGraph,
     loadGraph,
+    sanitizeGraph,
     getNodeOrder: () => nodeOrder.getOrder(),
     fitView,
     deleteSelectedNodes,

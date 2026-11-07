@@ -13,7 +13,7 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, debugSources } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, sanitizeGraph, debugSources } = await editorBase(container);
 
   // #8: default graph nodes come from the catalog (#7) via the factory —
   // no inline spec literals. A value function and a statement feature.
@@ -63,6 +63,13 @@ export async function createEditor(container: HTMLElement) {
   if (sampleNode2) area.translate(sampleNode2.id, { x: 600, y: 50 });
   area.translate(featureEndNode.id, { x: 900, y: 50 });
 
+  // The default sample must open clean: prune genuinely invalid/orphaned
+  // nodes and log what was removed. No-op when the sample is valid.
+  const sanitizeReport = await sanitizeGraph();
+  if (sanitizeReport.pruned.length > 0) {
+    console.warn(`[graph-sanitize] pruned ${sanitizeReport.pruned.length} invalid node(s) from the default sample`);
+  }
+
 
   (window as unknown as any)['editor'] = editor;
 
@@ -76,6 +83,7 @@ export async function createEditor(container: HTMLElement) {
     studioEvents,
     serializeGraph,
     loadGraph,
+    sanitizeGraph,
     getNodeOrder: () => nodeOrder.getOrder(),
     fitView,
     deleteSelectedNodes,
