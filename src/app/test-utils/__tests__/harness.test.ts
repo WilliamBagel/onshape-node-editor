@@ -161,9 +161,10 @@ describe('node chrome: empty map, left header, collapsed sockets, title focus', 
     expect(collapsedOutputs.length).toBe(Object.keys(node.outputs).length);
     // No duplicate registrations, correct side/key/data. Read the descriptors
     // from the component (the Ref stub does not expose props in jsdom).
-    const descriptors = [...(wrapper.vm as any).collapsedInputs, ...(wrapper.vm as any).collapsedOutputs];
+    const read = (value: unknown) => (typeof value === "function" ? (value as () => any[])() : value as any[]);
+    const descriptors = [...read((wrapper.vm as any).collapsedInputs), ...read((wrapper.vm as any).collapsedOutputs)];
     expect(descriptors.length).toBe(collapsedInputs.length + collapsedOutputs.length);
-    const keys = (wrapper.vm as any).collapsedInputs.map((d: any) => d.key);
+    const keys = read((wrapper.vm as any).collapsedInputs).map((d: any) => d.key);
     expect(new Set(keys).size).toBe(keys.length);
     expect([...keys].sort()).toEqual([...new Set(expectedInputs.filter((k) => k !== 'definition'))].sort());
     for (const d of descriptors) {
@@ -171,7 +172,7 @@ describe('node chrome: empty map, left header, collapsed sockets, title focus', 
       expect(d.nodeId).toBe(node.id);
       expect(d.payload).toBeDefined();
     }
-    expect((wrapper.vm as any).collapsedOutputs.length).toBe(collapsedOutputs.length);
+    expect(read((wrapper.vm as any).collapsedOutputs).length).toBe(collapsedOutputs.length);
     // Re-expand restores the full rows and removes the strip.
     await wrapper.find('.node-collapse-toggle').trigger('click');
     await wrapper.vm.$nextTick();
