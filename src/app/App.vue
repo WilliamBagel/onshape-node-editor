@@ -206,6 +206,9 @@ export default defineComponent({
       editorControls = await createEditor(this.$refs.rete as HTMLElement);
     }
     this.controls = editorControls;
+    // QA harness hook: the browser checks (qa/harness/*) assert live editor
+    // state through the same controls the UI calls, not a re-implementation.
+    (window as unknown as { controls?: EditorControls }).controls = editorControls;
     // Live group I/O: wire binds/rebinds/unbinds refresh the open panel
     // state immediately (read-only — refreshGroupBoundaryState never opens
     // the panel or writes back, so this cannot loop).
