@@ -480,6 +480,9 @@ export default defineComponent({
       if (this.groupEditing) {
         this.refreshGroupBoundaryState();
         this.groupPanelOpen = true;
+        // The Start/End cards sit outside the member bounds; fit so the user
+        // actually sees the group boundary instead of off-screen chrome.
+        await this.controls?.fitView();
       } else {
         this.groupPanelOpen = false;
         this.groupBoundaryState = null;
@@ -496,8 +499,8 @@ export default defineComponent({
       this.groupPanelOpen = false;
     },
     /** Group config: rename/retype a boundary socket, then refresh. */
-    async onGroupConfigUpdate(payload: { socketId: string; patch: { label?: string; valueType?: string } }) {
-      await this.controls?.updateGroupBoundarySocket(payload.socketId, payload.patch);
+    async onGroupConfigUpdate(payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }) {
+      await this.controls?.updateGroupBoundarySocket(payload.socketId, payload.patch, payload.direction);
       this.refreshGroupBoundaryState();
     },
     /** Group config: bind a candidate member socket, then refresh. */
@@ -506,8 +509,8 @@ export default defineComponent({
       this.refreshGroupBoundaryState();
     },
     /** Group config: remove a boundary socket, then refresh. */
-    async onGroupConfigRemove(socketId: string) {
-      await this.controls?.removeGroupBoundarySocket(socketId);
+    async onGroupConfigRemove(payload: { socketId: string; direction: 'input' | 'output' }) {
+      await this.controls?.removeGroupBoundarySocket(payload.socketId, payload.direction);
       this.refreshGroupBoundaryState();
     },
     /** #73: group instances are runtime state; snapshot them when a palette opens. */

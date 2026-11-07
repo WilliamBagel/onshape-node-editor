@@ -123,9 +123,9 @@ export type EditorControls = {
     /** #14: expose one member socket as a group input/output. */
     addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
     /** #14: rename or retype an existing group boundary socket. */
-    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch) => Promise<boolean>
+    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
     /** #14: remove a group boundary socket. */
-    removeGroupBoundarySocket: (socketId: string) => Promise<boolean>
+    removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
@@ -178,9 +178,9 @@ type EditorBaseInfo = {
     /** #14: expose one member socket as a group input/output. */
     addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
     /** #14: rename or retype an existing group boundary socket. */
-    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch) => Promise<boolean>
+    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
     /** #14: remove a group boundary socket. */
-    removeGroupBoundarySocket: (socketId: string) => Promise<boolean>
+    removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry. */
@@ -840,6 +840,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
             }
         },
+        updateNode: async (nodeId) => {
+            if (editor.getNode(nodeId) != null) {
+                await area.update("node", nodeId);
+            }
+        },
     });
 
     const selectedInstanceId = (): string | undefined => {
@@ -855,10 +860,10 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     const getGroupBoundaryState = (): GroupBoundaryState | null => groupController.boundaryState();
     const addGroupBoundarySocket = (direction: "input" | "output", nodeId: string, socketKey: string): Promise<boolean> =>
         groupController.addBoundarySocket(direction, nodeId, socketKey);
-    const updateGroupBoundarySocket = (socketId: string, patch: GroupSocketPatch): Promise<boolean> =>
-        groupController.updateBoundarySocket(socketId, patch);
-    const removeGroupBoundarySocket = (socketId: string): Promise<boolean> =>
-        groupController.removeBoundarySocket(socketId);
+    const updateGroupBoundarySocket = (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output"): Promise<boolean> =>
+        groupController.updateBoundarySocket(socketId, patch, direction);
+    const removeGroupBoundarySocket = (socketId: string, direction?: "input" | "output"): Promise<boolean> =>
+        groupController.removeBoundarySocket(socketId, direction);
 
     const toggleMuteSelected = async (): Promise<number> => {
         const selected = editor.getNodes().filter((node) => node.selected && !(node instanceof FrameNode));

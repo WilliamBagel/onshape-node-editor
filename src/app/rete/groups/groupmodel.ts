@@ -158,8 +158,12 @@ export function updateGroupSocket(
     definition: GroupDefinition,
     socketId: string,
     patch: GroupSocketPatch,
+    direction?: "input" | "output",
 ): boolean {
-    const socket = [...definition.inputs, ...definition.outputs].find((entry) => entry.id === socketId);
+    const list = direction == null
+        ? [...definition.inputs, ...definition.outputs]
+        : direction === "input" ? definition.inputs : definition.outputs;
+    const socket = list.find((entry) => entry.id === socketId);
     if (socket == null) return false;
     if (patch.label != null) {
         const label = patch.label.trim();
@@ -173,14 +177,18 @@ export function updateGroupSocket(
 }
 
 /** Remove a boundary socket. Member wiring is untouched. */
-export function removeGroupSocket(definition: GroupDefinition, socketId: string): boolean {
-    const direction = definition.inputs.some((entry) => entry.id === socketId)
+export function removeGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    direction?: "input" | "output",
+): boolean {
+    const resolved = direction ?? (definition.inputs.some((entry) => entry.id === socketId)
         ? "input"
         : definition.outputs.some((entry) => entry.id === socketId)
             ? "output"
-            : null;
-    if (direction == null) return false;
-    if (direction === "input") {
+            : null);
+    if (resolved == null) return false;
+    if (resolved === "input") {
         definition.inputs = definition.inputs.filter((entry) => entry.id !== socketId);
     } else {
         definition.outputs = definition.outputs.filter((entry) => entry.id !== socketId);

@@ -97,7 +97,7 @@ describe("GroupConfigPanel", () => {
     await nameInput.setValue("thickness");
     await nameInput.trigger("blur");
     expect(wrapper.emitted("update")).toEqual([
-      [{ socketId: "n1.depth", patch: { label: "thickness" } }],
+      [{ socketId: "n1.depth", direction: "input", patch: { label: "thickness" } }],
     ]);
     wrapper.unmount();
   });
@@ -107,7 +107,7 @@ describe("GroupConfigPanel", () => {
     const typeSelect = wrapper.find('[data-testid="group-input-row"] select');
     await typeSelect.setValue("ValueWithUnits");
     expect(wrapper.emitted("update")).toEqual([
-      [{ socketId: "n1.depth", patch: { valueType: "ValueWithUnits" } }],
+      [{ socketId: "n1.depth", direction: "input", patch: { valueType: "ValueWithUnits" } }],
     ]);
     wrapper.unmount();
   });
@@ -117,7 +117,7 @@ describe("GroupConfigPanel", () => {
     const removeBtn = wrapper.find('[data-testid="group-output-row"] button[aria-label="Remove output result"]');
     expect(removeBtn.exists()).toBe(true);
     await removeBtn.trigger("click");
-    expect(wrapper.emitted("remove")).toEqual([["n1.result"]]);
+    expect(wrapper.emitted("remove")).toEqual([[{ socketId: "n1.result", direction: "output" }]]);
     wrapper.unmount();
   });
 

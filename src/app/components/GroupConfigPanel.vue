@@ -20,9 +20,9 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'update', payload: { socketId: string; patch: { label?: string; valueType?: string } }): void
+  (e: 'update', payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }): void
   (e: 'add', payload: { direction: 'input' | 'output'; nodeId: string; socketKey: string }): void
-  (e: 'remove', socketId: string): void
+  (e: 'remove', payload: { socketId: string; direction: 'input' | 'output' }): void
   (e: 'close'): void
 }>()
 
@@ -54,11 +54,15 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>()
 function syncDrafts(): void {
   if (props.state == null) return
   for (const socket of [...props.state.inputs, ...props.state.outputs]) {
-    labelDrafts.value[socket.id] = socket.label
+    labelDrafts.value[rowKey(socket)] = socket.label
   }
 }
 
 watch(() => props.state, syncDrafts, { immediate: true, deep: true })
+
+function rowKey(socket: GroupSocketDefinition): string {
+  return `${socket.direction}:${socket.id}`
+}
 
 function sourceLabel(socket: GroupSocketDefinition): string {
   const all = props.state?.candidates
@@ -70,16 +74,16 @@ function sourceLabel(socket: GroupSocketDefinition): string {
 
 /** Debounce-free path: rename emits on blur, retype emits on change. */
 function onLabelBlur(socket: GroupSocketDefinition): void {
-  const next = labelDrafts.value[socket.id] ?? ''
+  const next = labelDrafts.value[rowKey(socket)] ?? ''
   if (next !== socket.label) {
-    emit('update', { socketId: socket.id, patch: { label: next } })
+    emit('update', { socketId: socket.id, direction: socket.direction, patch: { label: next } })
   }
 }
 
 function onTypeChange(socket: GroupSocketDefinition, event: Event): void {
   const next = (event.target as HTMLSelectElement).value
   if (next !== (socket.valueType ?? 'unknown')) {
-    emit('update', { socketId: socket.id, patch: { valueType: next } })
+    emit('update', { socketId: socket.id, direction: socket.direction, patch: { valueType: next } })
   }
 }
 
@@ -109,11 +113,12 @@ function addSelected(direction: 'input' | 'output'): void {
   else selectedOutput.value = ''
 }
 
-function removeSocket(socketId: string): void {
-  const timer = timers.get(socketId)
+function removeSocket(socket: GroupSocketDefinition): void {
+  const key = rowKey(socket)
+  const timer = timers.get(key)
   if (timer != null) clearTimeout(timer)
-  timers.delete(socketId)
-  emit('remove', socketId)
+  timers.delete(key)
+  emit('remove', { socketId: socket.id, direction: socket.direction })
 }
 </script>
 
@@ -149,12 +154,12 @@ function removeSocket(socketId: string): void {
       </p>
       <div
         v-for="socket in state.inputs"
-        :key="socket.id"
+        :key="rowKey(socket)"
         data-testid="group-input-row"
         class="socket-row"
       >
         <input
-          v-model="labelDrafts[socket.id]"
+          v-model="labelDrafts[rowKey(socket)]"
           class="name-input"
           type="text"
           :aria-label="`Input name for ${socket.label}`"
@@ -175,7 +180,7 @@ function removeSocket(socketId: string): void {
           type="button"
           class="remove-btn"
           :aria-label="`Remove input ${socket.label}`"
-          @click="removeSocket(socket.id)"
+          @click="removeSocket(socket)"
         >
           <SvgIcon href="#svg-icon-close-x" :size="12" :aria-label="`Remove input ${socket.label}`" />
         </button>
@@ -213,12 +218,12 @@ function removeSocket(socketId: string): void {
       </p>
       <div
         v-for="socket in state.outputs"
-        :key="socket.id"
+        :key="rowKey(socket)"
         data-testid="group-output-row"
         class="socket-row"
       >
         <input
-          v-model="labelDrafts[socket.id]"
+          v-model="labelDrafts[rowKey(socket)]"
           class="name-input"
           type="text"
           :aria-label="`Output name for ${socket.label}`"
@@ -239,7 +244,7 @@ function removeSocket(socketId: string): void {
           type="button"
           class="remove-btn"
           :aria-label="`Remove output ${socket.label}`"
-          @click="removeSocket(socket.id)"
+          @click="removeSocket(socket)"
         >
           <SvgIcon href="#svg-icon-close-x" :size="12" :aria-label="`Remove output ${socket.label}`" />
         </button>
@@ -275,10 +280,11 @@ function removeSocket(socketId: string): void {
 <style scoped>
 .group-config-panel {
   position: fixed;
-  top: 44px;
+  top: auto;
+  bottom: 160px;
   right: 8px;
   width: 300px;
-  max-height: calc(100vh - 52px);
+  max-height: calc(100vh - 220px);
   overflow-y: auto;
   padding: 12px;
   background: var(--surface-panel);

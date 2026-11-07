@@ -50,6 +50,8 @@ export interface GroupEditHost {
     getPositions: () => Record<string, Vec2 | null>;
     /** Place nodes at the given canvas positions, by node id. */
     setPositions: (positions: Record<string, Vec2 | null>) => Promise<void>;
+    /** Re-measure/repaint a node after its sockets changed. */
+    updateNode?: (nodeId: string) => Promise<void>;
 }
 
 interface EditLevel {
@@ -199,10 +201,14 @@ export class GroupEditorController {
     }
 
     /** Rename/retype an existing boundary socket. */
-    async updateBoundarySocket(socketId: string, patch: GroupSocketPatch): Promise<boolean> {
+    async updateBoundarySocket(
+        socketId: string,
+        patch: GroupSocketPatch,
+        direction?: "input" | "output",
+    ): Promise<boolean> {
         const definition = this.currentDefinition;
         if (definition == null) return false;
-        if (!updateGroupSocket(definition, socketId, patch)) {
+        if (!updateGroupSocket(definition, socketId, patch, direction)) {
             return false;
         }
         await this.refreshBoundary();
@@ -210,10 +216,10 @@ export class GroupEditorController {
     }
 
     /** Remove a boundary socket from the group interface. */
-    async removeBoundarySocket(socketId: string): Promise<boolean> {
+    async removeBoundarySocket(socketId: string, direction?: "input" | "output"): Promise<boolean> {
         const definition = this.currentDefinition;
         if (definition == null) return false;
-        if (!removeGroupSocket(definition, socketId)) {
+        if (!removeGroupSocket(definition, socketId, direction)) {
             return false;
         }
         await this.refreshBoundary();
@@ -229,7 +235,14 @@ export class GroupEditorController {
         for (const node of this.editor.getNodes()) {
             if (node instanceof GroupNode && node.definitionId === definition.id) {
                 node.setDefinition(definition);
+                await this.host.updateNode?.(node.id);
             }
+        }
+        if (this.groupInput != null) {
+            await this.host.updateNode?.(this.groupInput.id);
+        }
+        if (this.groupOutput != null) {
+            await this.host.updateNode?.(this.groupOutput.id);
         }
         await this.rebuildBoundaryWiring();
     }
@@ -244,10 +257,12 @@ export class GroupEditorController {
         const minX = memberPositions.length > 0 ? Math.min(...memberPositions.map((position) => position.x)) : 0;
         const minY = memberPositions.length > 0 ? Math.min(...memberPositions.map((position) => position.y)) : 0;
         const maxX = memberPositions.length > 0 ? Math.max(...memberPositions.map((position) => position.x)) : 640;
+        const startX = Math.max(20, minX - 280);
+        const endX = maxX + 40;
         await this.host.setPositions({
             ...definition.positions,
-            [this.groupInput.id]: { x: minX - 340, y: minY },
-            [this.groupOutput.id]: { x: maxX + 340, y: minY },
+            [this.groupInput.id]: { x: startX, y: minY },
+            [this.groupOutput.id]: { x: endX, y: minY },
         });
         await this.rebuildBoundaryWiring();
     }
