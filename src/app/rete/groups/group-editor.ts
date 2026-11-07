@@ -57,6 +57,10 @@ export interface GroupEditHost {
     setPositions: (positions: Record<string, Vec2 | null>) => Promise<void>;
     /** Re-measure/repaint a node after its sockets changed. */
     updateNode?: (nodeId: string) => Promise<void>;
+    /** Fired after any boundary socket / wiring change so the host can
+     * refresh its panel state. Must not write back into the editor
+     * (read-only state refresh), so it cannot recurse into this driver. */
+    onBoundaryChanged?: () => void;
 }
 
 interface EditLevel {
@@ -333,6 +337,7 @@ export class GroupEditorController {
                     if (socket != null) {
                         await this.connect(this.groupInput, socket.id, member, connection.targetInput);
                     }
+                    this.notifyBoundaryChanged();
                 } finally {
                     this.suspendBoundarySync = false;
                 }
@@ -340,6 +345,8 @@ export class GroupEditorController {
             }
             if (definition.inputs.some((entry) => entry.id === connection.sourceOutput)) {
                 bindGroupSocket(definition, connection.sourceOutput, member.id, connection.targetInput, "input");
+                await this.syncBoundaryInstances(definition);
+                this.notifyBoundaryChanged();
             }
             return;
         }
@@ -360,6 +367,7 @@ export class GroupEditorController {
                     if (socket != null) {
                         await this.connect(member, connection.sourceOutput, this.groupOutput, socket.id);
                     }
+                    this.notifyBoundaryChanged();
                 } finally {
                     this.suspendBoundarySync = false;
                 }
@@ -367,6 +375,8 @@ export class GroupEditorController {
             }
             if (definition.outputs.some((entry) => entry.id === connection.targetInput)) {
                 bindGroupSocket(definition, connection.targetInput, member.id, connection.sourceOutput, "output");
+                await this.syncBoundaryInstances(definition);
+                this.notifyBoundaryChanged();
             }
         }
     }
@@ -393,6 +403,8 @@ export class GroupEditorController {
             if (socket != null && isGroupSocketBound(socket)
                 && socket.nodeId === connection.target && socket.socketKey === connection.targetInput) {
                 unbindGroupSocket(definition, socket.id, "input");
+                this.syncBoundaryInstances(definition);
+                this.notifyBoundaryChanged();
             }
             return;
         }
@@ -401,6 +413,8 @@ export class GroupEditorController {
             if (socket != null && isGroupSocketBound(socket)
                 && socket.nodeId === connection.source && socket.socketKey === connection.sourceOutput) {
                 unbindGroupSocket(definition, socket.id, "output");
+                this.syncBoundaryInstances(definition);
+                this.notifyBoundaryChanged();
             }
         }
     }
@@ -437,6 +451,13 @@ export class GroupEditorController {
             await this.host.updateNode?.(this.groupOutput.id);
         }
         await this.rebuildBoundaryWiring();
+        this.notifyBoundaryChanged();
+    }
+
+    /** Notify the host (e.g. App) so the open panel refreshes live.
+     * Host callbacks are read-only state refreshes, so no loop. */
+    private notifyBoundaryChanged(): void {
+        this.host.onBoundaryChanged?.();
     }
 
     private async createBoundaryNodes(definition: GroupDefinition): Promise<void> {

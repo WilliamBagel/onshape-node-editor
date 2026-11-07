@@ -9,19 +9,46 @@
   component never touches the editor directly and uses no browser dialogs.
 -->
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import type { GroupBoundaryState } from '../rete/groups/group-editor'
-import type { GroupSocketCandidate, GroupSocketDefinition } from '../rete/groups/groupmodel'
+import type { GroupSocketDefinition } from '../rete/groups/groupmodel'
 
 const props = defineProps<{
   /** Live boundary state from controls.getGroupBoundaryState(); null hides the panel. */
   state: GroupBoundaryState | null
 }>()
 
+/**
+ * Socket data-colour for a value type, from the --socket-* tokens in
+ * common.css (the same palette the canvas sockets use). Unknown types
+ * fall back to the neutral socket ink.
+ */
+const SOCKET_COLORS: Readonly<Record<string, string>> = {
+  Query: 'var(--socket-query)',
+  QueryList: 'var(--socket-query)',
+  Id: 'var(--socket-id)',
+  ValueWithUnits: 'var(--socket-quantity)',
+  Enum: 'var(--socket-enum)',
+  Boolean: 'var(--socket-boolean)',
+  boolean: 'var(--socket-boolean)',
+  String: 'var(--socket-string)',
+  string: 'var(--socket-string)',
+  Vector: 'var(--socket-vector)',
+  Matrix: 'var(--socket-matrix)',
+  Transform: 'var(--socket-transform)',
+  CoordSystem: 'var(--socket-coordsystem)',
+  number: 'var(--socket-number)',
+  map: 'var(--socket-map)',
+  Context: 'var(--socket-context)',
+}
+
+function socketColor(valueType: string | undefined): string {
+  return SOCKET_COLORS[valueType ?? 'unknown'] ?? 'var(--socket-ink)'
+}
+
 const emit = defineEmits<{
   (e: 'update', payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }): void
-  (e: 'add', payload: { direction: 'input' | 'output'; nodeId: string; socketKey: string }): void
   (e: 'add-any', payload: { direction: 'input' | 'output'; label: string; valueType: string }): void
   (e: 'remove', payload: { socketId: string; direction: 'input' | 'output' }): void
   (e: 'close'): void
@@ -48,8 +75,6 @@ const VALUE_TYPES: readonly string[] = [
 
 /** Draft label text per socket id, so typing does not fight the parent refresh. */
 const labelDrafts = ref<Record<string, string>>({})
-const selectedInput = ref('')
-const selectedOutput = ref('')
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function syncDrafts(): void {
@@ -73,11 +98,7 @@ function sourceLabel(socket: GroupSocketDefinition): string {
   if (!isBound(socket)) {
     return 'Unbound — drag it onto a member node to bind it'
   }
-  const all = props.state?.candidates
-  const found = [...(all?.inputs ?? []), ...(all?.outputs ?? [])].find(
-    (c) => c.nodeId === socket.nodeId && c.socketKey === socket.socketKey,
-  )
-  return found != null ? `${found.nodeTitle} › ${found.label}` : socket.socketKey ?? ''
+  return socket.socketKey ?? ''
 }
 
 /** Debounce-free path: rename emits on blur, retype emits on change. */
@@ -93,32 +114,6 @@ function onTypeChange(socket: GroupSocketDefinition, event: Event): void {
   if (next !== (socket.valueType ?? 'unknown')) {
     emit('update', { socketId: socket.id, direction: socket.direction, patch: { valueType: next } })
   }
-}
-
-function candidateKey(c: GroupSocketCandidate): string {
-  return `${c.nodeId} ${c.socketKey}`
-}
-
-function grouped(candidates: GroupSocketCandidate[]): { nodeTitle: string; items: GroupSocketCandidate[] }[] {
-  const byTitle = new Map<string, GroupSocketCandidate[]>()
-  for (const c of candidates) {
-    const list = byTitle.get(c.nodeTitle) ?? []
-    list.push(c)
-    byTitle.set(c.nodeTitle, list)
-  }
-  return [...byTitle.entries()].map(([nodeTitle, items]) => ({ nodeTitle, items }))
-}
-
-const inputGroups = computed(() => grouped(props.state?.candidates?.inputs ?? []))
-const outputGroups = computed(() => grouped(props.state?.candidates?.outputs ?? []))
-
-function addSelected(direction: 'input' | 'output'): void {
-  const selected = direction === 'input' ? selectedInput.value : selectedOutput.value
-  if (selected === '') return
-  const [nodeId, socketKey] = selected.split(' ')
-  emit('add', { direction, nodeId, socketKey })
-  if (direction === 'input') selectedInput.value = ''
-  else selectedOutput.value = ''
 }
 
 const anyInputLabel = ref('')
@@ -157,22 +152,33 @@ function removeSocket(socket: GroupSocketDefinition): void {
         <SvgIcon href="#svg-icon-mateGroup" :size="16" aria-label="Node group" />
         <h2 class="panel-heading">{{ state.name }}</h2>
       </div>
-      <button
-        type="button"
-        class="close-btn"
-        aria-label="Close group configuration"
-        data-testid="group-config-close"
-        @click="emit('close')"
-      >
-        <SvgIcon href="#svg-icon-close-x" :size="12" aria-label="Close group configuration" />
-      </button>
+      <div class="header-actions">
+        <button
+          type="button"
+          class="collapse-btn"
+          aria-label="Collapse group configuration"
+          data-testid="group-config-collapse"
+          @click="emit('close')"
+        >
+          <SvgIcon href="#svg-icon-arrow-down" :size="12" aria-label="Collapse group configuration" />
+        </button>
+        <button
+          type="button"
+          class="close-btn"
+          aria-label="Close group configuration"
+          data-testid="group-config-close"
+          @click="emit('close')"
+        >
+          <SvgIcon href="#svg-icon-close-x" :size="12" aria-label="Close group configuration" />
+        </button>
+      </div>
     </div>
-    <p class="panel-meta">Start Feature / End Feature sockets for this group.</p>
+    <p class="panel-meta">Start Feature / End Feature sockets for this group. Bind sockets by dragging wires on the canvas.</p>
 
     <section aria-labelledby="group-inputs-heading">
       <h3 id="group-inputs-heading" class="section-label">Inputs</h3>
       <p v-if="state.inputs.length === 0" class="empty-state">
-        No inputs yet. Choose a member-node socket below and press + Input to expose it on the Start Feature.
+        No inputs yet. Add one below, then drag it onto a member node to bind it.
       </p>
       <div
         v-for="socket in state.inputs"
@@ -188,14 +194,22 @@ function removeSocket(socket: GroupSocketDefinition): void {
           :aria-label="`Input name for ${socket.label}`"
           @blur="onLabelBlur(socket)"
         />
-        <select
-          class="type-select"
-          :aria-label="`Type for input ${socket.label}`"
-          :value="socket.valueType ?? 'unknown'"
-          @change="onTypeChange(socket, $event)"
-        >
-          <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
-        </select>
+        <span class="type-dot-wrap">
+          <span class="type-dot" data-testid="group-row-type-dot" :style="{ background: socketColor(socket.valueType) }"></span>
+          <select
+            class="type-select"
+            :aria-label="`Type for input ${socket.label}`"
+            :value="socket.valueType ?? 'unknown'"
+            @change="onTypeChange(socket, $event)"
+          >
+            <option
+              v-for="t in VALUE_TYPES"
+              :key="t"
+              :value="t"
+              :style="{ color: socketColor(t) }"
+            >{{ t }}</option>
+          </select>
+        </span>
         <span class="source-label" :title="isBound(socket) ? `Bound to ${socket.nodeId}.${socket.socketKey}` : 'Unbound'">
           {{ sourceLabel(socket) }}
         </span>
@@ -209,52 +223,36 @@ function removeSocket(socket: GroupSocketDefinition): void {
         </button>
       </div>
       <div class="add-row">
-        <select
-          v-model="selectedInput"
-          class="candidate-select"
-          aria-label="Member socket to expose as a group input"
-        >
-          <option value="">Select a member socket…</option>
-          <optgroup v-for="group in inputGroups" :key="group.nodeTitle" :label="group.nodeTitle">
-            <option v-for="c in group.items" :key="candidateKey(c)" :value="candidateKey(c)">
-              {{ c.nodeTitle }} › {{ c.label }}
-            </option>
-          </optgroup>
-        </select>
-        <button
-          type="button"
-          data-testid="group-add-input"
-          class="add-btn"
-          aria-label="Add selected socket as a group input"
-          :disabled="selectedInput === ''"
-          @click="addSelected('input')"
-        >
-          + Input
-        </button>
-      </div>
-      <div class="add-row">
         <input
           v-model="anyInputLabel"
           class="name-input"
           type="text"
           placeholder="New input name…"
-          aria-label="Label for a new arbitrary group input"
+          aria-label="Label for a new group input"
         />
-        <select
-          v-model="anyInputType"
-          class="type-select"
-          aria-label="Type for a new arbitrary group input"
-        >
-          <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
-        </select>
+        <span class="type-dot-wrap">
+          <span class="type-dot" data-testid="group-add-input-type-dot" :style="{ background: socketColor(anyInputType) }"></span>
+          <select
+            v-model="anyInputType"
+            class="type-select"
+            aria-label="Type for a new group input"
+          >
+            <option
+              v-for="t in VALUE_TYPES"
+              :key="t"
+              :value="t"
+              :style="{ color: socketColor(t) }"
+            >{{ t }}</option>
+          </select>
+        </span>
         <button
           type="button"
-          data-testid="group-add-any-input"
+          data-testid="group-add-input"
           class="add-btn"
           aria-label="Add a new unbound group input"
           @click="addAny('input')"
         >
-          + Any input
+          + Add input
         </button>
       </div>
     </section>
@@ -262,7 +260,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
     <section aria-labelledby="group-outputs-heading">
       <h3 id="group-outputs-heading" class="section-label">Outputs</h3>
       <p v-if="state.outputs.length === 0" class="empty-state">
-        No outputs yet. Choose a member-node socket below and press + Output to expose it on the End Feature.
+        No outputs yet. Add one below, then drag it onto a member node to bind it.
       </p>
       <div
         v-for="socket in state.outputs"
@@ -278,14 +276,22 @@ function removeSocket(socket: GroupSocketDefinition): void {
           :aria-label="`Output name for ${socket.label}`"
           @blur="onLabelBlur(socket)"
         />
-        <select
-          class="type-select"
-          :aria-label="`Type for output ${socket.label}`"
-          :value="socket.valueType ?? 'unknown'"
-          @change="onTypeChange(socket, $event)"
-        >
-          <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
-        </select>
+        <span class="type-dot-wrap">
+          <span class="type-dot" data-testid="group-row-type-dot" :style="{ background: socketColor(socket.valueType) }"></span>
+          <select
+            class="type-select"
+            :aria-label="`Type for output ${socket.label}`"
+            :value="socket.valueType ?? 'unknown'"
+            @change="onTypeChange(socket, $event)"
+          >
+            <option
+              v-for="t in VALUE_TYPES"
+              :key="t"
+              :value="t"
+              :style="{ color: socketColor(t) }"
+            >{{ t }}</option>
+          </select>
+        </span>
         <span class="source-label" :title="isBound(socket) ? `Bound to ${socket.nodeId}.${socket.socketKey}` : 'Unbound'">
           {{ sourceLabel(socket) }}
         </span>
@@ -299,52 +305,36 @@ function removeSocket(socket: GroupSocketDefinition): void {
         </button>
       </div>
       <div class="add-row">
-        <select
-          v-model="selectedOutput"
-          class="candidate-select"
-          aria-label="Member socket to expose as a group output"
-        >
-          <option value="">Select a member socket…</option>
-          <optgroup v-for="group in outputGroups" :key="group.nodeTitle" :label="group.nodeTitle">
-            <option v-for="c in group.items" :key="candidateKey(c)" :value="candidateKey(c)">
-              {{ c.nodeTitle }} › {{ c.label }}
-            </option>
-          </optgroup>
-        </select>
-        <button
-          type="button"
-          data-testid="group-add-output"
-          class="add-btn"
-          aria-label="Add selected socket as a group output"
-          :disabled="selectedOutput === ''"
-          @click="addSelected('output')"
-        >
-          + Output
-        </button>
-      </div>
-      <div class="add-row">
         <input
           v-model="anyOutputLabel"
           class="name-input"
           type="text"
           placeholder="New output name…"
-          aria-label="Label for a new arbitrary group output"
+          aria-label="Label for a new group output"
         />
-        <select
-          v-model="anyOutputType"
-          class="type-select"
-          aria-label="Type for a new arbitrary group output"
-        >
-          <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
-        </select>
+        <span class="type-dot-wrap">
+          <span class="type-dot" data-testid="group-add-output-type-dot" :style="{ background: socketColor(anyOutputType) }"></span>
+          <select
+            v-model="anyOutputType"
+            class="type-select"
+            aria-label="Type for a new group output"
+          >
+            <option
+              v-for="t in VALUE_TYPES"
+              :key="t"
+              :value="t"
+              :style="{ color: socketColor(t) }"
+            >{{ t }}</option>
+          </select>
+        </span>
         <button
           type="button"
-          data-testid="group-add-any-output"
+          data-testid="group-add-output"
           class="add-btn"
           aria-label="Add a new unbound group output"
           @click="addAny('output')"
         >
-          + Any output
+          + Add output
         </button>
       </div>
     </section>
@@ -425,8 +415,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 }
 
 .name-input,
-.type-select,
-.candidate-select {
+.type-select {
   font-family: var(--font-sans);
   font-size: var(--font-size-label);
   color: var(--text-primary);
@@ -439,9 +428,26 @@ function removeSocket(socket: GroupSocketDefinition): void {
   min-width: 0;
 }
 
+.type-dot-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.type-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.type-select {
+  width: 100%;
+}
+
 .name-input:focus-visible,
-.type-select:focus-visible,
-.candidate-select:focus-visible {
+.type-select:focus-visible {
   border-color: var(--accent-steel);
   outline: none;
 }
@@ -457,6 +463,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 }
 
 .remove-btn,
+.collapse-btn,
 .close-btn {
   display: inline-flex;
   align-items: center;
@@ -472,6 +479,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 }
 
 .remove-btn:hover,
+.collapse-btn:hover,
 .close-btn:hover {
   background: var(--hover-tint);
   border-color: var(--border-hairline);
@@ -485,8 +493,10 @@ function removeSocket(socket: GroupSocketDefinition): void {
   margin-top: 8px;
 }
 
-.candidate-select {
-  flex: 1;
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .add-btn {
