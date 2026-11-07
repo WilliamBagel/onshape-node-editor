@@ -1,16 +1,12 @@
 /**
- * #14: inline expansion of group instances for codegen.
+ * #14: inline expansion of group instances for codegen — the FALLBACK.
  *
- * Choice (documented per the issue): **inline the subgraph at each
- * instance**, rather than emitting one FeatureScript function per group
- * definition. Trade-off: inlining duplicates the subgraph's FeatureScript
- * once per placement (more bytes, and FeatureScript has no way to share it),
- * but it needs no typed function signatures — the existing expression
- * planner already types every value — and it composes with the statement
- * pipeline unchanged. Emitting a function per definition would be smaller
- * for heavily reused groups, at the cost of inventing a typed signature
- * (parameter types, `var`/`let` scoping, and statement-order rules) for
- * every boundary socket.
+ * Each group definition normally compiles to one reusable FeatureScript
+ * function and each instance to a call (see ./group-function.ts). Inline
+ * expansion is used only when a reachable definition cannot compile to a
+ * function — today, when it contains a member kind outside the
+ * cloneable set below — in which case the whole graph is expanded and
+ * codegen either inlines correctly or refuses with its existing error.
  *
  * Expansion builds a fresh editor: non-instance nodes are shared, each
  * instance's member nodes are cloned with instance-scoped ids
@@ -34,7 +30,7 @@ import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { createUtilityNode } from "../catalog-node-factory";
 import { connectGraphNodes } from "../serialization/graph-serializer";
-import type { GroupDefinition } from "./groupmodel";
+import { isGroupSocketBound, type GroupDefinition } from "./groupmodel";
 
 interface BoundaryTarget {
     node: OnshapeNode;
@@ -246,9 +242,16 @@ export async function expandGroupInstances(
         }
 
         for (const socket of definition.inputs) {
+            if (!isGroupSocketBound(socket)) continue; // unbound input: unused
             result.inputs.set(socket.id, resolveMember(socket.nodeId, socket.socketKey, "input"));
         }
         for (const socket of definition.outputs) {
+            if (!isGroupSocketBound(socket)) {
+                throw new Error(
+                    `Group "${definition.id}" boundary output "${socket.label}" (${socket.id}) is not bound to a member output; ` +
+                        `bind it by dragging a member output onto the End Feature before building.`,
+                );
+            }
             result.outputs.set(socket.id, resolveMember(socket.nodeId, socket.socketKey, "output"));
         }
         return result;

@@ -1,5 +1,5 @@
 <template>
-  <svg data-testid="connection" xmlns="http://www.w3.org/2000/svg" v-bind:class="{ 'open': open }" preserveAspectRatio="none" viewBox="0 0 10000 10000">
+  <svg data-testid="connection" xmlns="http://www.w3.org/2000/svg" v-bind:class="{ 'open': open, [raisedClass]: raised }" preserveAspectRatio="none" viewBox="0 0 10000 10000">
     <!-- Transparent rect to maintain SVG bounds -->
     <rect x="0" y="0" width="10000" height="10000" fill="none" pointer-events="none" />
     <path :d="path" class="path-outline" :style="{ 'marker-start': fixedLeft, 'marker-end': fixedRight }"></path>
@@ -33,12 +33,14 @@
 import { defineComponent } from 'vue'
 import { Schemes } from '../rete/types';
 import Color from 'color';
+import { CONNECTION_RAISED_CLASS, selectedNodeIds } from '../rete/modified-rete/connection-raise';
 
 export default defineComponent({
   props: ['data', 'start', 'end', 'path'],
   data() {
     return {
       color: 'var(--flow-teal)',
+      raisedClass: CONNECTION_RAISED_CLASS,
     }
   },
   methods: {
@@ -66,6 +68,13 @@ export default defineComponent({
   computed: {
     open() {
       return this.data.target === '';
+    },
+    // True while either endpoint node is selected: the SVG gets
+    // `connection-node-selected` (z-index -4 instead of -5), painting above
+    // unrelated connections but still below every node (see
+    // connection-raise.ts for the layering trade-off).
+    raised() {
+      return selectedNodeIds.value.includes(this.data.source) || selectedNodeIds.value.includes(this.data.target);
     },
     colorStart() {
       this.path;
@@ -113,6 +122,12 @@ svg {
   height: 10000px;
 
   z-index: -5;
+
+  /* Selected node's incident connections: above other connections (-5),
+     still below every node (0). See connection-raise.ts. */
+  &.connection-node-selected {
+    z-index: -4;
+  }
 
   .path {
     fill: none;

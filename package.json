@@ -28,9 +28,16 @@
     "organize:docs": "node scripts/std-library-scrapper/organizeLibrary.mjs",
     "scrape:all": "npm run scrape:docs && npm run organize:docs",
     "style-check": "node scripts/style-check.mjs",
+    "fetch:feature-specs": "node scripts/fetch-feature-specs.mjs",
     "test:ui": "vitest run --config vitest.ui.config.ts",
-    "verify:ui": "node scripts/ui-verify.mjs",
-    "explore:ui": "node scripts/ui-explorer.mjs"
+    "verify:ui": "node qa/harness/ui-verify.mjs",
+    "explore:ui": "node qa/harness/explorer.mjs",
+    "build:qa-dashboard": "vite build --config qa/dashboard/vite.config.ts",
+    "smoke:qa-dashboard": "node qa/dashboard/dashboard.smoke.mjs",
+    "qa:node-chrome": "node qa/harness/node-chrome-check.mjs",
+    "qa:defects": "node qa/harness/defect-checks.mjs",
+    "qa:report": "node qa/harness/report.mjs",
+    "qa:review": "node qa/review/review-packet.mjs"
   },
   "dependencies": {
     "@rwh/keystrokes": "^1.5.6",

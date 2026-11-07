@@ -161,13 +161,17 @@ export default OnshapeInputMap
     border-top: 6px solid var(--text-primary);
     transition: transform 0.15s ease;
     flex-shrink: 0;
+    // Caret only (measured 3px too far left): transform shifts the triangle
+    // without moving the label, unlike margin/padding which would push the
+    // whole header row. Rotation is preserved per-state below.
+    transform: translateX(3px);
 
     &.expanded {
-        transform: rotate(0deg);
+        transform: translateX(3px) rotate(0deg);
     }
 
     &:not(.expanded) {
-        transform: rotate(-90deg);
+        transform: translateX(3px) rotate(-90deg);
     }
 }
 

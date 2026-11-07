@@ -3,6 +3,21 @@ body {
 }
 
 /*
+ * Real Inter Bold (OFL, via Fontsource) so the 700 node title is a true bold
+ * face, not a synthesized or regular-weight substitute. The old TTF was a byte
+ * copy of Inter-Regular and no @font-face ever materialized any Inter file;
+ * both public/fonts/Inter-Bold.{ttf,woff2} now hold the real Bold face (the
+ * .ttf also satisfies woolsthorpe.css's vendored Inter Bold declaration).
+ */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/onshape-node-editor/fonts/Inter-Bold.woff2') format('woff2');
+}
+
+/*
  * Style-guide tokens (STYLE_GUIDE.md) — the one palette.
  *
  * Every UI file consumes these names instead of literal hex values. Colours,
@@ -77,7 +92,7 @@ body {
     --font-size-value: 13px;
     --font-size-meta: 11px;
     --font-size-literal: 12px;
-    --font-weight-title: 600;
+    --font-weight-title: 700;
     --font-weight-section: 600;
     --line-height-body: 1.35;
     --line-height-title: 1.2;

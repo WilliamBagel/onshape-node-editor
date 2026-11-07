@@ -2,7 +2,8 @@
   <div class="quantity-autocomplete-holder dropdown">
     <input ref="input"
       class="os-param-number dropdown-source ng-pristine ng-untouched ng-valid ng-not-empty os-param-form-item"
-      type="text" autocomplete="off" :value="display" :key="updateDisplay" @focus="onFocus" @blur="valueEntered"
+      type="text" autocomplete="off" :value="display" :key="updateDisplay" :aria-label="control.label"
+      @focus="onFocus" @blur="valueEntered"
       @keypress.enter="onEnter" :class="{ 'os-invalid-textbox': errored }">
     </input>
   </div>

@@ -207,10 +207,24 @@ export interface SerializedGroupSocket {
     id: string;
     label: string;
     direction: "input" | "output";
-    nodeId: string;
-    socketKey: string;
+    /** Absent when the interface socket is unbound (arbitrary socket). */
+    nodeId?: string;
+    /** Absent when the interface socket is unbound (arbitrary socket). */
+    socketKey?: string;
     valueType?: string;
     defaultLiteral?: string;
+}
+
+/**
+ * Permanent Start/End Feature boundary identity for a group definition.
+ * Ids and positions are stable across save/load and group re-entry;
+ * they never appear as top-level nodes.
+ */
+export interface SerializedGroupBoundaryNodes {
+    inputId: string;
+    outputId: string;
+    inputPosition: Vec2 | null;
+    outputPosition: Vec2 | null;
 }
 
 /**
@@ -226,6 +240,8 @@ export interface SerializedGroupDefinition {
     connections: SerializedConnection[];
     inputs: SerializedGroupSocket[];
     outputs: SerializedGroupSocket[];
+    /** Permanent Start/End boundary identity; absent in pre-permanent documents. */
+    boundaryNodes?: SerializedGroupBoundaryNodes;
 }
 
 /**
@@ -283,7 +299,7 @@ export interface SerializedFrame {
     id: string;
     label: string;
     color: string;
-    /** When true, the frame's descendants are hidden on the canvas. */
+    /** Legacy schema field; frames always serialize expanded (see FrameNode). */
     collapsed: boolean;
     position: Vec2 | null;
     size: NodeSize;

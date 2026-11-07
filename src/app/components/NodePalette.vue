@@ -112,9 +112,9 @@ function onKeydown(event: KeyboardEvent) {
    (flex + min-height: 0), so long catalogs stay reachable. */
 .palette-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
 .palette-category { font-size: var(--font-size-section); font-weight: var(--font-weight-section); padding: 8px 4px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
-.palette-item { display: flex; justify-content: space-between; width: 100%; padding: 6px 4px; border: none; background: transparent; cursor: pointer; font-family: var(--font-sans); text-align: left; }
+.palette-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; width: 100%; padding: 6px 4px; border: none; background: transparent; cursor: pointer; font-family: var(--font-sans); text-align: left; }
 .palette-item--active { background: var(--surface-sunken); }
-.palette-item-name { font-size: var(--font-size-value); color: var(--ink); }
-.palette-item-meta { font-size: var(--font-size-meta); color: var(--ink); opacity: var(--opacity-faint); }
+.palette-item-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-value); color: var(--ink); }
+.palette-item-meta { flex: 0 0 auto; white-space: nowrap; font-size: var(--font-size-meta); color: var(--ink-soft); }
 .palette-empty { font-size: var(--font-size-label); padding: 8px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
 </style>

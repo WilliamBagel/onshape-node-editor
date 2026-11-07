@@ -36,6 +36,7 @@ import { ScopesPlugin, Presets as ScopesPresets } from 'rete-scopes-plugin';
 import { DataflowEngine } from 'rete-engine';
 import { FixSelector } from './modified-rete/fixselector';
 import { installNodeOrder, NodeOrderKeeper } from './modified-rete/nodeorder';
+import { installConnectionRaise, syncConnectionRaise } from './modified-rete/connection-raise';
 import { FRAME_HEADER_HEIGHT, FRAME_PADDING, areaZoom, computeFrameBounds, installFrameSizeSync, pinFrameElement, syncNodeSize } from './modified-rete/frame-layout';
 import { clampNodePlacement } from './modified-rete/node-placement';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
@@ -47,9 +48,10 @@ import { editorContextMenuPreset } from "./editor-context-menu";
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
+import { cachedSpecResolver } from "../onshape/feature-spec-cache";
 import { GroupNode } from "./nodes/groupinstancenode";
-import { assertGroupableSelection, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
-import { GroupEditorController } from "./groups/group-editor";
+import { assertGroupableSelection, commonGroupParent, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition, type GroupSocketPatch } from "./groups/groupmodel";
+import { GroupEditorController, type GroupBoundaryState } from "./groups/group-editor";
 
 /** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
 export function modifierCheckKey(modifier: string): string {
@@ -116,6 +118,20 @@ export type EditorControls = {
     addGroupInstance: (definitionId: string) => Promise<GroupNode | null>
     /** #14: wrap the selected non-frame nodes in a new group definition. */
     createGroupFromSelection: () => Promise<GroupNode | null>
+    /** #14: boundary configuration for the group currently being edited. */
+    getGroupBoundaryState: () => GroupBoundaryState | null
+    /** #14: true when `nodeId` is the Start/End card of the group being edited. */
+    isGroupBoundaryNode: (nodeId: string) => boolean
+    /** #14: expose one member socket as a group input/output. */
+    addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
+    /** #14: create an arbitrary (unbound) group input/output. */
+    addGroupBoundarySocketAny: (direction: "input" | "output", label: string, valueType?: string) => Promise<boolean>
+    /** #14: rename or retype an existing group boundary socket. */
+    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
+    /** #14: remove a group boundary socket. */
+    removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
+    /** #14: register the callback fired on live boundary changes. */
+    setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
@@ -163,6 +179,20 @@ type EditorBaseInfo = {
     addGroupInstance: (definitionId: string) => Promise<GroupNode | null>
     /** #14: wrap the selected non-frame nodes in a new group definition. */
     createGroupFromSelection: () => Promise<GroupNode | null>
+    /** #14: boundary configuration for the group currently being edited. */
+    getGroupBoundaryState: () => GroupBoundaryState | null
+    /** #14: true when `nodeId` is the Start/End card of the group being edited. */
+    isGroupBoundaryNode: (nodeId: string) => boolean
+    /** #14: expose one member socket as a group input/output. */
+    addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
+    /** #14: create an arbitrary (unbound) group input/output. */
+    addGroupBoundarySocketAny: (direction: "input" | "output", label: string, valueType?: string) => Promise<boolean>
+    /** #14: rename or retype an existing group boundary socket. */
+    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
+    /** #14: remove a group boundary socket. */
+    removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
+    /** #14: register the callback fired on live boundary changes. */
+    setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry. */
@@ -326,7 +356,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                     group.category,
                     group.entries.map((entry): [string, () => OnshapeNode] => [
                         entry.name,
-                        () => createNodeFromCatalogEntry(entry) as OnshapeNode,
+                        () => createNodeFromCatalogEntry(entry, cachedSpecResolver) as OnshapeNode,
                     ]),
                 ],
             ),
@@ -468,6 +498,37 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     const selector = new FixSelector();
 
+    // Selected node's incident connections paint above other connections
+    // (z-index -4 vs -5, still below nodes at 0 — see connection-raise.ts).
+    // The views read the shared `selectedNodeIds` ref reactively, so the
+    // only sync needed is publishing the selector's ids on every mutation.
+    // `selectableNodes` mutates selection through `selector.add` (pick /
+    // accumulate) and `selector.unselectAll` (background-click deselect);
+    // wrapping those two instance methods sees every selection change,
+    // including deselection back to empty, which emits no pipe signal.
+    const connectionRaiseHooks = {
+        getSelectedIds: () => Array.from(selector.entities.values())
+            .filter((entity) => entity.label === 'node')
+            .map((entity) => entity.id),
+    };
+    installConnectionRaise(area, connectionRaiseHooks);
+    const syncRaise = (): void => syncConnectionRaise(connectionRaiseHooks);
+    const originalSelectorAdd = selector.add.bind(selector);
+    selector.add = async (...args: Parameters<typeof selector.add>): Promise<void> => {
+        await originalSelectorAdd(...args);
+        syncRaise();
+    };
+    const originalSelectorRemove = selector.remove.bind(selector);
+    selector.remove = async (...args: Parameters<typeof selector.remove>): Promise<void> => {
+        await originalSelectorRemove(...args);
+        syncRaise();
+    };
+    const originalSelectorUnselectAll = selector.unselectAll.bind(selector);
+    selector.unselectAll = async (): Promise<void> => {
+        await originalSelectorUnselectAll();
+        syncRaise();
+    };
+
     AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
             active: () => {
@@ -482,9 +543,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     // `nodepicked` and reorders the DOM itself, which would make it a second
     // owner of the order this app persists as `nodeOrder`.
     const nodeOrder = installNodeOrder(area, {
-        getSelectedIds: () => Array.from(selector.entities.values())
-            .filter((entity) => entity.label === 'node')
-            .map((entity) => entity.id),
+        getSelectedIds: connectionRaiseHooks.getSelectedIds,
         // #13: frames are excluded from the paint order entirely — the
         // pinning pipe above keeps their elements behind their children.
         isExcluded: (id) => editor.getNodes().find((node) => node.id === id) instanceof FrameNode,
@@ -565,46 +624,25 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     };
 
     // #13 frame helpers --------------------------------------------------
-
-    /** True when any frame above `node` in the group chain is collapsed. */
-    const isEffectivelyHidden = (node: OnshapeNode): boolean => {
-        let parentId = node.group;
-        const seen = new Set<string>();
-        while (parentId != null && !seen.has(parentId)) {
-            seen.add(parentId);
-            const parent = editor.getNodes().find((candidate) => candidate.id === parentId);
-            if (parent instanceof FrameNode && parent.collapsed) {
-                return true;
-            }
-            parentId = parent?.group ?? null;
-        }
-        return false;
-    };
-
-    /** Recompute every node's visibility from the frames' collapsed flags. */
-    const applyCollapsedStates = (): void => {
-        for (const node of editor.getNodes()) {
-            const view = area.nodeViews.get(node.id);
-            if (view != null) {
-                view.element.style.display = isEffectivelyHidden(node) ? 'none' : '';
-            }
-        }
-    };
-
-    /** Wire a frame's view toggle to the canvas (the view only flips the flag). */
-    const prepareFrame = (frame: FrameNode): void => {
-        frame.onCollapsedChanged = () => {
-            applyCollapsedStates();
-        };
-    };
+    //
+    // Frame collapsing was removed. Frames always stay expanded, so no code
+    // path here hides descendant node elements: old documents carrying
+    // `collapsed: true` normalize to false in `FrameNode.fromJSON`, and
+    // nothing else ever sets the flag. `toggleFrameCollapsed` is kept as a
+    // no-op for API compatibility and only forces the expanded state.
 
     const toggleFrameCollapsed = async (frameId: string): Promise<void> => {
         const frame = editor.getNodes().find((node) => node.id === frameId);
         if (!(frame instanceof FrameNode)) {
             return;
         }
-        frame.collapsed = !frame.collapsed;
-        applyCollapsedStates();
+        // Collapse is disabled; the frame stays expanded with visible
+        // descendants. Normalizing here covers legacy programmatic callers.
+        frame.collapsed = false;
+        const view = area.nodeViews.get(frame.id);
+        if (view != null) {
+            view.element.style.display = "";
+        }
     };
 
     const createFrameFromSelection = async (): Promise<FrameNode | null> => {
@@ -638,7 +676,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         const frame = new FrameNode();
         frame.width = Math.max(frame.minWidth, bounds.width);
         frame.height = Math.max(80, bounds.height);
-        prepareFrame(frame);
         await editor.addNode(frame);
         // The new element starts on top of the holder; pin it to its
         // paint layer behind its children and the connections (the
@@ -663,7 +700,6 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         // come from the same code path as drag-to-frame refits. The
         // measured bounds above already give the correct first paint.
         await scopes.update(frame.id);
-        applyCollapsedStates();
         return frame;
     };
 
@@ -710,19 +746,20 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             await editor.removeNode(node.id);
         }
         for (const node of graph.nodes) {
-            if (node instanceof FrameNode) {
-                prepareFrame(node);
-            }
             await editor.addNode(node);
         }
-        for (const connection of graph.connections) {
-            await editor.addConnection(connection);
-        }
+        // Place nodes before creating their connections. rete-render-utils
+        // snapshots socket centres when a connection is added; adding the
+        // connections first left every restored wire at the node's
+        // default/pre-translation position until a drag forced a re-render.
         for (const node of graph.nodes) {
             const position = graph.positions[node.id];
             if (position != null) {
                 await area.translate(node.id, position);
             }
+        }
+        for (const connection of graph.connections) {
+            await editor.addConnection(connection);
         }
         await nodeOrder.setOrder(graph.nodeOrder);
         // Serialized sizes are model sizes and can be stale against the
@@ -736,9 +773,21 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 await scopes.update(node.id);
             }
         }
-        // Restore collapsed frames after positions exist so hidden children
-        // hide in place rather than flashing on load.
-        applyCollapsedStates();
+        // Repaint every restored connection from settled socket geometry
+        // (node sizes, expanded controls and fonts can change after
+        // addConnection). recalcAll emits the per-socket updates that the
+        // connection views listen to; without it a restored wire can stay
+        // offset until a node drag re-renders it.
+        if (typeof document !== "undefined") {
+            if (typeof requestAnimationFrame === "function") {
+                await new Promise<void>((resolve) => {
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+                });
+            }
+            await connection.socketPositionWatcher.recalcAll();
+        }
+        // Old documents may carry collapsed frames; `FrameNode.fromJSON`
+        // already normalized them to expanded, so descendants load visible.
         // #14: adopt the loaded definitions so instances can be re-placed
         // and entered without a reload.
         groupDefinitions.clear();
@@ -787,6 +836,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return specs;
     };
 
+    let boundaryChangedCb: (() => void) | null = null;
     const groupController = new GroupEditorController(editor, {
         snapshot: () => ({ document: serializeGraph(), positions: canvasPositions(), specs: collectSpecs() }),
         restore: async (snap) => {
@@ -803,7 +853,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
             }
         },
+        updateNode: async (nodeId) => {
+            if (editor.getNode(nodeId) != null) {
+                await area.update("node", nodeId);
+            }
+        },
+        onBoundaryChanged: () => boundaryChangedCb?.(),
     });
+
+    const setGroupBoundaryChangedCallback = (cb: (() => void) | null): void => {
+        boundaryChangedCb = cb;
+    };
 
     const selectedInstanceId = (): string | undefined => {
         const selected = editor.getNodes().find((node) => node.selected && node instanceof GroupNode);
@@ -814,6 +874,17 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         await groupController.toggle(selectedInstanceId());
         return groupController.breadcrumb();
     };
+
+    const getGroupBoundaryState = (): GroupBoundaryState | null => groupController.boundaryState();
+    const isGroupBoundaryNode = (nodeId: string): boolean => groupController.isBoundaryNode(nodeId);
+    const addGroupBoundarySocket = (direction: "input" | "output", nodeId: string, socketKey: string): Promise<boolean> =>
+        groupController.addBoundarySocket(direction, nodeId, socketKey);
+    const addGroupBoundarySocketAny = (direction: "input" | "output", label: string, valueType = "unknown"): Promise<boolean> =>
+        groupController.addBoundarySocketAny(direction, label, valueType);
+    const updateGroupBoundarySocket = (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output"): Promise<boolean> =>
+        groupController.updateBoundarySocket(socketId, patch, direction);
+    const removeGroupBoundarySocket = (socketId: string, direction?: "input" | "output"): Promise<boolean> =>
+        groupController.removeBoundarySocket(socketId, direction);
 
     const toggleMuteSelected = async (): Promise<number> => {
         const selected = editor.getNodes().filter((node) => node.selected && !(node instanceof FrameNode));
@@ -864,6 +935,10 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         definition.inputs = inputs;
         definition.outputs = outputs;
         definition.positions = canvasPositions();
+        // A group created from nodes inside one frame stays inside that frame;
+        // removing the members otherwise leaves an empty frame that the scopes
+        // plugin shrinks to its header. Mixed-parent selections stay unparented.
+        const parentFrame = commonGroupParent(selected);
         // A fresh definition cannot be part of a cycle, but a member that
         // is an instance of a definition that (transitively) contains one
         // of the selected nodes would be — refuse rather than build it.
@@ -877,12 +952,20 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         groupDefinitions.set(definition.id, definition);
 
         const instance = new GroupNode(definition);
+        instance.group = parentFrame;
         // External connections are rewired to the instance's boundary
         // sockets; the members leave the editor (they live in the
         // definition until the group is entered).
         const external = allConnections.filter(
             (connection) => memberIds.has(connection.source) !== memberIds.has(connection.target),
         );
+        // Detach the members from their frames before removal. rete-scopes
+        // refuses to remove a parent node that still has children; and an
+        // empty frame would otherwise collapse to its header. The instance
+        // inherits the shared parent frame below.
+        for (const node of selected) {
+            node.group = null;
+        }
         for (const connection of [...editor.getConnections()]) {
             if (memberIds.has(connection.source) || memberIds.has(connection.target)) {
                 await editor.removeConnection(connection.id);
@@ -934,6 +1017,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 );
                 await editor.addConnection(rewired);
             }
+        }
+        if (parentFrame != null) {
+            // Re-fit the frame around the surviving group instance instead of
+            // letting an empty scope collapse to its header.
+            await scopes.update(parentFrame);
         }
         return instance;
     };
@@ -1022,7 +1110,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     /** #8: create a catalog node and place it at the given / last-click / centre position. */
     const addNodeFromCatalog = async (entry: CatalogEntry, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
-        placeNode(createNodeFromCatalogEntry(entry), position);
+        placeNode(createNodeFromCatalogEntry(entry, cachedSpecResolver), position);
 
     /** #73: array/iteration nodes the catalog does not contain. */
     const addArrayNode = async (variant: ArrayNodeVariant, position?: { x: number; y: number }): Promise<OnshapeNode | null> =>
@@ -1087,6 +1175,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         listGroupDefinitions,
         addGroupInstance,
         createGroupFromSelection,
+        getGroupBoundaryState,
+        isGroupBoundaryNode,
+        addGroupBoundarySocket,
+        addGroupBoundarySocketAny,
+        updateGroupBoundarySocket,
+        removeGroupBoundarySocket,
+        setGroupBoundaryChangedCallback,
         applyPreferences,
         addNodeFromCatalog,
         addArrayNode,

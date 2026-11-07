@@ -1,7 +1,10 @@
 <template>
-  <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected }" :style="{
+  <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected, collapsed }" :style="{
     'width': Number.isFinite(width) ? `${width}px` : '',
-    'height': Number.isFinite(height) ? `${height}px` : '',
+    // Collapsed nodes are content-sized: skip the expanded height
+    // entirely instead of pinning it inline and relying on
+    // `height:auto !important` to beat it. Expanding restores it.
+    'height': !collapsed && Number.isFinite(height) ? `${height}px` : '',
     'min-width': Number.isFinite(data.minWidth) ? `${data.minWidth}px` : '',
     'max-width': Number.isFinite(data.maxWidth) ? `${data.maxWidth}px` : ''
   }" data-testid="node">
@@ -47,6 +50,9 @@
           data-testid="generic-definition-warning" role="note">
           Generic definition — definition map schema not known; generated code uses an empty map.
         </p>
+        <p v-if="boundaryEmptyText() != null" class="boundary-empty-hint" data-testid="boundary-empty-hint">
+          {{ boundaryEmptyText() }}
+        </p>
         <!-- Outputs-->
         <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
           :key="'output' + key + seed" :data-testid="'output-' + key">
@@ -66,7 +72,7 @@
         <Ref class="control" v-for="[key, control] in controls()" :key="'control' + key + seed" :emit="proxyEmit"
           :data="{ type: 'control', payload: control }" :data-testid="'control-' + key" />
         <!-- Inputs-->
-        <template v-for="[key, input] in visibleInputs" :key="'input' + key + seed">
+        <template v-for="[key, input] in visibleInputs()" :key="'input' + key + seed">
           <OnshapeInputMap v-if="isMapInput(input)" :mapKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
             :seed="seed" @value-change="controlValueChange(input, $event)" />
           <OnshapeInput v-else :inputKey="key" :input="input" :nodeId="data.id" :emit="proxyEmit"
@@ -77,20 +83,20 @@
       <div class="collapsed-socket-strip" v-if="collapsed" data-testid="collapsed-socket-strip"
         :aria-label="`Collapsed ${title} — ${collapsedInputs.length + collapsedOutputs.length} sockets`">
         <span class="collapsed-socket-group collapsed-socket-inputs">
-          <Ref v-for="socket in collapsedInputs" :key="'collapsed-in-' + socket.key + seed" class="collapsed-socket"
+          <Ref v-for="socket in collapsedInputs()" :key="'collapsed-in-' + socket.key + seed" class="collapsed-socket"
             :emit="proxyEmit"
             :data="{ type: 'socket', side: 'input', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
             data-testid="collapsed-input-socket" />
         </span>
         <span class="collapsed-socket-group collapsed-socket-outputs">
-          <Ref v-for="socket in collapsedOutputs" :key="'collapsed-out-' + socket.key + seed" class="collapsed-socket"
+          <Ref v-for="socket in collapsedOutputs()" :key="'collapsed-out-' + socket.key + seed" class="collapsed-socket"
             :emit="proxyEmit"
             :data="{ type: 'socket', side: 'output', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
             data-testid="collapsed-output-socket" />
         </span>
       </div>
       <div class="dialog-help-container"><a class="os-help-link os-center-content"
-          href="./probably-a-popup-here-instead.error" target="help"><svg class="os-svg-icon os-help-btn"
+          href="./probably-a-popup-here-instead.error" target="help" aria-label="Open FeatureScript help" title="Help"><svg class="os-svg-icon os-help-btn"
             xmlns="http://www.w3.org/2000/svg">
             <use xlink:href="#svg-icon-help-button"></use>
           </svg></a>
@@ -156,10 +162,13 @@ export default defineComponent({
       updateComponent: 0
     }
   },
-  computed: {
-    visibleInputs() {
-      // make updateComponent changes update this computed property
-      this.updateComponent;
+  methods: {
+    visibleInputs(): Array<[string, OnshapeInputType<any>]> {
+      // Method, not computed: graph nodes are raw model objects (markRaw),
+      // so socket mutations are not reactive. `area.update('node')` rerenders
+      // the component, and a method re-reads the live input map. A computed
+      // here cached the initially mounted sockets and hid newly added
+      // boundary ports until the group was exited and re-entered.
       return this.inputs().filter(([key, input]) => {
         // Arguments (context, id) are always visible
         const inputType = (input as any).type;
@@ -174,14 +183,30 @@ export default defineComponent({
         return this.hiddenParameters[key] !== true;
       });
     },
-    collapsedInputs() {
-      return collectCollapsedSockets(this.visibleInputs.map(([key, input]: any) => ({ key, input })) as any, this.data.id);
+    collapsedInputs(): any[] {
+      return collectCollapsedSockets(this.visibleInputs().map(([key, input]: any) => ({ key, input })) as any, this.data.id);
     },
-    collapsedOutputs() {
+    collapsedOutputs(): any[] {
       return collectCollapsedOutputSockets(Object.fromEntries(this.outputs()) as any, this.data.id);
-    }
-  },
-  methods: {
+    },
+    /** Explain an empty Start/End card instead of leaving a blank body. */
+    boundaryEmptyText(): string | null {
+      const type = (this.data as any).type;
+      if (type === "group-input" && Object.keys(this.data.outputs).length === 0) {
+        return "No inputs exposed — use Group inputs and outputs.";
+      }
+      if (type === "group-output" && Object.keys(this.data.inputs).length === 0) {
+        return "No outputs exposed — use Group inputs and outputs.";
+      }
+      if (
+        type === "group-instance" &&
+        Object.keys(this.data.inputs).length === 0 &&
+        Object.keys(this.data.outputs).length === 0
+      ) {
+        return "No inputs or outputs exposed — open the group to configure.";
+      }
+      return null;
+    },
     proxyEmit(...args: any[]) {
       this.emit?.(...args);
     },
@@ -333,7 +358,7 @@ export default defineComponent({
   --node-font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --node-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --node-title-size: 14px;
-  --node-title-weight: 600;
+  --node-title-weight: 700;
   --node-title-line-height: 1.2;
   --node-label-size: 12px;
   --node-label-weight: 400;
@@ -398,7 +423,8 @@ export default defineComponent({
   margin-right: - round($socket-overflow, 1px);
 }
 
-// Node title (#35): 14px/600 warm ink at 100% opacity, 1.2 line-height.
+// Node title (#35): 14px/700 true bold (real Inter Bold face, common.css)
+// warm ink at 100% opacity, 1.2 line-height.
 // `!important` retained only to beat the vendored woolsthorpe.css title size.
 .ns-dialog-title,
 .os-dialog-header-rename-textbox {
@@ -482,6 +508,19 @@ export default defineComponent({
     line-height: var(--node-value-line-height) !important;
   }
 
+  // Quantity value inputs: 13px/400 sans, like every other node value
+  // (STYLE_GUIDE). Specificity is raised to tie the literal-mono rule above
+  // (input[type=...] + :not(...) = 0,2,1) and declared AFTER it, so it wins
+  // for `os-param-number` inputs and anything inside the quantity holder.
+  // Without this, quantity fields rendered in Courier — wrong for a value
+  // control (measured: ui-monospace 12px in headless Chrome).
+  :deep(input[type='text'].os-param-number),
+  :deep(input[type='number'].os-param-number),
+  :deep(.quantity-autocomplete-holder input.os-param-number) {
+    font-family: var(--node-font-sans) !important;
+    font-size: var(--node-value-size) !important;
+  }
+
   // Non-literal values (enum/select surfaces): 13px/400 sans at 100%.
   :deep(select),
   :deep(.os-select-container),
@@ -515,6 +554,15 @@ export default defineComponent({
   line-height: 1.35;
 }
 
+.boundary-empty-hint {
+  margin: 0;
+  padding: 8px;
+  color: var(--ink-soft);
+  font-family: var(--node-font-sans);
+  font-size: var(--font-size-label);
+  line-height: 1.35;
+}
+
 .dialog-help-container {
   position: relative;
   display: flex;
@@ -532,6 +580,14 @@ export default defineComponent({
 .feature-dialog {
   left: 0px;
   top: 0px;
+}
+
+// A collapsed node is content-sized: the inline expanded height must not leave
+// a blank card under the socket strip. Re-expanding removes this class and
+// restores the stored expanded height.
+.node.collapsed {
+  height: auto !important;
+  min-height: 0;
 }
 
 // Header chrome (#72): the title is centred between two small header buttons.
@@ -635,26 +691,73 @@ export default defineComponent({
   pointer-events: auto;
 }
 
-// Compact socket strip while collapsed: input sockets hug the left edge,
-// output sockets the right edge, Blender-style, so wires can still attach.
+// Compact socket strip while collapsed: sockets run horizontally under the
+// header — inputs left-aligned, outputs right-aligned, wrapping only when a
+// node has too many sockets to fit one row. A vertical column looked like a
+// half-expanded card (seven inputs still produced a ~159px tall node with a
+// blank right side), so the strip is deliberately a row: header + one short
+// band, no reserved body space, wires still attach to every dot.
 .collapsed-socket-strip {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  min-height: 24px;
-  padding: 2px 4px;
+  gap: 2px 6px;
+  min-height: 0;
+  padding: 2px 6px 4px;
 }
 
 .collapsed-socket-group {
-  display: inline-flex;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 2px 4px;
+  min-width: 0;
+}
+
+.collapsed-socket-inputs {
+  margin-right: auto;
+}
+
+.collapsed-socket-outputs {
+  margin-left: auto;
 }
 
 .collapsed-socket {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 12px;
   min-width: 8px;
-  min-height: 14px;
+  // Fixed (not min-) height: the port box inside OnshapeSocket is 24px
+  // tall, so a min-height here never compacted the strip — each collapsed
+  // socket measured 24px and a 7-socket Chamfer collapsed to ~229px, only
+  // 38px shorter than its 267px expanded frame (and taller than small
+  // expanded cards). Pin the row and its port box to the intended 14px.
+  height: 14px;
+  min-height: 0;
+}
+
+// The port box and its snap target are 24px / 40x30px in the expanded
+// rows; in the strip they must shrink with the row or they re-inflate it
+// (and the 30px snap targets of stacked sockets would overlap each
+// other). The colour/scale from OnshapeSocket is unchanged, so the dot
+// stays fully visible and unclipped inside its 14px row.
+.collapsed-socket :deep(.socket-container) {
+  width: 12px;
+  height: 14px;
+}
+
+.collapsed-socket :deep(.socket) {
+  width: 12px;
+  height: 14px;
+}
+
+.collapsed-socket :deep(.snap-target) {
+  width: 20px;
+  height: 14px;
+  top: 0;
+  left: -4px;
 }
 </style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent, watch } from 'vue';
 import TopBar from './components/TopBar.vue'
 import AppDialog from './components/AppDialog.vue';
 import DebugGrid from './components/DebugGrid.vue';
@@ -14,17 +14,20 @@ import ToolTip from './components/tooltip/ToolTip.vue';
 import { editorBase, EditorControls } from './rete/editorbase.js';
 import { formatTarget, type FeatureStudioTarget } from './onshape-utils/featurestudiotarget';
 import type { GraphIdentity } from './onshape-utils/graphidentity';
+import type { GroupBoundaryState } from './rete/groups/group-editor';
 import type { SpecResolver } from './rete/serialization/graph-schema-types';
 import type { FeatureInsertion } from './onshape-utils/partstudiofeature';
 import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 import NodePalette from './components/NodePalette.vue';
 import ActionPalette from './components/ActionPalette.vue';
+import GroupConfigPanel from './components/GroupConfigPanel.vue';
 import { buildPaletteInsertables, type PaletteInsertable } from './rete/catalog-node-factory';
 import { canDispatchAction } from './ui/actionPalette';
 import type { CommandId } from './ui/editorSettings';
 import { defaultCatalog } from './onshape/catalog/spec-catalog';
 import type { DebugNodeSource, DebugSelection, EvalFeatureScriptApiLike } from './onshape-utils/evalfeaturescript';
+import { selectedNodeIds } from './rete/modified-rete/connection-raise';
 
 /**
  * The slice of `App` the toolbar needs for the Feature Studio upload (#1) and
@@ -80,6 +83,7 @@ export default defineComponent({
     LogPanel: LogPanel,
     NodePalette: NodePalette,
     ActionPalette: ActionPalette,
+    GroupConfigPanel: GroupConfigPanel,
     ToolTip: ToolTip
   },
   // Options-API injection: `provide('app', this)` in `App.startVueApp()`.
@@ -101,6 +105,12 @@ export default defineComponent({
       paletteGroupDefs: [] as { id: string; name: string }[],
       /** #14: group editing breadcrumb, from the toolbar down to the open group. */
       groupBreadcrumb: [] as string[],
+      /** Group config: true while editing a group (breadcrumb past top level). */
+      groupEditing: false,
+      /** Group config: Start/End Feature panel visibility. */
+      groupPanelOpen: false,
+      /** Group config: live boundary state for the panel; null at top level. */
+      groupBoundaryState: null as GroupBoundaryState | null,
       /** #16: debug grid panel visibility plus a graph-change pulse the panel debounces. */
       debugGridOpen: false,
       debugGraphVersion: 0,
@@ -170,6 +180,10 @@ export default defineComponent({
   },
   async mounted() {
     window.addEventListener('keydown', this.onShortcutKeydown);
+    // Blender-style: selecting a group's Start/End card opens the config
+    // panel. Subscribes to the shared `selectedNodeIds` ref (no document
+    // listeners); selecting an unrelated node never opens the panel.
+    watch(selectedNodeIds, (ids: string[]) => this.onBoundarySelected(ids));
     let editorControls: EditorControls;
     const dev = inject('developerMode');
 
@@ -179,6 +193,12 @@ export default defineComponent({
       editorControls = await createEditor(this.$refs.rete as HTMLElement);
     }
     this.controls = editorControls;
+    // Live group I/O: wire binds/rebinds/unbinds refresh the open panel
+    // state immediately (read-only — refreshGroupBoundaryState never opens
+    // the panel or writes back, so this cannot loop).
+    editorControls.setGroupBoundaryChangedCallback?.(() => {
+      if (this.groupEditing) this.refreshGroupBoundaryState();
+    });
     // #6: the App's save path reads the open graph through this provider.
     const host = this.featureStudioHost();
     if (host != null) {
@@ -387,8 +407,19 @@ export default defineComponent({
       const target = event.target as HTMLElement | null;
       const typing = target != null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
       if (!typing && event.key === 'Tab') {
-        event.preventDefault();
-        this.groupBreadcrumb = await this.controls?.toggleGroupEdit() ?? [];
+        // Group enter/exit is a canvas gesture only. Tab on toolbar,
+        // panel, dialog or any other chrome must stay normal browser
+        // focus navigation — intercepting it there used to enter/exit
+        // the group (and can literally empty the canvas).
+        const onCanvas = target === document.body || target?.closest?.('main.rete') != null;
+        const chrome =
+          target?.closest?.(
+            'button, a, input, textarea, select, [contenteditable], [role="button"], dialog, [role="dialog"], .group-config-panel, .action-palette',
+          ) != null;
+        if (onCanvas && !chrome) {
+          event.preventDefault();
+          await this.runToggleGroupEdit();
+        }
         return;
       }
       if (!typing && (event.key === 'm' || event.key === 'M')) {
@@ -456,6 +487,72 @@ export default defineComponent({
         case 'actionPalette': this.actionsOpen = true; break;
       }
     },
+    /** Group config: refresh the panel state from the editor controls. */
+    refreshGroupBoundaryState() {
+      this.groupBoundaryState = this.controls?.getGroupBoundaryState() ?? null;
+    },
+    /**
+     * Blender-style: if the selection now includes the Start/End card of
+     * the group being edited, open the config panel (and refresh its
+     * state). Any other selection — including an empty one — leaves the
+     * panel as it is. Leaving group editing closes it (runToggleGroupEdit).
+     */
+    onBoundarySelected(ids: string[]) {
+      if (!this.groupEditing) return;
+      const boundary = this.groupBoundaryState?.boundaryNodeIds;
+      const isBoundary = (id: string) =>
+        (boundary != null && (id === boundary.input || id === boundary.output)) ||
+        (this.controls?.isGroupBoundaryNode?.(id) ?? false);
+      if (ids.some(isBoundary)) {
+        this.refreshGroupBoundaryState();
+        this.groupPanelOpen = true;
+      }
+    },
+    /**
+     * Group config: Tab enter/exit lands here. Entering a group refreshes
+     * the boundary state but does NOT open the panel — it opens on Start /
+     * End Feature selection (onBoundarySelected) or the TopBar toggle.
+     * Leaving to the top level closes it. The canvas is never blocked.
+     */
+    async runToggleGroupEdit() {
+      this.groupBreadcrumb = await this.controls?.toggleGroupEdit() ?? [];
+      this.groupEditing = this.groupBreadcrumb.length > 1;
+      if (this.groupEditing) {
+        this.refreshGroupBoundaryState();
+        this.groupPanelOpen = false;
+        // The Start/End cards sit outside the member bounds; fit so the user
+        // actually sees the group boundary instead of off-screen chrome.
+        await this.controls?.fitView();
+      } else {
+        this.groupPanelOpen = false;
+        this.groupBoundaryState = null;
+      }
+    },
+    /** Group config: toolbar button toggles the panel while editing a group. */
+    toggleGroupConfigPanel() {
+      if (!this.groupEditing) return;
+      this.groupPanelOpen = !this.groupPanelOpen;
+      if (this.groupPanelOpen) this.refreshGroupBoundaryState();
+    },
+    /** Group config: panel closed; boundary state is refreshed on next open. */
+    closeGroupConfigPanel() {
+      this.groupPanelOpen = false;
+    },
+    /** Group config: rename/retype a boundary socket, then refresh. */
+    async onGroupConfigUpdate(payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }) {
+      await this.controls?.updateGroupBoundarySocket(payload.socketId, payload.patch, payload.direction);
+      this.refreshGroupBoundaryState();
+    },
+    /** Group config: create an arbitrary (unbound) socket, then refresh. */
+    async onGroupConfigAddAny(payload: { direction: 'input' | 'output'; label: string; valueType: string }) {
+      await this.controls?.addGroupBoundarySocketAny(payload.direction, payload.label, payload.valueType);
+      this.refreshGroupBoundaryState();
+    },
+    /** Group config: remove a boundary socket, then refresh. */
+    async onGroupConfigRemove(payload: { socketId: string; direction: 'input' | 'output' }) {
+      await this.controls?.removeGroupBoundarySocket(payload.socketId, payload.direction);
+      this.refreshGroupBoundaryState();
+    },
     /** #73: group instances are runtime state; snapshot them when a palette opens. */
     refreshPaletteGroupDefs() {
       this.paletteGroupDefs = this.controls?.listGroupDefinitions().map(d => ({ id: d.id, name: d.name })) ?? [];
@@ -496,10 +593,18 @@ export default defineComponent({
 </script>
 
 <template>
-  <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
+  <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :group-editing="groupEditing" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
-    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" />
+    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" @toggle-group-config="toggleGroupConfigPanel" />
   <main class="rete" ref="rete"></main>
+  <GroupConfigPanel
+    v-if="groupPanelOpen && groupEditing"
+    :state="groupBoundaryState"
+    @update="onGroupConfigUpdate"
+    @add-any="onGroupConfigAddAny"
+    @remove="onGroupConfigRemove"
+    @close="closeGroupConfigPanel"
+  />
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
   <ToolTip />

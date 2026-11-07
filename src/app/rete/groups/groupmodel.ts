@@ -18,19 +18,57 @@ import type { OnshapeNode } from "../nodes/onshapenode";
 import type { SerializedConnection, Vec2 } from "../serialization/graph-schema-types";
 
 export interface GroupSocketDefinition {
-    /** Stable id, also the instance node's socket key: `${nodeId}.${socketKey}`. */
+    /** Stable id, also the instance node's socket key: `${nodeId}.${socketKey}` when bound. */
     id: string;
     /** Display label on the instance node; defaults to the member socket key. */
     label: string;
     direction: "input" | "output";
-    /** Id of the member node this socket is bound to. */
-    nodeId: string;
+    /**
+     * Id of the member node this socket is bound to. Optional: an arbitrary
+     * interface socket may exist without a member binding yet (Blender-style)
+     * and is then "unbound" — it still shows on the Start/End card and on
+     * instances, and can be bound later by dragging a wire to/from it.
+     * Unbound inputs are allowed unused; unbound outputs are a build error.
+     */
+    nodeId?: string;
     /** Socket key on that member node. */
-    socketKey: string;
+    socketKey?: string;
     /** FeatureScript value type label, for the instance socket's type. */
     valueType?: string;
     /** Literal emitted when an instance leaves this input unconnected. */
     defaultLiteral?: string;
+}
+
+/** Whether this interface socket is bound to a member socket. */
+export function isGroupSocketBound(
+    socket: GroupSocketDefinition,
+): socket is GroupSocketDefinition & { nodeId: string; socketKey: string } {
+    return socket.nodeId != null && socket.socketKey != null;
+}
+
+/** A member socket that can still become a group boundary socket. */
+export interface GroupSocketCandidate {
+    direction: "input" | "output";
+    nodeId: string;
+    nodeTitle: string;
+    socketKey: string;
+    label: string;
+    valueType?: string;
+}
+
+/** Editable fields of an existing boundary socket. */
+export interface GroupSocketPatch {
+    label?: string;
+    valueType?: string;
+}
+
+
+/** Stable identity and placement of a group's Start/End Feature cards. */
+export interface GroupBoundaryNodes {
+    inputId: string;
+    outputId: string;
+    inputPosition: Vec2 | null;
+    outputPosition: Vec2 | null;
 }
 
 export interface GroupDefinition {
@@ -44,15 +82,253 @@ export interface GroupDefinition {
     outputs: GroupSocketDefinition[];
     /** Canvas positions of member nodes while editing, by node id. */
     positions: Record<string, Vec2 | null>;
+    /**
+     * Permanent Start/End Feature boundary identity. The boundary cards
+     * are definition-owned, not ordinary graph nodes: they are recreated
+     * on every group entry with these stable ids and positions, and
+     * serialized inside this definition (never as top-level nodes).
+     * `inputs`/`outputs` remain the single source of truth for sockets.
+     */
+    boundaryNodes: GroupBoundaryNodes;
+}
+
+/** Stable boundary ids derived from the definition id (unique per definition). */
+export function defaultBoundaryNodes(definitionId: string): GroupBoundaryNodes {
+    return {
+        inputId: `${definitionId}:boundary-input`,
+        outputId: `${definitionId}:boundary-output`,
+        inputPosition: null,
+        outputPosition: null,
+    };
+}
+
+/** Fill in a missing boundary record (legacy/manual definitions). */
+export function ensureBoundaryNodes(definition: GroupDefinition): GroupBoundaryNodes {
+    const existing = definition.boundaryNodes;
+    if (existing == null || existing.inputId == null || existing.inputId === "" || existing.outputId == null || existing.outputId === "") {
+        definition.boundaryNodes = {
+            ...(existing ?? {}),
+            ...defaultBoundaryNodes(definition.id),
+            inputPosition: existing?.inputPosition ?? null,
+            outputPosition: existing?.outputPosition ?? null,
+        } as GroupBoundaryNodes;
+    }
+    return definition.boundaryNodes;
 }
 
 export function createGroupDefinition(id: string, name: string): GroupDefinition {
-    return { id, name, nodes: [], connections: [], inputs: [], outputs: [], positions: {} };
+    return { id, name, nodes: [], connections: [], inputs: [], outputs: [], positions: {}, boundaryNodes: defaultBoundaryNodes(id) };
 }
 
 export function groupSocketId(nodeId: string, socketKey: string): string {
     return `${nodeId}.${socketKey}`;
 }
+
+function memberSocketValueType(node: OnshapeNode, socketKey: string, direction: "input" | "output"): string | undefined {
+    const side = direction === "input" ? node.inputs : node.outputs;
+    return (side?.[socketKey]?.socket as { valueType?: { name: string } } | undefined)?.valueType?.name;
+}
+
+/**
+ * Member sockets that are not yet exposed as boundary sockets. The group
+ * editor's input/output menu uses this to offer only real, bindable targets.
+ */
+export function listGroupSocketCandidates(definition: GroupDefinition): {
+    inputs: GroupSocketCandidate[];
+    outputs: GroupSocketCandidate[];
+} {
+    const boundInputs = new Set(definition.inputs.map((socket) => socket.id));
+    const boundOutputs = new Set(definition.outputs.map((socket) => socket.id));
+    const inputs: GroupSocketCandidate[] = [];
+    const outputs: GroupSocketCandidate[] = [];
+    for (const node of definition.nodes) {
+        for (const [socketKey, input] of Object.entries(node.inputs)) {
+            const id = groupSocketId(node.id, socketKey);
+            if (boundInputs.has(id)) continue;
+            const socket = input.socket as { name?: string; valueType?: { name: string } };
+            inputs.push({
+                direction: "input",
+                nodeId: node.id,
+                nodeTitle: node.getTitle(),
+                socketKey,
+                label: input.label ?? socket.name ?? socketKey,
+                valueType: socket.valueType?.name,
+            });
+        }
+        for (const [socketKey, output] of Object.entries(node.outputs)) {
+            const id = groupSocketId(node.id, socketKey);
+            if (boundOutputs.has(id)) continue;
+            const socket = output.socket as { name?: string; valueType?: { name: string } };
+            outputs.push({
+                direction: "output",
+                nodeId: node.id,
+                nodeTitle: node.getTitle(),
+                socketKey,
+                label: output.label ?? socket.name ?? socketKey,
+                valueType: socket.valueType?.name,
+            });
+        }
+    }
+    return { inputs, outputs };
+}
+
+/**
+ * Expose one member socket as a boundary socket. The binding is by member
+ * node id + socket key, so it survives reordering and display renames.
+ */
+export function addGroupSocket(
+    definition: GroupDefinition,
+    direction: "input" | "output",
+    nodeId: string,
+    socketKey: string,
+    label?: string,
+    valueType?: string,
+): GroupSocketDefinition | null {
+    const node = definition.nodes.find((member) => member.id === nodeId);
+    if (node == null) return null;
+    const side = direction === "input" ? node.inputs : node.outputs;
+    const socket = side?.[socketKey];
+    if (socket == null) return null;
+    const id = groupSocketId(nodeId, socketKey);
+    const list = direction === "input" ? definition.inputs : definition.outputs;
+    if (list.some((entry) => entry.id === id)) return null;
+    const candidate = listGroupSocketCandidates(definition)[direction === "input" ? "inputs" : "outputs"]
+        .find((entry) => entry.nodeId === nodeId && entry.socketKey === socketKey);
+    const result: GroupSocketDefinition = {
+        id,
+        label: (label ?? candidate?.label ?? socketKey).trim() || socketKey,
+        direction,
+        nodeId,
+        socketKey,
+        valueType: valueType ?? memberSocketValueType(node, socketKey, direction),
+    };
+    list.push(result);
+    return result;
+}
+
+/**
+ * Create an arbitrary interface socket with no member binding yet
+ * (Blender-style: the parameter/return exists first, wiring comes later).
+ * `valueType` defaults to `unknown` ("any"), which the value-type model
+ * treats as compatible with every member type — no feature-spec
+ * enum/parameter constraints apply.
+ */
+export function createAnyGroupSocket(
+    definition: GroupDefinition,
+    direction: "input" | "output",
+    label: string,
+    valueType = "unknown",
+): GroupSocketDefinition {
+    const list = direction === "input" ? definition.inputs : definition.outputs;
+    const cleaned = label.trim() || (direction === "input" ? "input" : "output");
+    const base = `${definition.id}.${direction}.${sanitizeFsIdentifier(cleaned, direction)}`;
+    let id = base;
+    let counter = 2;
+    while (list.some((entry) => entry.id === id)) {
+        id = `${base}_${counter}`;
+        counter += 1;
+    }
+    const socket: GroupSocketDefinition = {
+        id,
+        label: cleaned,
+        direction,
+        valueType,
+    };
+    list.push(socket);
+    return socket;
+}
+
+/** (Re)bind an interface socket to a member socket. Returns false if unknown. */
+export function bindGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    nodeId: string,
+    socketKey: string,
+    direction?: "input" | "output",
+): boolean {
+    const list = direction == null
+        ? [...definition.inputs, ...definition.outputs]
+        : direction === "input" ? definition.inputs : definition.outputs;
+    const socket = list.find((entry) => entry.id === socketId);
+    if (socket == null) return false;
+    socket.nodeId = nodeId;
+    socket.socketKey = socketKey;
+    return true;
+}
+
+/** Clear an interface socket's member binding; the socket itself remains. */
+export function unbindGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    direction?: "input" | "output",
+): boolean {
+    const list = direction == null
+        ? [...definition.inputs, ...definition.outputs]
+        : direction === "input" ? definition.inputs : definition.outputs;
+    const socket = list.find((entry) => entry.id === socketId);
+    if (socket == null) return false;
+    delete socket.nodeId;
+    delete socket.socketKey;
+    return true;
+}
+
+/** Rename and/or retype an existing boundary socket. */
+export function updateGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    patch: GroupSocketPatch,
+    direction?: "input" | "output",
+): boolean {
+    const list = direction == null
+        ? [...definition.inputs, ...definition.outputs]
+        : direction === "input" ? definition.inputs : definition.outputs;
+    const socket = list.find((entry) => entry.id === socketId);
+    if (socket == null) return false;
+    if (patch.label != null) {
+        const label = patch.label.trim();
+        if (label === "") return false;
+        socket.label = label;
+    }
+    if (patch.valueType != null) {
+        socket.valueType = patch.valueType;
+    }
+    return true;
+}
+
+/** Remove a boundary socket. Member wiring is untouched. */
+export function removeGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    direction?: "input" | "output",
+): boolean {
+    const resolved = direction ?? (definition.inputs.some((entry) => entry.id === socketId)
+        ? "input"
+        : definition.outputs.some((entry) => entry.id === socketId)
+            ? "output"
+            : null);
+    if (resolved == null) return false;
+    if (resolved === "input") {
+        definition.inputs = definition.inputs.filter((entry) => entry.id !== socketId);
+    } else {
+        definition.outputs = definition.outputs.filter((entry) => entry.id !== socketId);
+    }
+    return true;
+}
+
+/**
+ * The frame a group instance should inherit: the one shared parent frame of
+ * every selected member, or null when the selection is not wholly inside one
+ * frame. Grouping must not orphan a frame's contents (an empty frame collapses
+ * to its header and the user loses the visual grouping).
+ */
+export function commonGroupParent(nodes: readonly { group: string | null }[]): string | null {
+    if (nodes.length === 0) return null;
+    const parent = nodes[0].group;
+    if (parent == null) return null;
+    return nodes.every((node) => node.group === parent) ? parent : null;
+}
+
+
 
 /**
  * Derive boundary sockets from a member set: every connection from outside
@@ -265,6 +541,9 @@ export function validateGroupDefinition(
 ): string | null {
     const memberIds = new Set(definition.nodes.map((node) => node.id));
     for (const socket of [...definition.inputs, ...definition.outputs]) {
+        if (!isGroupSocketBound(socket)) {
+            continue; // arbitrary interface socket, bound later by wiring
+        }
         const member = definition.nodes.find((node) => node.id === socket.nodeId);
         if (member == null || !memberIds.has(socket.nodeId)) {
             return `Group "${definition.id}" boundary socket "${socket.id}" references missing member node "${socket.nodeId}".`;
@@ -284,4 +563,228 @@ export function validateGroupDefinition(
         return `Group definitions form a cycle: ${cycle.join(" -> ")}.`;
     }
     return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Group -> FeatureScript function signature planning                */
+/*                                                                    */
+/*  Each group definition compiles to one reusable FeatureScript      */
+/*  function (see group-function.ts); each instance is a call to it.  */
+/*  The helpers below are the pure, string-based half of that plan:   */
+/*  they need no node classes, so both the instance node (codegen     */
+/*  call sites) and the function-body generator can share them.       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Member kinds that make a group a "statement" group: calling the group
+ * function runs statements, so it needs `context`/`id` parameters. The
+ * check is by `type` string, like {@link isGroupableKind}, so this module
+ * stays free of node-class imports.
+ */
+const STATEMENT_MEMBER_TYPES: ReadonlySet<string> = new Set([
+    "utility-statement",
+    "CustomFeature",
+    "for-each",
+    "bounded-for",
+]);
+
+/**
+ * Whether a definition is a statement group: it has a statement member, a
+ * `context`/`id` boundary socket, or a nested statement group. Statement
+ * groups get implicit `context is Context, id is Id` parameters (unless a
+ * boundary socket already provides them) and are always called as
+ * statements — never hoisted as value expressions — so their position
+ * relative to other statements is preserved.
+ */
+export function definitionIsStatementKind(definition: GroupDefinition, trail: readonly string[] = []): boolean {
+    for (const socket of [...definition.inputs, ...definition.outputs]) {
+        if (socket.socketKey === "context" || socket.socketKey === "id" || socket.valueType === "Context" || socket.valueType === "Id") {
+            return true;
+        }
+    }
+    for (const member of definition.nodes) {
+        if (STATEMENT_MEMBER_TYPES.has(member.type)) {
+            return true;
+        }
+        const nested = (member as { getDefinition?: () => GroupDefinition }).getDefinition?.();
+        if (nested != null && !trail.includes(nested.id)) {
+            if (definitionIsStatementKind(nested, [...trail, definition.id])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Boundary outputs that carry a value back to the caller. `context`/`id`
+ * outputs are excluded: statement functions mutate the context in place,
+ * so the caller's `context`/`id` variables already hold the result and
+ * no return channel is needed for them.
+ */
+export function valuedBoundaryOutputs(definition: GroupDefinition): GroupSocketDefinition[] {
+    return definition.outputs.filter((socket) => socket.socketKey !== "context" && socket.socketKey !== "id");
+}
+
+/**
+ * Map keys for a multi-output group's return map, aligned with
+ * {@link valuedBoundaryOutputs}. The key is the output's label; a
+ * duplicate label is suffixed deterministically (`label0`, `label1`, ...)
+ * so every output has a unique key. Call sites unpack with the same
+ * helper, so body and callers always agree.
+ */
+export function groupOutputKeys(definition: GroupDefinition): string[] {
+    const used = new Set<string>();
+    return valuedBoundaryOutputs(definition).map((socket) => {
+        let key = socket.label;
+        let counter = 0;
+        while (used.has(key)) {
+            key = `${socket.label}${counter}`;
+            counter += 1;
+        }
+        used.add(key);
+        return key;
+    });
+}
+
+/** Whether this definition's instances codegen through the value-expression path. */
+export function groupUsesExpressionPath(definition: GroupDefinition): boolean {
+    return !definitionIsStatementKind(definition) && valuedBoundaryOutputs(definition).length === 1;
+}
+
+/** Sanitize arbitrary text (a label, a node id) into a FeatureScript identifier fragment. */
+export function sanitizeFsIdentifier(text: string, fallback: string): string {
+    const cleaned = text.replace(/[^A-Za-z0-9_$]/g, "_").replace(/^_+/, "");
+    if (cleaned === "" || /^[0-9]/.test(cleaned)) {
+        return fallback;
+    }
+    return cleaned;
+}
+
+/**
+ * The `let` variable a statement-style group call stores its result in.
+ * Derived from the instance's node id, which is unique per placement and
+ * stable across serialization, so call sites and consumers agree without
+ * sharing allocator state.
+ */
+export function groupResultVariable(instanceId: string): string {
+    return `groupResult_${sanitizeFsIdentifier(instanceId, "instance")}`;
+}
+
+/** Escape a string for use as a FeatureScript string literal key. */
+export function escapeFsString(text: string): string {
+    return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Default FeatureScript function name for a definition, from its display
+ * name (`Cross to transform` -> `groupCrossToTransform`). Definitions
+ * that share a name are disambiguated by the planner in group-function.ts;
+ * this is the per-definition base name.
+ */
+export function defaultGroupFunctionName(definition: GroupDefinition): string {
+    const words = definition.name
+        .replace(/[^A-Za-z0-9]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter((word) => word !== "");
+    const pascal = words.map((word) => word[0].toUpperCase() + word.slice(1)).join("");
+    if (pascal === "") {
+        return `groupFn${sanitizeFsIdentifier(definition.id, "group")}`;
+    }
+    return `group${pascal}`;
+}
+
+/** FeatureScript value type names a boundary socket's `valueType` can map to. */
+const FS_TYPE_NAMES: ReadonlySet<string> = new Set([
+    "Vector",
+    "Matrix",
+    "Transform",
+    "CoordSystem",
+    "number",
+    "ValueWithUnits",
+    "boolean",
+    "string",
+    "Query",
+    "Id",
+    "Context",
+    "map",
+]);
+
+export interface GroupFunctionParam {
+    /** The boundary input socket, or null for an implicit `context`/`id` parameter. */
+    socket: GroupSocketDefinition | null;
+    /** `context`/`id` for an implicit parameter; null when sourced from a boundary socket. */
+    implicit: "context" | "id" | null;
+    /** Parameter identifier in the generated function. */
+    name: string;
+    /** The `is <Type>` annotation, when the boundary socket declares a known FeatureScript type. */
+    fsType?: string;
+}
+
+export interface GroupFunctionSignature {
+    kind: "value" | "statement";
+    params: GroupFunctionParam[];
+    /** Boundary outputs returned by the function (context/id pass-throughs excluded). */
+    valuedOutputs: GroupSocketDefinition[];
+    /** Map keys aligned with `valuedOutputs` (used when there is more than one). */
+    outputKeys: string[];
+}
+
+/**
+ * The callable signature for a definition's FeatureScript function.
+ *
+ * Parameter order: implicit `context`, `id` first (statement groups),
+ * then the boundary inputs in definition order. A boundary socket bound
+ * to a member's `context`/`id` input supplies that implicit parameter
+ * instead of adding a second one. Boundary input names come from their
+ * labels, made unique deterministically; a known FeatureScript
+ * `valueType` becomes an `is <Type>` annotation, an unknown one leaves
+ * the parameter untyped (FeatureScript allows untyped parameters, as in
+ * `mapArray`'s generated `function(item)`).
+ */
+export function groupFunctionSignature(definition: GroupDefinition): GroupFunctionSignature {
+    const statement = definitionIsStatementKind(definition);
+    const usedNames = new Set<string>();
+    const uniqueName = (desired: string): string => {
+        let name = desired;
+        let counter = 0;
+        while (usedNames.has(name)) {
+            name = `${desired}${counter}`;
+            counter += 1;
+        }
+        usedNames.add(name);
+        return name;
+    };
+    const fsTypeOf = (socket: GroupSocketDefinition): string | undefined =>
+        socket.valueType != null && FS_TYPE_NAMES.has(socket.valueType) ? socket.valueType : undefined;
+
+    const params: GroupFunctionParam[] = [];
+    const consumedSockets = new Set<string>();
+    if (statement) {
+        for (const key of ["context", "id"] as const) {
+            const socket = definition.inputs.find((entry) => entry.socketKey === key);
+            if (socket != null) {
+                usedNames.add(key);
+                params.push({ socket, implicit: null, name: key, fsType: fsTypeOf(socket) });
+                consumedSockets.add(socket.id);
+            } else {
+                usedNames.add(key);
+                params.push({ socket: null, implicit: key, name: key, fsType: key === "context" ? "Context" : "Id" });
+            }
+        }
+    }
+    for (const socket of definition.inputs) {
+        if (consumedSockets.has(socket.id)) {
+            continue;
+        }
+        const desired = sanitizeFsIdentifier(socket.label, sanitizeFsIdentifier(socket.socketKey ?? socket.label, "input"));
+        params.push({ socket, implicit: null, name: uniqueName(desired), fsType: fsTypeOf(socket) });
+    }
+    return {
+        kind: statement ? "statement" : "value",
+        params,
+        valuedOutputs: valuedBoundaryOutputs(definition),
+        outputKeys: groupOutputKeys(definition),
+    };
 }

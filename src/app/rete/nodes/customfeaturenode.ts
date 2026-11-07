@@ -17,6 +17,7 @@ import type {
   SpecResolver,
 } from '../serialization/graph-schema-types';
 import { toFeatureSpecReference } from '../serialization/graph-schema-types';
+import { formatDisplayName } from '../display-name';
 
 
 export class CustomFeatureNode extends OnshapeNode {
@@ -41,7 +42,10 @@ export class CustomFeatureNode extends OnshapeNode {
   }
 
   public getTitle(): string {
-    return this.featureSpec?.featureTypeName || "Untitled";
+    const raw = this.featureSpec?.featureTypeName;
+    if (raw == null || raw === "") return "Untitled";
+    // Display-only capitalization; featureType/codegen identifiers unchanged.
+    return formatDisplayName(raw);
   }
 
   private addDefaultArguments(): void {

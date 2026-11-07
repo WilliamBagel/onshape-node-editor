@@ -65,6 +65,28 @@ A saved graph is a single JSON document produced by
 | `connections` | array | Every connection. Endpoints are node ids plus port keys. |
 | `nodeOrder` | string[] | Node ids, **bottom-most first**: the last id paints on top. Every node appears exactly once. Always written by this build; absent from version-1 documents. |
 | `frames` | array (optional) | Grouping frames (#13). Omitted when the graph has none, so pre-#13 documents keep their exact shape. |
+| `groupDefinitions` | array (optional) | Group definitions (#14), each stored once per graph. Omitted when the graph has no group instances. |
+
+### Group definitions
+
+Each `groupDefinitions` entry holds one group definition: its member `nodes`
+(never in the top-level `nodes` array), internal `connections`, and the
+boundary `inputs`/`outputs` that group instances expose. The definition's
+Start Feature / End Feature cards are permanent and definition-owned
+(Blender-style): their stable identity and positions are recorded in the
+optional `boundaryNodes` object (`inputId`, `outputId`, `inputPosition`,
+`outputPosition`) inside the definition. They are never serialized as
+top-level nodes, and `inputs`/`outputs` remain the single source of truth for
+sockets. A document without `boundaryNodes` loads by deriving stable ids
+from the definition id. Add/rename/retype/remove of boundary sockets go
+through the definition's socket arrays exactly as before. A boundary socket's
+`nodeId`/`socketKey` binding is optional: an arbitrary interface socket may be
+created unbound (label + value type, `unknown` = any) and bound later by
+dragging a wire to/from the Start/End card; removing the wire unbinds it while
+the socket remains. An unbound input is allowed unused; an unbound output is
+a build error. The Start card also shows a `+ Input` and the End card a
+`+ Output` drag-to-create placeholder (`unknown`-typed); placeholders are
+never serialized as interface sockets.
 
 `nodeOrder` is the canvas paint order and nothing else. It is one list for the
 whole graph rather than a per-node `order` ordinal, because a single list cannot
@@ -162,8 +184,10 @@ A frame is a grouping rectangle the rete-scopes-plugin parents nodes into
 (`node.parent`). Frames are not codegen nodes: they have no inputs or
 outputs, so the flattening walk (which follows connection parents from the
 output node) never reaches them and generated FeatureScript is unaffected by
-framing. `label` and `color` are the frame header's; `collapsed` hides the
-frame's descendants on the canvas without deleting them. A frame's own
+framing. `label` and `color` are the frame header's. `collapsed` is a legacy
+schema field only: frame collapsing was removed, frames always stay
+expanded, and a document carrying `collapsed: true` loads expanded
+(descendants visible). It is always serialized as `false`. A frame's own
 `group` is its parent frame's id (frames nest). A child whose `group` names a
 frame that is missing from the document loads ungrouped, with a warning, and
 so does a frame whose parent frame is missing.
