@@ -5,7 +5,7 @@
   14/13/12/11 scale, keycap chips — STYLE_GUIDE.md. -->
 <template>
   <div v-if="open" class="actions-backdrop" @click.self="close">
-    <div ref="panel" class="actions" role="dialog" aria-modal="true" aria-label="Search actions">
+    <div ref="panel" class="actions" role="dialog" aria-modal="true" aria-label="Search actions" @keydown="onPanelKeydown">
       <div class="actions-header">
         <h2 class="actions-title">Search actions</h2>
         <span class="actions-keycap">F3</span>
@@ -17,12 +17,16 @@
         type="text"
         placeholder="Type an action…"
         aria-label="Search actions"
-        @keydown="onKeydown"
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="action-palette-list"
+        :aria-activedescendant="activeId"
       />
-      <div ref="list" class="actions-list" role="listbox" aria-label="Actions and nodes">
+      <div ref="list" id="action-palette-list" class="actions-list" role="listbox" aria-label="Actions and nodes">
         <button
           v-for="result in results"
           :key="result.key"
+          :id="`action-palette-item-${result.key}`"
           :ref="(el) => registerItem(result.key, el)"
           type="button"
           class="actions-item"
@@ -115,6 +119,8 @@ const results = computed<PaletteResult[]>(() => {
   return term.value.trim() === '' ? actions : [...actions, ...nodes]
 })
 
+const activeId = computed(() => (activeKey.value != null ? `action-palette-item-${activeKey.value}` : undefined))
+
 watch(() => props.open, async (v) => {
   if (v) {
     term.value = ''
@@ -147,14 +153,30 @@ function scrollActiveIntoView() {
   else if (itemRect.bottom > listRect.bottom - pad) container.scrollTop += itemRect.bottom - (listRect.bottom - pad)
 }
 
-function close() { emit('close') }
+function close() {
+  emit('close')
+  // Dismissal returns focus to the canvas (see NodePalette).
+  void nextTick(() => {
+    const canvas = document.querySelector('main.rete') as HTMLElement | null
+    if (canvas != null) {
+      canvas.tabIndex = -1
+      canvas.focus()
+    }
+  })
+}
 function choose(result: PaletteResult) {
   if (result.kind === 'command') emit('select', result.id)
   else emit('insert', result.item)
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') { close(); return }
+/**
+ * Panel-level key handling: Escape closes from ANY focus inside the palette
+ * (search input or a row button), and arrows move the active row from
+ * anywhere. Enter on a row button is left to the native click so the
+ * choice is not made twice. Tab is unhandled (no trap).
+ */
+function onPanelKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.preventDefault(); close(); return }
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault()
     const idx = results.value.findIndex(r => r.key === activeKey.value)
@@ -163,7 +185,7 @@ function onKeydown(event: KeyboardEvent) {
       : Math.max(idx - 1, 0)
     activeKey.value = results.value[next]?.key ?? null
     scrollActiveIntoView()
-  } else if (event.key === 'Enter') {
+  } else if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
     const result = results.value.find(r => r.key === activeKey.value)
     if (result != null) choose(result)
   }
@@ -180,7 +202,7 @@ void ACTION_PALETTE_SHORTCUT
 .actions-title { font-size: var(--font-size-heading); font-weight: var(--font-weight-title); line-height: var(--line-height-title); margin: 0; }
 .actions-keycap { font-family: var(--font-mono); font-size: var(--font-size-keycap); border: 1px solid var(--hairline); border-radius: var(--radius-keycap); padding: 1px 4px; background: var(--surface-sunken); color: var(--text-secondary); opacity: 1; }
 .actions-search { flex: none; width: calc(100% - 24px); margin: 0 12px 8px; padding: 6px 8px; font-size: var(--font-size-value); font-family: var(--font-sans); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-sunken); color: var(--ink); box-sizing: border-box; }
-.actions-search:focus { outline: 1px solid var(--accent-steel); border-color: var(--accent-steel); }
+.actions-search:focus { outline: 2px solid var(--accent-steel); outline-offset: 1px; border-color: var(--accent-steel); }
 /* Thin, always-visible classic scrollbar: overlay scrollbars render at
    width 0 and read as "no scrollbar" (user-reported: scrollbar doesn't
    work). */
@@ -192,6 +214,9 @@ void ACTION_PALETTE_SHORTCUT
 /* See NodePalette: the active row needs a visibly darker tint than the
    white panel plus full-opacity text, not a one-step-off-white wash. */
 .actions-item--active { background: var(--active-tint); box-shadow: inset 3px 0 0 var(--accent-steel); }
+/* Keyboard-only ring (never on mouse click): 2px steel, inset so the
+ * full-width row keeps its layout. #2f5f8f on white ≈ 6.7:1 contrast. */
+.actions-item:focus-visible { outline: 2px solid var(--accent-steel); outline-offset: -2px; }
 .actions-item--active .actions-item-name { opacity: 1; }
 .actions-item--active .actions-item-desc { color: var(--text-secondary); opacity: 1; }
 .actions-item--active .actions-item-meta { opacity: 1; }

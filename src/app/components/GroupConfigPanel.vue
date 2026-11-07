@@ -523,4 +523,11 @@ function removeSocket(socket: GroupSocketDefinition): void {
   cursor: default;
   color: var(--text-secondary);
 }
+
+/* Keyboard-only ring on every panel button (never on mouse click):
+ * 2px steel outline with a 2px offset. #2f5f8f on white ≈ 6.7:1. */
+.group-config-panel button:focus-visible {
+  outline: 2px solid var(--accent-steel);
+  outline-offset: 2px;
+}
 </style>

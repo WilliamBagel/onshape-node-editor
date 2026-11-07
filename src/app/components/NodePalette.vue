@@ -7,7 +7,7 @@
   Styled per STYLE_GUIDE.md: white card, hairline, 14/13/12/11 scale, keycaps. -->
 <template>
   <div v-if="open" class="palette-backdrop" @click.self="close">
-    <div ref="panel" class="palette" role="dialog" aria-modal="true" aria-label="Add node">
+    <div ref="panel" class="palette" role="dialog" aria-modal="true" aria-label="Add node" @keydown="onPanelKeydown">
       <div class="palette-header">
         <h2 class="palette-title">Add node</h2>
         <span class="palette-keycap">Ctrl K</span>
@@ -18,15 +18,19 @@
         class="palette-search"
         type="text"
         placeholder="Search every node…"
-        aria-label="Search every node"
-        @keydown="onKeydown"
+        aria-label="Search nodes"
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="node-palette-list"
+        :aria-activedescendant="activeId"
       />
-      <div ref="list" class="palette-list" role="listbox" aria-label="Insertable nodes">
+      <div ref="list" id="node-palette-list" class="palette-list" role="listbox" aria-label="Insertable nodes">
         <template v-for="group in groups" :key="group.category">
           <div class="palette-category">{{ group.category }}</div>
           <button
             v-for="item in group.entries"
             :key="item.key"
+            :id="`node-palette-item-${item.key}`"
             :ref="(el) => registerItem(item.key, el)"
             type="button"
             class="palette-item"
@@ -70,6 +74,7 @@ function registerItem(key: string, el: unknown) {
 
 const flat = computed(() => searchPaletteInsertables(props.insertables, term.value))
 const groups = computed(() => groupInsertablesByCategory(flat.value))
+const activeId = computed(() => (activeKey.value != null ? `node-palette-item-${activeKey.value}` : undefined))
 
 watch(() => props.open, async (v) => {
   if (v) { term.value = ''; activeKey.value = flat.value[0]?.key ?? null; await nextTick(); search.value?.focus() }
@@ -96,17 +101,35 @@ function scrollActiveIntoView() {
   else if (itemRect.bottom > listRect.bottom - pad) container.scrollTop += itemRect.bottom - (listRect.bottom - pad)
 }
 
-function close() { emit('close') }
+function close() {
+  emit('close')
+  // Escape (or backdrop) dismissal returns focus to the canvas so keyboard
+  // shortcuts keep working without a mouse trip back.
+  void nextTick(() => {
+    const canvas = document.querySelector('main.rete') as HTMLElement | null
+    if (canvas != null) {
+      canvas.tabIndex = -1
+      canvas.focus()
+    }
+  })
+}
 function choose(item: PaletteInsertable) { emit('select', item) }
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') { close(); return }
+
+/**
+ * Panel-level key handling: Escape closes from ANY focus inside the palette
+ * (search input or a row button), and arrows move the active row from
+ * anywhere. Enter on a row button is left to the native click so the
+ * choice is not made twice. Tab is unhandled (no trap).
+ */
+function onPanelKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.preventDefault(); close(); return }
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault()
     const idx = flat.value.findIndex(e => e.key === activeKey.value)
     const next = event.key === 'ArrowDown' ? Math.min(idx + 1, flat.value.length - 1) : Math.max(idx - 1, 0)
     activeKey.value = flat.value[next]?.key ?? null
     scrollActiveIntoView()
-  } else if (event.key === 'Enter') {
+  } else if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
     const item = flat.value.find(e => e.key === activeKey.value)
     if (item) choose(item)
   }
@@ -120,7 +143,7 @@ function onKeydown(event: KeyboardEvent) {
 .palette-title { font-size: var(--font-size-heading); font-weight: var(--font-weight-title); line-height: var(--line-height-title); margin: 0; }
 .palette-keycap { font-family: var(--font-mono); font-size: var(--font-size-keycap); border: 1px solid var(--hairline); border-radius: var(--radius-keycap); padding: 1px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
 .palette-search { flex: none; width: calc(100% - 24px); margin: 0 12px 8px; padding: 6px 8px; font-size: var(--font-size-value); font-family: var(--font-sans); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-sunken); color: var(--ink); box-sizing: border-box; }
-.palette-search:focus { outline: 1px solid var(--accent-steel); border-color: var(--accent-steel); }
+.palette-search:focus { outline: 2px solid var(--accent-steel); outline-offset: 1px; border-color: var(--accent-steel); }
 /* #73: the list owns the remaining height and scrolls inside the dialog
    (flex + min-height: 0), so long catalogs stay reachable. The scrollbar
    is a thin, always-visible classic scrollbar (overlay scrollbars render
@@ -136,6 +159,9 @@ function onKeydown(event: KeyboardEvent) {
    read as "no selection"), an accent-steel keyline, and every text span
    at full opacity — no reduced-opacity text on the active row. */
 .palette-item--active { background: var(--active-tint); box-shadow: inset 3px 0 0 var(--accent-steel); }
+/* Keyboard-only ring (never on mouse click): 2px steel, inset so the
+ * full-width row keeps its layout. #2f5f8f on white ≈ 6.7:1 contrast. */
+.palette-item:focus-visible { outline: 2px solid var(--accent-steel); outline-offset: -2px; }
 .palette-item--active .palette-item-name { color: var(--ink); opacity: 1; }
 .palette-item--active .palette-item-meta { color: var(--ink-soft); opacity: 1; }
 .palette-item-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-value); color: var(--ink); }
