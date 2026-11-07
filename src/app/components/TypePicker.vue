@@ -161,7 +161,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onOutsideClick))
   align-items: center;
   gap: 6px;
   width: 100%;
-  min-width: 168px;
+  min-width: 200px;
   height: 24px;
   padding: 0 6px;
   font-family: var(--font-sans);

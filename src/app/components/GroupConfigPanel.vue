@@ -260,7 +260,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
   top: auto;
   bottom: 160px;
   right: 8px;
-  width: 340px;
+  width: 420px;
   max-height: calc(100vh - 220px);
   overflow-y: auto;
   padding: 10px;
@@ -319,7 +319,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 
 .socket-row {
   display: grid;
-  grid-template-columns: 1fr 168px 24px;
+  grid-template-columns: 1fr 200px 24px;
   grid-template-rows: auto auto;
   gap: 4px 6px;
   align-items: center;
@@ -383,7 +383,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 
 .add-row {
   display: grid;
-  grid-template-columns: 1fr 150px 24px;
+  grid-template-columns: 1fr 200px auto;
   gap: 6px;
   align-items: center;
   margin-top: 8px;
