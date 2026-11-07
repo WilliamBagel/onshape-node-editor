@@ -139,12 +139,18 @@ async function paletteCheck(label, listSel, activeSel, parts, open) {
     afterWheel.list.scrollTop > before.list.scrollTop,
     `scrollTop ${before.list.scrollTop} -> ${afterWheel.list.scrollTop}`);
 
+  // Reset to the top first: after the wheel step the active row sits above
+  // the viewport, and scroll-into-view then (correctly) scrolls up — which
+  // made this assertion wheel-position-dependent. From the top, ArrowDown
+  // deterministically scrolls down.
+  await page.evaluate((sel) => { document.querySelector(sel).scrollTop = 0; }, listSel);
+  await sleep(150);
   for (let i = 0; i < 25; i++) await page.keyboard.press('ArrowDown');
   await sleep(350);
   const afterArrows = await measure();
   check(`${label}: ArrowDown scrolls the list`,
-    afterArrows.list.scrollTop > afterWheel.list.scrollTop,
-    `scrollTop ${afterWheel.list.scrollTop} -> ${afterArrows.list.scrollTop}`);
+    afterArrows.list.scrollTop > 0,
+    `scrollTop 0 -> ${afterArrows.list.scrollTop}`);
   check(`${label}: active row kept inside list after arrows`,
     afterArrows.active?.insideList === true,
     `insideList=${afterArrows.active?.insideList}`);
@@ -226,6 +232,69 @@ if (await menu.count()) {
   }
   await page.keyboard.press('Escape');
 }
+
+// Keyboard/aria section (menu-a11y fixes): the context menu is a real
+// keyboard menu, both palettes close with Escape from a row-button focus,
+// and the toolbar Run button gets a visible :focus-visible ring.
+await page.mouse.click(700, 450, { button: 'right' });
+await sleep(800);
+const kb = page.locator('[rete-context-menu]');
+if (await kb.count()) {
+  const role = await kb.getAttribute('role');
+  const ad0 = await kb.getAttribute('aria-activedescendant');
+  check('ContextMenu keyboard: role=menu', role === 'menu', `role=${role}`);
+  check('ContextMenu keyboard: aria-activedescendant set', !!ad0, `ad=${ad0}`);
+  await page.keyboard.press('ArrowDown');
+  await sleep(250);
+  const ad1 = await kb.getAttribute('aria-activedescendant');
+  check('ContextMenu keyboard: ArrowDown moves active item', ad1 !== ad0, `${ad0} -> ${ad1}`);
+  await page.keyboard.press('Escape');
+  await sleep(400);
+  check('ContextMenu keyboard: Escape closes menu',
+    (await page.locator('[rete-context-menu]').count()) === 0);
+  const focusTag = await page.evaluate(() => document.activeElement?.tagName + '.' + document.activeElement?.className);
+  check('ContextMenu keyboard: focus returns to canvas', focusTag === 'MAIN.rete', `active=${focusTag}`);
+}
+
+for (const [label, openKey, panelSel, itemSel] of [
+  ['NodePalette', 'Shift+A', '.palette', '.palette-item'],
+  ['ActionPalette', 'F3', '.actions', '.actions-item'],
+]) {
+  await page.keyboard.press(openKey);
+  await sleep(700);
+  await page.keyboard.press('Tab'); // search input -> first row button
+  await sleep(250);
+  const focusedCls = await page.evaluate(() => document.activeElement?.className);
+  check(`${label} keyboard: Tab reaches a row button`, (focusedCls ?? '').includes('item'), `focus=${focusedCls}`);
+  await page.keyboard.press('Escape');
+  await sleep(400);
+  check(`${label} keyboard: Escape closes from row button`,
+    (await page.locator(panelSel).count()) === 0);
+}
+
+// Toolbar focus ring: focus Run programmatically, then Tab away and
+// Shift+Tab back — a keyboard-initiated move, so Run matches
+// :focus-visible. (Tab on body/canvas is group-edit by design (#14), and a
+// bare programmatic focus() does not set the :focus-visible modality.)
+await page.evaluate(() => document.querySelector('.toolbar-btn--primary').focus());
+await page.keyboard.press('Tab');
+await sleep(200);
+await page.keyboard.press('Shift+Tab');
+await sleep(200);
+let ring = await page.evaluate(() => {
+  const el = document.activeElement;
+  const f = el && el.classList?.contains('toolbar-btn--primary') ? getComputedStyle(el) : null;
+  return f ? { fv: el.matches(':focus-visible'), fs: f.outlineStyle, fw: f.outlineWidth, fc: f.outlineColor, fo: f.outlineOffset } : null;
+});
+const ringUnfocused = await page.evaluate(() => {
+  const el = document.querySelector('.toolbar-btn--primary');
+  el.blur();
+  return getComputedStyle(el).outlineStyle;
+});
+check('Toolbar ring: Run focus-visible outline 2px solid steel',
+  ring != null && ring.fv && ring.fs === 'solid' && ring.fw === '2px' && ring.fc === 'rgb(47, 95, 143)' && ring.fo === '2px',
+  JSON.stringify(ring));
+check('Toolbar ring: focused differs from unfocused', ringUnfocused === 'none' && ring?.fs !== ringUnfocused);
 
 report.results = results;
 report.passed = results.every((r) => r.ok);
