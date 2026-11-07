@@ -204,9 +204,10 @@ if (!results.typography.qtyFontFamily || /mono|courier/i.test(results.typography
 if (results.typography.qtyFontSize !== '13px') fail(`quantity size ${results.typography.qtyFontSize} != 13px`);
 const caretE = results.caret ? Number((results.caret.caretTransform.match(/matrix\(([^)]+)\)/) || [])[1]?.split(',')[4] ?? 0) : 0;
 if (!(caretE >= 2)) fail(`caret translateX ${caretE}px < 2`);
-if (!results.collapsed?.inCol || results.collapsed.inCol.flexDirection !== 'column') fail('collapsed input sockets are not a column');
+if (!results.collapsed?.inCol || results.collapsed.inCol.flexDirection !== 'row') fail('collapsed input sockets are not a row');
 if (!results.collapsed?.inCol || Number(results.collapsed.inCol.rowGap.replace('px','')) > 2) fail('collapsed socket row gap > 2px');
-if (!results.collapsed?.inCol || results.collapsed.inCol.ySpread <= results.collapsed.inCol.xSpread) fail('collapsed sockets do not run vertically');
+if (!results.collapsed?.inCol || results.collapsed.inCol.xSpread <= results.collapsed.inCol.ySpread) fail('collapsed sockets do not run horizontally');
+if (!results.collapsed?.strip || results.collapsed.strip.h > 32) fail(`collapsed strip height ${results.collapsed?.strip?.h}px > 32`);
 if (!selected || !/connection-node-selected/.test(selected.cls) || Number(selected.z) <= -5) fail(`selected connection not raised: ${JSON.stringify(selected)}`);
 results.failures = failures;
 writeFileSync(`${OUT}results.json`, JSON.stringify(results, null, 2));
