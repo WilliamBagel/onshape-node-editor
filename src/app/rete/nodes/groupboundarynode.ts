@@ -2,12 +2,15 @@
  * #14 group boundary nodes: the visible Start Feature / End Feature cards
  * shown while a group definition is being edited.
  *
- * These nodes are transient UI. They are created on entering a group and
- * removed on exit; the durable boundary model remains
- * `GroupDefinition.inputs` / `.outputs` (serialized with the definition).
- * Their sockets expose the definition's boundary sockets so the user can see
- * what leaves and enters the group, and the editor wires them to the member
- * sockets they describe.
+ * These cards are definition-owned and permanent (Blender-style): the
+ * definition stores stable boundary ids and positions (see
+ * GroupDefinition.boundaryNodes, serialized inside the definition), so
+ * entering a group always recreates the same two cards at the same place
+ * with the same ids — even when the group is empty. They are not ordinary
+ * graph nodes: they are never stored as top-level nodes (they stay
+ * `transient` so the serializer/snapshot logic omits them), and their
+ * sockets are rebuilt from the definition's `inputs`/`outputs`, which
+ * remain the single source of truth for sockets.
  *
  * They deliberately emit no FeatureScript: group expansion rewires the
  * instance's external connections directly to the cloned member sockets.
@@ -25,11 +28,14 @@ export abstract class GroupBoundaryNode extends OnshapeNode {
     protected definition: GroupDefinition;
     public readonly boundaryRole: GroupBoundaryRole;
 
-    protected constructor(type: string, title: string, definition: GroupDefinition, role: GroupBoundaryRole) {
+    protected constructor(type: string, title: string, definition: GroupDefinition, role: GroupBoundaryRole, presetId?: string) {
         super(type, title);
         this.definition = definition;
         this.boundaryRole = role;
         this.transient = true;
+        if (presetId != null && presetId !== "") {
+            this.id = presetId;
+        }
         this.width = 240;
         this.height = 90;
         this.minWidth = 200;
@@ -62,8 +68,8 @@ function socketValueType(name: string | undefined): ReturnType<typeof parseValue
 
 /** Start Feature: outputs for every declared group input. */
 export class GroupInputNode extends GroupBoundaryNode {
-    constructor(definition: GroupDefinition) {
-        super("group-input", "Start Feature", definition, "input");
+    constructor(definition: GroupDefinition, presetId?: string) {
+        super("group-input", "Start Feature", definition, "input", presetId);
         this.rebuildSockets();
     }
 
@@ -85,8 +91,8 @@ export class GroupInputNode extends GroupBoundaryNode {
 
 /** End Feature: inputs for every declared group output. */
 export class GroupOutputNode extends GroupBoundaryNode {
-    constructor(definition: GroupDefinition) {
-        super("group-output", "End Feature", definition, "output");
+    constructor(definition: GroupDefinition, presetId?: string) {
+        super("group-output", "End Feature", definition, "output", presetId);
         this.rebuildSockets();
     }
 

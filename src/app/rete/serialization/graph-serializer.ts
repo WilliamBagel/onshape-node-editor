@@ -20,7 +20,7 @@ import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
 import { FunctionNode } from "../nodes/functionnode";
 import { GroupNode } from "../nodes/groupinstancenode";
-import { createGroupDefinition, validateGroupDefinition, type GroupDefinition } from "../groups/groupmodel";
+import { createGroupDefinition, ensureBoundaryNodes, validateGroupDefinition, type GroupDefinition } from "../groups/groupmodel";
 import { UtilityStatementNode } from "../nodes/utilitystatementnode";
 import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { resolveUtilityStatement, utilityMeta } from "../catalog-node-factory";
@@ -146,8 +146,10 @@ export function serializeGraph(
             });
             return false;
         }
-        // Group Start/End cards are editor-only chrome; snapshots and saved
-        // graphs must not contain them (they are recreated on group entry).
+        // Group Start/End cards are definition-owned permanent cards, never
+        // top-level nodes: their identity/positions are serialized inside
+        // the group definition (see collectDefinition below), so snapshots
+        // and saved graphs carry them there, not in `nodes`.
         return !node.transient;
     }).map((node) => {
         const serialized = node.toJSON() as SerializedNode;
@@ -187,6 +189,7 @@ export function serializeGraph(
                 collectDefinition(member.getDefinition());
             }
         }
+        const boundary = ensureBoundaryNodes(definition);
         groupDefinitions.push({
             id: definition.id,
             name: definition.name,
@@ -197,6 +200,7 @@ export function serializeGraph(
             connections: definition.connections.map((connection) => ({ ...connection })),
             inputs: definition.inputs.map((socket) => ({ ...socket })),
             outputs: definition.outputs.map((socket) => ({ ...socket })),
+            boundaryNodes: { ...boundary },
         });
     };
     for (const node of editor.getNodes()) {
@@ -361,6 +365,17 @@ export function deserializeGraph(raw: unknown, options: DeserializeOptions): Loa
             definition.inputs = (serialized.inputs ?? []).map((socket) => ({ ...socket }));
             definition.outputs = (serialized.outputs ?? []).map((socket) => ({ ...socket }));
             definition.connections = (serialized.connections ?? []).map((connection) => ({ ...connection }));
+            if (serialized.boundaryNodes != null && typeof serialized.boundaryNodes === "object") {
+                ensureBoundaryNodes(definition);
+                if (typeof serialized.boundaryNodes.inputId === "string" && serialized.boundaryNodes.inputId !== "") {
+                    definition.boundaryNodes.inputId = serialized.boundaryNodes.inputId;
+                }
+                if (typeof serialized.boundaryNodes.outputId === "string" && serialized.boundaryNodes.outputId !== "") {
+                    definition.boundaryNodes.outputId = serialized.boundaryNodes.outputId;
+                }
+                definition.boundaryNodes.inputPosition = serialized.boundaryNodes.inputPosition ?? null;
+                definition.boundaryNodes.outputPosition = serialized.boundaryNodes.outputPosition ?? null;
+            }
             groupDefinitions.push(definition);
             groupDefinitionMap.set(serialized.id, definition);
         }
