@@ -163,13 +163,16 @@ describe("grouping v2 (#14)", () => {
         expect(fixture.instance1.definitionId).toBe("group-cross-transform");
     });
 
-    it("a two-node subgraph, placed twice, generates inlined FeatureScript", async () => {
+    it("a two-node subgraph, placed twice, compiles to one function and two calls", async () => {
         const fixture = await buildFixture();
         const source = await generateFeatureStudioSource(fixture.editor, fixture.engine);
         expect(source).toBeDefined();
-        // Inlined once per placement: cross and transform each appear twice.
-        expect(source?.match(/cross\(/g)).toHaveLength(2);
-        expect(source?.match(/transform\(/g)).toHaveLength(2);
+        // One reusable function; cross and transform each appear once, inside it.
+        expect(source?.match(/function groupCrossToTransform\(/g)).toHaveLength(1);
+        expect(source?.match(/cross\(/g)).toHaveLength(1);
+        expect(source?.match(/transform\(/g)).toHaveLength(1);
+        // One call per placement.
+        expect(source?.match(/groupCrossToTransform\(/g)).toHaveLength(3);
         expect(source).toContain("opTransform");
     });
 
@@ -299,6 +302,10 @@ describe("grouping v2 (#14)", () => {
         });
 
         const outerBefore = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+        // First entry computes and persists the permanent Start/End positions
+        // (null -> placed), so the definition legitimately gains them; every
+        // later round-trip must leave the outer document byte-identical.
+        let outerBaseline: ReturnType<typeof serializeGraph> | null = null;
         for (let round = 0; round < 2; round++) {
             const instanceId = fixture.editor.getNodes().find((node) => node instanceof GroupNode)?.id;
             expect(instanceId).toBeTruthy();
@@ -310,19 +317,128 @@ describe("grouping v2 (#14)", () => {
             expect(fixture.editor.getNodes().some((node) => node instanceof GroupOutputNode)).toBe(true);
             expect(await controller.toggle()).toBe("exited");
             expect(controller.breadcrumb()).toEqual(["Top level"]);
+            if (outerBaseline == null) {
+                const afterFirst = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+                expect(afterFirst.connections).toEqual(outerBefore.connections);
+                expect(afterFirst.nodes.map((node) => node.id).sort()).toEqual(outerBefore.nodes.map((node) => node.id).sort());
+                for (const def of afterFirst.groupDefinitions ?? []) {
+                    expect(def.boundaryNodes?.inputId).toBeTruthy();
+                    expect(def.boundaryNodes?.outputId).toBeTruthy();
+                    expect(def.boundaryNodes?.inputPosition).not.toBeNull();
+                    expect(def.boundaryNodes?.outputPosition).not.toBeNull();
+                }
+                outerBaseline = afterFirst;
+            }
         }
         const outerAfter = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
-        expect(outerAfter.connections).toEqual(outerBefore.connections);
-        expect(outerAfter.nodes.map((node) => node.id).sort()).toEqual(outerBefore.nodes.map((node) => node.id).sort());
-        expect(outerAfter.groupDefinitions).toEqual(outerBefore.groupDefinitions);
+        expect(outerAfter.connections).toEqual(outerBaseline!.connections);
+        expect(outerAfter.nodes.map((node) => node.id).sort()).toEqual(outerBaseline!.nodes.map((node) => node.id).sort());
+        expect(outerAfter.groupDefinitions).toEqual(outerBaseline!.groupDefinitions);
+    });
+
+    it("permanent boundary cards keep stable ids and moved positions across exit + re-enter", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({
+                document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))),
+                positions: { ...positions },
+            }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...fixture.editor.getConnections()]) {
+                    await fixture.editor.removeConnection(connection.id);
+                }
+                for (const node of [...fixture.editor.getNodes()]) {
+                    await fixture.editor.removeNode(node.id);
+                }
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+
+        const instanceId = (): string => {
+            const id = fixture.editor.getNodes().find((node) => node instanceof GroupNode)?.id;
+            expect(id).toBeTruthy();
+            return id as string;
+        };
+
+        expect(await controller.toggle(instanceId())).toBe("entered");
+        const firstInput = fixture.editor.getNodes().find((node) => node instanceof GroupInputNode);
+        const firstOutput = fixture.editor.getNodes().find((node) => node instanceof GroupOutputNode);
+        expect(firstInput).toBeDefined();
+        expect(firstOutput).toBeDefined();
+        const inputId = firstInput!.id;
+        const outputId = firstOutput!.id;
+        // The cards are the definition's permanent cards, even when empty.
+        expect(controller.isBoundaryNode(inputId)).toBe(true);
+        expect(controller.isBoundaryNode(outputId)).toBe(true);
+        expect(controller.isBoundaryNode(fixture.cross.id)).toBe(false);
+        // User moves the cards, then exits.
+        positions[inputId] = { x: -500, y: 333 };
+        positions[outputId] = { x: 1234, y: -99 };
+        expect(await controller.toggle()).toBe("exited");
+
+        expect(await controller.toggle(instanceId())).toBe("entered");
+        const secondInput = fixture.editor.getNodes().find((node) => node instanceof GroupInputNode);
+        const secondOutput = fixture.editor.getNodes().find((node) => node instanceof GroupOutputNode);
+        expect(secondInput?.id).toBe(inputId);
+        expect(secondOutput?.id).toBe(outputId);
+        expect(positions[inputId]).toEqual({ x: -500, y: 333 });
+        expect(positions[outputId]).toEqual({ x: 1234, y: -99 });
+        // Definitions agree, and cards never became top-level nodes.
+        expect(fixture.definition.boundaryNodes.inputId).toBe(inputId);
+        expect(fixture.definition.boundaryNodes.outputId).toBe(outputId);
+        expect(fixture.definition.boundaryNodes.inputPosition).toEqual({ x: -500, y: 333 });
+        expect(fixture.definition.boundaryNodes.outputPosition).toEqual({ x: 1234, y: -99 });
+        const docInside = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+        expect(docInside.nodes.map((node) => node.id)).not.toContain(inputId);
+        expect(docInside.nodes.map((node) => node.id)).not.toContain(outputId);
+        expect(await controller.toggle()).toBe("exited");
+        const doc = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+        expect(doc.nodes.map((node) => node.id)).not.toContain(inputId);
+        expect(doc.nodes.map((node) => node.id)).not.toContain(outputId);
+        expect(doc.groupDefinitions?.[0]?.boundaryNodes).toEqual({
+            inputId,
+            outputId,
+            inputPosition: { x: -500, y: 333 },
+            outputPosition: { x: 1234, y: -99 },
+        });
+
+        // Serialization round-trip preserves the permanent boundary record.
+        const saved = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id));
+        const loaded = deserializeGraph(JSON.parse(JSON.stringify(saved)), { resolveSpec: () => undefined });
+        expect(loaded.ok).toBe(true);
+        if (!loaded.ok) return;
+        const reloaded = loaded.graph.groupDefinitions.find((d) => d.id === fixture.definition.id);
+        expect(reloaded?.boundaryNodes).toEqual({
+            inputId,
+            outputId,
+            inputPosition: { x: -500, y: 333 },
+            outputPosition: { x: 1234, y: -99 },
+        });
+        // Entering the reloaded definition reuses the same ids/positions.
+        const reloadedInstance = loaded.graph.nodes.find((node) => node instanceof GroupNode) as GroupNode | undefined;
+        expect(reloadedInstance).toBeDefined();
+        expect(reloadedInstance!.getDefinition().boundaryNodes.inputId).toBe(inputId);
     });
 
     it("a muted instance is skipped by codegen", async () => {
         const fixture = await buildFixture();
         fixture.instance2.muted = true;
         const source = await generateFeatureStudioSource(fixture.editor, fixture.engine);
+        // The definition still compiles (instance1 places it), once.
         expect(source?.match(/cross\(/g)).toHaveLength(1);
         expect(source?.match(/transform\(/g)).toHaveLength(1);
+        // Exactly one call: the non-muted instance's. The muted instance
+        // emits none, and its consumer falls back to its own literal.
+        expect(source?.match(/groupCrossToTransform\(/g)).toHaveLength(2);
+        expect(source).toContain("opTransform");
     });
 
     it("a nesting cycle is rejected", async () => {
@@ -369,7 +485,7 @@ describe("grouping v2 (#14)", () => {
         }
     });
 
-    it("groups nest: a group inside a group inlines recursively", async () => {
+    it("groups nest: the outer function calls the inner function per placement", async () => {
         const fixture = await buildFixture();
         // Wrap the whole graph's instances in an outer group definition
         // whose members are the two instances, exposed end to end.
@@ -415,8 +531,11 @@ describe("grouping v2 (#14)", () => {
 
         const source = await generateFeatureStudioSource(editor, engine);
         expect(source).toBeDefined();
-        // The outer group inlines both inner instances: two crosses in total.
-        expect(source?.match(/cross\(/g)).toHaveLength(2);
+        // One function per definition: the inner cross appears once; the
+        // outer function body contains two inner calls (both placements).
+        expect(source?.match(/cross\(/g)).toHaveLength(1);
+        expect(source?.match(/groupCrossToTransform\(/g)).toHaveLength(3);
+        expect(source?.match(/groupOuter\(/g)).toHaveLength(2);
     });
 
     it("exposes boundary sockets and lets the editor add, rename, retype and remove them", async () => {

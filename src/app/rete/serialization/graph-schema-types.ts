@@ -214,6 +214,18 @@ export interface SerializedGroupSocket {
 }
 
 /**
+ * Permanent Start/End Feature boundary identity for a group definition.
+ * Ids and positions are stable across save/load and group re-entry;
+ * they never appear as top-level nodes.
+ */
+export interface SerializedGroupBoundaryNodes {
+    inputId: string;
+    outputId: string;
+    inputPosition: Vec2 | null;
+    outputPosition: Vec2 | null;
+}
+
+/**
  * One group definition (#14): the subgraph, stored once per graph. Member
  * nodes appear here and not in the top-level `nodes` array; instances
  * reference the definition by `id`. Member nodes may themselves be group
@@ -226,6 +238,8 @@ export interface SerializedGroupDefinition {
     connections: SerializedConnection[];
     inputs: SerializedGroupSocket[];
     outputs: SerializedGroupSocket[];
+    /** Permanent Start/End boundary identity; absent in pre-permanent documents. */
+    boundaryNodes?: SerializedGroupBoundaryNodes;
 }
 
 /**

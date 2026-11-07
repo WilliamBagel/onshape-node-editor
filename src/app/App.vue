@@ -1,5 +1,5 @@
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent, watch } from 'vue';
 import TopBar from './components/TopBar.vue'
 import AppDialog from './components/AppDialog.vue';
 import DebugGrid from './components/DebugGrid.vue';
@@ -27,6 +27,7 @@ import { canDispatchAction } from './ui/actionPalette';
 import type { CommandId } from './ui/editorSettings';
 import { defaultCatalog } from './onshape/catalog/spec-catalog';
 import type { DebugNodeSource, DebugSelection, EvalFeatureScriptApiLike } from './onshape-utils/evalfeaturescript';
+import { selectedNodeIds } from './rete/modified-rete/connection-raise';
 
 /**
  * The slice of `App` the toolbar needs for the Feature Studio upload (#1) and
@@ -179,6 +180,10 @@ export default defineComponent({
   },
   async mounted() {
     window.addEventListener('keydown', this.onShortcutKeydown);
+    // Blender-style: selecting a group's Start/End card opens the config
+    // panel. Subscribes to the shared `selectedNodeIds` ref (no document
+    // listeners); selecting an unrelated node never opens the panel.
+    watch(selectedNodeIds, (ids: string[]) => this.onBoundarySelected(ids));
     let editorControls: EditorControls;
     const dev = inject('developerMode');
 
@@ -468,6 +473,23 @@ export default defineComponent({
     /** Group config: refresh the panel state from the editor controls. */
     refreshGroupBoundaryState() {
       this.groupBoundaryState = this.controls?.getGroupBoundaryState() ?? null;
+    },
+    /**
+     * Blender-style: if the selection now includes the Start/End card of
+     * the group being edited, open the config panel (and refresh its
+     * state). Any other selection — including an empty one — leaves the
+     * panel as it is. Leaving group editing closes it (runToggleGroupEdit).
+     */
+    onBoundarySelected(ids: string[]) {
+      if (!this.groupEditing) return;
+      const boundary = this.groupBoundaryState?.boundaryNodeIds;
+      const isBoundary = (id: string) =>
+        (boundary != null && (id === boundary.input || id === boundary.output)) ||
+        (this.controls?.isGroupBoundaryNode?.(id) ?? false);
+      if (ids.some(isBoundary)) {
+        this.refreshGroupBoundaryState();
+        this.groupPanelOpen = true;
+      }
     },
     /**
      * Group config: Tab enter/exit lands here. Entering a group refreshes the

@@ -28,6 +28,44 @@ import {
 } from "../onshape-utils/expressioncodegen";
 import { validateGraphNodes } from "./graph-validation";
 import { expandGroupInstances } from "./groups/group-expand";
+import {
+    assignGroupFunctionNames,
+    buildGroupFunctionInfos,
+    planGroupFunctions,
+} from "./groups/group-function";
+import {
+    escapeFsString,
+    groupOutputKeys,
+    groupResultVariable,
+    groupUsesExpressionPath,
+} from "./groups/groupmodel";
+import type { NodeFeaturescriptInfo } from "../onshape-utils/featurestudiogenerator";
+import { GroupNode } from "./nodes/groupinstancenode";
+
+/**
+ * The identifier a consumer reads a statement-style group instance's
+ * output through: `context`/`id` pass through by name (in-place
+ * mutation), a single valued output is the instance's result variable,
+ * and multi-output results are unpacked per output label. Mirrors the
+ * return side of the group function (see groups/group-function.ts).
+ */
+function groupOutputIdentifier(instance: GroupNode, outputKey: string): string {
+    if (outputKey === "context" || outputKey === "id") {
+        return outputKey;
+    }
+    const definition = instance.getDefinition();
+    const valuedIndex = definition.outputs.findIndex((socket) => socket.id === outputKey);
+    const keys = groupOutputKeys(definition);
+    const result = groupResultVariable(instance.id);
+    const key = valuedIndex >= 0 ? keys[valuedIndex] : undefined;
+    if (key == null) {
+        return result;
+    }
+    if (keys.length <= 1) {
+        return result;
+    }
+    return `${result}["${escapeFsString(key)}"]`;
+}
 
 /**
  * Generate the Feature Studio source for `editor`'s graph.
@@ -43,15 +81,30 @@ export async function generateFeatureStudioSource(
     editor: NodeEditor<Schemes>,
     engine: DataflowEngine<Schemes>
 ): Promise<string | undefined> {
-    // #14: group instances are inlined (see groups/group-expand.ts for the
-    // inline-vs-function trade-off). The expanded editor has no instances,
-    // so the recursive call runs the ordinary pipeline below.
-    const expanded = await expandGroupInstances(editor);
-    if (expanded != null) {
-        return generateFeatureStudioSource(expanded.editor, expanded.engine);
-    }
     const nodeProcessor = new ReteOnshapeNodeProcessor(editor);
     const nodeArray = nodeProcessor.processNodes();
+
+    // #14: each group definition compiles to one reusable FeatureScript
+    // function and each instance emits a call (see groups/group-function.ts).
+    // When a reachable definition cannot compile to a function, the whole
+    // graph falls back to inline expansion (groups/group-expand.ts), which
+    // inlines correctly or refuses with its existing error. Only
+    // instances the pipeline will actually emit (`nodeArray` prunes
+    // unreachable nodes) cause a function to be emitted, so no generated
+    // function is ever left uncalled.
+    let groupFunctionInfos: NodeFeaturescriptInfo[] = [];
+    if (editor.getNodes().some((node) => node instanceof GroupNode)) {
+        const plan = planGroupFunctions(editor, new Set(nodeArray ?? []));
+        if (plan.supported) {
+            assignGroupFunctionNames(editor, plan);
+            groupFunctionInfos = buildGroupFunctionInfos(plan);
+        } else {
+            const expanded = await expandGroupInstances(editor);
+            if (expanded != null) {
+                return generateFeatureStudioSource(expanded.editor, expanded.engine);
+            }
+        }
+    }
 
     if (!nodeArray) {
         console.warn('No nodes to process');
@@ -127,6 +180,47 @@ export async function generateFeatureStudioSource(
             continue;
         }
         nodeDataMap[nodeId] = nodeInputs as Record<string, VariablePointer>[];
+    }
+
+    // #14: a muted group instance emits no call. Inline expansion dropped
+    // its consumers' connections (they fall back to their own literals);
+    // function mode does the same here instead of failing validation like
+    // a muted value node would: remove every consumer input whose producer
+    // is a muted GroupNode's valued output (a `context`/`id` output that
+    // is also an input of the muted instance still passes through below).
+    // A muted instance feeding another group instance without a boundary
+    // default is refused, mirroring expansion's #76 rule.
+    for (const nodeId of nodeArray) {
+        const data = nodeDataMap[nodeId];
+        if (data == null) continue;
+        const consumer = editor.getNode(nodeId);
+        for (const key of Object.keys(data)) {
+            const pointer = data[key]?.[0];
+            if (pointer == null) continue;
+            const producer = editor.getNode(pointer.id);
+            if (
+                producer instanceof GroupNode &&
+                producer.muted &&
+                !(pointer.name in (producer.inputs ?? {}))
+            ) {
+                if (consumer instanceof GroupNode) {
+                    const socket = consumer
+                        .getDefinition()
+                        .inputs.find((entry) => entry.id === key);
+                    if (socket?.defaultLiteral == null) {
+                        throw new Error(
+                            `Group expansion refused: group instance ` +
+                                `"${consumer.getTitle()}" (id "${consumer.id}") ` +
+                                `input "${key}" is wired to a muted node ` +
+                                `"${producer.getTitle()}" (id "${producer.id}"), ` +
+                                `which emits nothing, and the boundary input has no defaultLiteral; ` +
+                                `unmute that node, remove the connection, or set a default literal.`,
+                        );
+                    }
+                }
+                delete data[key];
+            }
+        }
     }
 
     const producersOf = (nodeId: string): Record<string, { nodeId: string; outputKey: string }> => {
@@ -240,6 +334,23 @@ export async function generateFeatureStudioSource(
                 variableMapping[key] = hoisted;
                 continue;
             }
+            // #14: a group instance's outputs do not resolve through the
+            // local-variable allocator. Statement-style groups store their
+            // result in `groupResult_<instanceId>` (see
+            // nodes/groupinstancenode.ts) and multi-output results are
+            // unpacked per label; `context`/`id` pass through by name,
+            // because the caller's variables are mutated in place. Groups
+            // on the expression path are handled by `expressionBindings`
+            // above. Statement-style producers are also handed to
+            // expression consumers as external identifiers, so their
+            // templates substitute the result expression verbatim.
+            const producerNode = editor.getNode(variablePointer.id);
+            if (producerNode instanceof GroupNode && !groupUsesExpressionPath(producerNode.getDefinition())) {
+                const groupIdentifier = groupOutputIdentifier(producerNode, variablePointer.name);
+                variableMapping[key] = groupIdentifier;
+                inputProducers[key] = groupIdentifier;
+                continue;
+            }
             // Look up the variable name from the source node's output
             const allocated = localVariableAllocator.lookup(variablePointer.name, variablePointer.id);
             if (allocated != null) {
@@ -319,7 +430,10 @@ export async function generateFeatureStudioSource(
         console.log(`Generated feature script for node ${nodeId}:`, node);
     }
 
-    const featureScriptInfo = assembleFeatureScriptInfo(pipelineNodes);
+    // Group function definitions come first: they must be declared before
+    // the feature that calls them, and their own imports are collected by
+    // the FeatureStudioGenerator like any other line's.
+    const featureScriptInfo = [...groupFunctionInfos, ...assembleFeatureScriptInfo(pipelineNodes)];
 
     console.log('Final featureScriptInfo array:', featureScriptInfo);
 

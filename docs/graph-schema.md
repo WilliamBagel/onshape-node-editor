@@ -65,6 +65,21 @@ A saved graph is a single JSON document produced by
 | `connections` | array | Every connection. Endpoints are node ids plus port keys. |
 | `nodeOrder` | string[] | Node ids, **bottom-most first**: the last id paints on top. Every node appears exactly once. Always written by this build; absent from version-1 documents. |
 | `frames` | array (optional) | Grouping frames (#13). Omitted when the graph has none, so pre-#13 documents keep their exact shape. |
+| `groupDefinitions` | array (optional) | Group definitions (#14), each stored once per graph. Omitted when the graph has no group instances. |
+
+### Group definitions
+
+Each `groupDefinitions` entry holds one group definition: its member `nodes`
+(never in the top-level `nodes` array), internal `connections`, and the
+boundary `inputs`/`outputs` that group instances expose. The definition's
+Start Feature / End Feature cards are permanent and definition-owned
+(Blender-style): their stable identity and positions are recorded in the
+optional `boundaryNodes` object (`inputId`, `outputId`, `inputPosition`,
+`outputPosition`) inside the definition. They are never serialized as
+top-level nodes, and `inputs`/`outputs` remain the single source of truth for
+sockets. A document without `boundaryNodes` loads by deriving stable ids
+from the definition id. Add/rename/retype/remove of boundary sockets go
+through the definition's socket arrays exactly as before.
 
 `nodeOrder` is the canvas paint order and nothing else. It is one list for the
 whole graph rather than a per-node `order` ordinal, because a single list cannot

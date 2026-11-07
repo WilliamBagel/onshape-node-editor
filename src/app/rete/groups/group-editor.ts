@@ -25,6 +25,7 @@ import { StyleSettings } from "../stylesettings";
 import { connectGraphNodes } from "../serialization/graph-serializer";
 import {
     addGroupSocket,
+    ensureBoundaryNodes,
     listGroupSocketCandidates,
     removeGroupSocket,
     updateGroupSocket,
@@ -165,6 +166,14 @@ export class GroupEditorController {
         return true;
     }
 
+    /** True when `nodeId` is a boundary card of the group being edited. */
+    public isBoundaryNode(nodeId: string): boolean {
+        const definition = this.currentDefinition;
+        if (definition == null) return false;
+        const record = ensureBoundaryNodes(definition);
+        return nodeId === record.inputId || nodeId === record.outputId;
+    }
+
     /** Current boundary state for the group editor UI, or null at the top level. */
     boundaryState(): GroupBoundaryState | null {
         const definition = this.currentDefinition;
@@ -248,8 +257,12 @@ export class GroupEditorController {
     }
 
     private async createBoundaryNodes(definition: GroupDefinition): Promise<void> {
-        this.groupInput = new GroupInputNode(definition);
-        this.groupOutput = new GroupOutputNode(definition);
+        // Permanent definition-owned cards: reuse the definition's stable
+        // ids and saved positions on every entry (Blender-style). Only
+        // compute and persist a position the first time a card is shown.
+        const record = ensureBoundaryNodes(definition);
+        this.groupInput = new GroupInputNode(definition, record.inputId);
+        this.groupOutput = new GroupOutputNode(definition, record.outputId);
         await this.editor.addNode(this.groupInput);
         await this.editor.addNode(this.groupOutput);
         const memberPositions = Object.values(definition.positions)
@@ -257,12 +270,16 @@ export class GroupEditorController {
         const minX = memberPositions.length > 0 ? Math.min(...memberPositions.map((position) => position.x)) : 0;
         const minY = memberPositions.length > 0 ? Math.min(...memberPositions.map((position) => position.y)) : 0;
         const maxX = memberPositions.length > 0 ? Math.max(...memberPositions.map((position) => position.x)) : 640;
-        const startX = Math.max(20, minX - 280);
-        const endX = maxX + 40;
+        if (record.inputPosition == null) {
+            record.inputPosition = { x: Math.max(20, minX - 280), y: minY };
+        }
+        if (record.outputPosition == null) {
+            record.outputPosition = { x: maxX + 40, y: minY };
+        }
         await this.host.setPositions({
             ...definition.positions,
-            [this.groupInput.id]: { x: startX, y: minY },
-            [this.groupOutput.id]: { x: endX, y: minY },
+            [this.groupInput.id]: record.inputPosition,
+            [this.groupOutput.id]: record.outputPosition,
         });
         await this.rebuildBoundaryWiring();
     }
@@ -324,6 +341,15 @@ export class GroupEditorController {
             if (level.definition.nodes.some((node) => node.id === memberId)) {
                 level.definition.positions[memberId] = positions[memberId];
             }
+        }
+        // Persist where the user left the permanent Start/End cards so the
+        // next entry (and a later save) restores exactly those positions.
+        const boundaryRecord = ensureBoundaryNodes(level.definition);
+        if (this.groupInput != null && positions[this.groupInput.id] != null) {
+            boundaryRecord.inputPosition = positions[this.groupInput.id];
+        }
+        if (this.groupOutput != null && positions[this.groupOutput.id] != null) {
+            boundaryRecord.outputPosition = positions[this.groupOutput.id];
         }
         level.definition.connections = this.editor.getConnections()
             .filter((connection) =>
