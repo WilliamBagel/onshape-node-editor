@@ -1,21 +1,38 @@
 <!-- Editor context menu: recursive search + viewport clamping.
      The vendor preset only filters its top-level rows, so typing a node name
      (for example "fillet") found nothing inside Math / Onshape features.
-     This replacement keeps the same item shape but searches every leaf. -->
+     This replacement keeps the same item shape but searches every leaf.
+     Keyboard: root is a real menu (role=menu/menuitem, aria-activedescendant);
+     ArrowUp/ArrowDown/Home/End move the active row and scroll it into view,
+     Enter/Space activate, Escape closes and returns focus to the canvas.
+     Tab is not trapped. Mouse behaviour is unchanged. -->
 <template>
   <div ref="root" class="menu" data-testid="context-menu" rete-context-menu
+    role="menu" tabindex="0" aria-label="Editor context menu"
+    :aria-activedescendant="activeId"
+    @keydown="onKeydown"
     @mouseover="cancelHide" @mouseleave="scheduleHide" @wheel.stop="onWheel">
     <div v-if="searchBar" class="block">
       <input ref="search" v-model="term" class="search" data-testid="context-menu-search-input"
-        aria-label="Search context menu" placeholder="Search…" />
+        aria-label="Search context menu" aria-expanded="true" aria-controls="context-menu-list"
+        placeholder="Search…" />
     </div>
 
+    <div id="context-menu-list">
     <template v-if="!query">
       <div v-for="item in items" :key="item.key" class="block"
-        :class="{ hasSubitems: hasChildren(item) }">
-        <div class="content" @click.stop="activate(item)">{{ item.label }}</div>
+        :class="{ hasSubitems: hasChildren(item), 'block--active': item.key === activeKey }"
+        role="menuitem" :id="`cm-${item.key}`" tabindex="-1"
+        :aria-expanded="hasChildren(item) ? openKey === item.key : undefined"
+        @mouseenter="activeKey = item.key" @focus="activeKey = item.key"
+        @click.stop="activate(item)">
+        <div class="content">{{ item.label }}</div>
         <div v-if="hasChildren(item) && openKey === item.key" class="subitems subitems-inline">
-          <div v-for="sub in item.subitems" :key="sub.key" class="block subitem" @click.stop="activate(sub)">
+          <div v-for="sub in item.subitems" :key="sub.key" class="block subitem"
+            :class="{ 'block--active': sub.key === activeKey }"
+            role="menuitem" :id="`cm-${sub.key}`" tabindex="-1"
+            @mouseenter="activeKey = sub.key" @focus="activeKey = sub.key"
+            @click.stop="activate(sub)">
             <div class="content">{{ sub.label }}</div>
           </div>
         </div>
@@ -23,7 +40,11 @@
     </template>
 
     <template v-else>
-      <div v-for="hit in hits" :key="hit.item.key" class="block" @click.stop="activate(hit.item)">
+      <div v-for="hit in hits" :key="hit.item.key" class="block"
+        :class="{ 'block--active': hit.item.key === activeKey }"
+        role="menuitem" :id="`cm-${hit.item.key}`" tabindex="-1"
+        @mouseenter="activeKey = hit.item.key" @focus="activeKey = hit.item.key"
+        @click.stop="activate(hit.item)">
         <div class="content">
           <span class="hit-category">{{ hit.category }}</span>
           <span class="hit-label">{{ hit.item.label }}</span>
@@ -33,11 +54,12 @@
         <div class="content menu-empty">No matching node.</div>
       </div>
     </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUpdated, ref } from "vue";
+import { computed, nextTick, onMounted, onUpdated, ref, watch } from "vue";
 
 interface ContextMenuItem {
   label: string;
@@ -59,6 +81,7 @@ const props = withDefaults(defineProps<{
 
 const term = ref("");
 const openKey = ref<string | null>(null);
+const activeKey = ref<string | null>(null);
 const root = ref<HTMLElement | null>(null);
 const search = ref<HTMLInputElement | null>(null);
 
@@ -95,6 +118,101 @@ const hits = computed<Hit[]>(() => {
   }
   return out.slice(0, 80);
 });
+
+/** Rows the keyboard can reach right now: search hits, or the visible tree
+ *  (top level plus the open inline category). */
+const visibleItems = computed<ContextMenuItem[]>(() => {
+  if (query.value !== "") return hits.value.map(hit => hit.item);
+  const out: ContextMenuItem[] = [];
+  for (const item of props.items) {
+    out.push(item);
+    if (hasChildren(item) && openKey.value === item.key) out.push(...(item.subitems as ContextMenuItem[]));
+  }
+  return out;
+});
+
+const activeId = computed(() => (activeKey.value != null ? `cm-${activeKey.value}` : undefined));
+
+watch(visibleItems, () => {
+  if (activeKey.value == null || !visibleItems.value.some(item => item.key === activeKey.value)) {
+    activeKey.value = visibleItems.value[0]?.key ?? null;
+  }
+  scrollActiveIntoView();
+}, { immediate: true });
+
+/**
+ * Keep the active row inside the menu by scrolling the menu only.
+ * (Same rule as the palettes: never scroll the document/canvas.)
+ */
+function scrollActiveIntoView(): void {
+  const container = root.value;
+  if (activeKey.value == null || container == null) return;
+  // Keys are catalog-generated; quote/backslash escaping suffices for the
+  // attribute selector (and avoids relying on CSS.escape in jsdom).
+  const escaped = activeKey.value.replace(/["\\]/g, "\\$&");
+  const el = container.querySelector(`[id="cm-${escaped}"]`);
+  if (!(el instanceof HTMLElement)) return;
+  const pad = 4;
+  const listRect = container.getBoundingClientRect();
+  const itemRect = el.getBoundingClientRect();
+  if (itemRect.top < listRect.top + pad) container.scrollTop -= listRect.top + pad - itemRect.top;
+  else if (itemRect.bottom > listRect.bottom - pad) container.scrollTop += itemRect.bottom - (listRect.bottom - pad);
+}
+
+function moveActive(delta: number): void {
+  const list = visibleItems.value;
+  if (list.length === 0) return;
+  const idx = list.findIndex(item => item.key === activeKey.value);
+  const next = idx === -1 ? 0 : Math.min(Math.max(idx + delta, 0), list.length - 1);
+  activeKey.value = list[next]?.key ?? null;
+  scrollActiveIntoView();
+}
+
+function jumpActive(toEnd: boolean): void {
+  const list = visibleItems.value;
+  if (list.length === 0) return;
+  activeKey.value = (toEnd ? list[list.length - 1] : list[0])?.key ?? null;
+  scrollActiveIntoView();
+}
+
+/** Escape closes the menu and returns focus to the canvas. */
+function closeAndRefocus(): void {
+  props.onHide?.();
+  const canvas = root.value?.closest("main.rete") as HTMLElement | null;
+  if (canvas != null) {
+    canvas.tabIndex = -1;
+    canvas.focus();
+  }
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  const inSearch = search.value != null && event.target === search.value;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    moveActive(1);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    moveActive(-1);
+  } else if (event.key === "Home") {
+    event.preventDefault();
+    jumpActive(false);
+  } else if (event.key === "End") {
+    event.preventDefault();
+    jumpActive(true);
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    const item = visibleItems.value.find(i => i.key === activeKey.value);
+    if (item != null) activate(item);
+  } else if (event.key === " " && !inSearch) {
+    // Space activates a menu row (in the search input it types a space).
+    event.preventDefault();
+    const item = visibleItems.value.find(i => i.key === activeKey.value);
+    if (item != null) activate(item);
+  } else if (event.key === "Escape") {
+    closeAndRefocus();
+  }
+  // Tab intentionally unhandled: the menu never traps it.
+}
 
 /**
  * The menu lives inside MAIN.rete, where the canvas zoom handler sits on
@@ -145,7 +263,8 @@ function clamp(): void {
 onMounted(async () => {
   await nextTick();
   clamp();
-  search.value?.focus();
+  if (search.value != null) search.value.focus();
+  else root.value?.focus();
 });
 
 onUpdated(() => {

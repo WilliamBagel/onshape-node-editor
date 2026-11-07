@@ -169,6 +169,13 @@ const hoveredButton = ref<'search' | null>(null)
   background: var(--border-subtle);
 }
 
+/* Keyboard-only ring (never on mouse click): matches the top toolbar.
+ * #2f5f8f on white ≈ 6.7:1 contrast. */
+.toolbar-btn:focus-visible {
+  outline: 2px solid var(--accent-steel);
+  outline-offset: 2px;
+}
+
 .btn-label {
   letter-spacing: 0.01em;
 }

@@ -99,4 +99,76 @@ describe("EditorContextMenu", () => {
     expect(wrapper.text()).toContain("No matching node.");
     wrapper.unmount();
   });
+
+  it("is a real keyboard menu: roles, activedescendant, arrows, Enter, Escape", async () => {
+    const { items, sin } = menuItems();
+    const onHide = vi.fn();
+    const wrapper = mount(EditorContextMenu, {
+      props: { items, searchBar: false, onHide },
+      attachTo: document.body,
+    });
+    const menu = wrapper.find('[data-testid="context-menu"]');
+    expect(menu.attributes("role")).toBe("menu");
+    expect(menu.attributes("tabindex")).toBe("0");
+    const menuitems = wrapper.findAll('[role="menuitem"]');
+    expect(menuitems.length).toBeGreaterThan(0);
+    expect(menuitems[0].attributes("tabindex")).toBe("-1");
+
+    // Initial active row is the first item; arrows move it and the
+    // aria-activedescendant follows, with the active class on the row.
+    expect(menu.attributes("aria-activedescendant")).toBe("cm-math");
+    await menu.trigger("keydown", { key: "ArrowDown" });
+    expect(menu.attributes("aria-activedescendant")).toBe("cm-features");
+    expect(wrapper.findAll(".block--active").map(b => b.text())).toEqual(["Onshape features"]);
+    await menu.trigger("keydown", { key: "ArrowUp" });
+    expect(menu.attributes("aria-activedescendant")).toBe("cm-math");
+
+    // Enter on a category opens its inline subitems; arrows reach leaves.
+    await menu.trigger("keydown", { key: "Enter" });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findAll(".subitem").map(s => s.text())).toEqual(["sin", "cos"]);
+    await menu.trigger("keydown", { key: "ArrowDown" });
+    expect(menu.attributes("aria-activedescendant")).toBe("cm-sin");
+
+    // Enter activates the leaf: handler runs and the menu hides.
+    await menu.trigger("keydown", { key: "Enter" });
+    expect(sin).toHaveBeenCalledOnce();
+    expect(onHide).toHaveBeenCalledOnce();
+
+    // Escape hides the menu.
+    await menu.trigger("keydown", { key: "Escape" });
+    expect(onHide).toHaveBeenCalledTimes(2);
+
+    // Tab is not trapped: the handler leaves the default alone.
+    const tabEvent = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    menu.element.dispatchEvent(tabEvent);
+    expect(tabEvent.defaultPrevented).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("in search mode, arrows move over hits and Space still types", async () => {
+    const { items, sin } = menuItems();
+    const onHide = vi.fn();
+    const wrapper = mount(EditorContextMenu, {
+      props: { items, searchBar: true, onHide },
+      attachTo: document.body,
+    });
+    const menu = wrapper.find('[data-testid="context-menu"]');
+    await search(wrapper, "si");
+    await wrapper.vm.$nextTick();
+    expect(menu.attributes("aria-activedescendant")).toBe("cm-sin");
+    await menu.trigger("keydown", { key: "ArrowDown" });
+    // Only one hit, clamped at the last row.
+    expect(menu.attributes("aria-activedescendant")).toBe("cm-sin");
+    // Space in the search input types a space (no activation).
+    const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    wrapper.find(".search").element.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(false);
+    expect(sin).not.toHaveBeenCalled();
+    // Enter activates the active hit.
+    await menu.trigger("keydown", { key: "Enter" });
+    expect(sin).toHaveBeenCalledOnce();
+    expect(onHide).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
 });

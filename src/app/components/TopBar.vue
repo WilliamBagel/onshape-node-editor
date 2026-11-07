@@ -300,9 +300,13 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
   background: var(--active-tint);
 }
 
+/* Keyboard-only ring (never on mouse click): 2px steel outline with a 2px
+ * offset so it reads against the toolbar surface on BOTH the ghost buttons
+ * (white) and the filled primary Run (accent fill — a border-only ring is
+ * identical to the unfocused state there). #2f5f8f on white ≈ 6.7:1. */
 .toolbar-btn:focus-visible {
-  border-color: var(--accent);
-  outline: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── The one filled action ─────────────────────────────────────── */
