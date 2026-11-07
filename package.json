@@ -36,6 +36,7 @@
     "smoke:qa-dashboard": "node qa/dashboard/dashboard.smoke.mjs",
     "qa:node-chrome": "node qa/harness/node-chrome-check.mjs",
     "qa:defects": "node qa/harness/defect-checks.mjs",
+    "qa:search-menus": "node qa/harness/search-menu-check.mjs",
     "qa:report": "node qa/harness/report.mjs",
     "qa:review": "node qa/review/review-packet.mjs"
   },
