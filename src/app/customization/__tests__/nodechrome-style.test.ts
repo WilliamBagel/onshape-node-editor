@@ -53,14 +53,16 @@ describe('map collapse caret offset', () => {
     });
 });
 
-describe('collapsed socket strip is vertical columns', () => {
-    it('socket groups stack vertically with a 1px row gap', () => {
-        expect(nodeSrc).toMatch(/\.collapsed-socket-group\s*\{[^}]*flex-direction:\s*column/);
-        expect(nodeSrc).toMatch(/\.collapsed-socket-group\s*\{[^}]*gap:\s*1px/);
+describe('collapsed socket strip is one compact horizontal band', () => {
+    it('socket groups run in a row and wrap only when the card is full', () => {
+        expect(nodeSrc).toMatch(/\.collapsed-socket-group\s*\{[^}]*flex-direction:\s*row/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket-group\s*\{[^}]*flex-wrap:\s*wrap/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket-group\s*\{[^}]*gap:\s*2px 4px/);
+        expect(nodeSrc).not.toMatch(/\.collapsed-socket-group\s*\{[^}]*flex-direction:\s*column/);
     });
     it('strip is compressed (no reserved expanded min-height, tight padding)', () => {
         expect(nodeSrc).toMatch(/\.collapsed-socket-strip\s*\{[^}]*min-height:\s*0/);
-        expect(nodeSrc).toMatch(/\.collapsed-socket-strip\s*\{[^}]*padding:\s*2px 4px/);
+        expect(nodeSrc).toMatch(/\.collapsed-socket-strip\s*\{[^}]*padding:\s*2px 6px 4px/);
         expect(nodeSrc).not.toMatch(/\.collapsed-socket-strip\s*\{[^}]*min-height:\s*24px/);
     });
     it('socket anchors and test ids are preserved', () => {
