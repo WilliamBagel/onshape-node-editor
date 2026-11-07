@@ -21,7 +21,7 @@
         aria-label="Search every node"
         @keydown="onKeydown"
       />
-      <div class="palette-list" role="listbox" aria-label="Insertable nodes">
+      <div ref="list" class="palette-list" role="listbox" aria-label="Insertable nodes">
         <template v-for="group in groups" :key="group.category">
           <div class="palette-category">{{ group.category }}</div>
           <button
@@ -60,6 +60,7 @@ const emit = defineEmits<{ (e: 'select', item: PaletteInsertable): void; (e: 'cl
 const term = ref('')
 const activeKey = ref<string | null>(null)
 const search = ref<HTMLInputElement | null>(null)
+const list = ref<HTMLElement | null>(null)
 const itemRefs = new Map<string, unknown>()
 
 function registerItem(key: string, el: unknown) {
@@ -78,9 +79,21 @@ watch(flat, () => {
   scrollActiveIntoView()
 })
 
+/**
+ * Keep the active row inside the list by scrolling the list only.
+ * scrollIntoView() can also scroll the document/backdrop, which made
+ * arrow navigation shake the dialog; adjusting list.scrollTop from the
+ * row rects never touches any other scroll container.
+ */
 function scrollActiveIntoView() {
   const el = activeKey.value != null ? itemRefs.get(activeKey.value) : null
-  if (el instanceof HTMLElement) el.scrollIntoView({ block: 'nearest' })
+  const container = list.value
+  if (!(el instanceof HTMLElement) || container == null) return
+  const pad = 4
+  const listRect = container.getBoundingClientRect()
+  const itemRect = el.getBoundingClientRect()
+  if (itemRect.top < listRect.top + pad) container.scrollTop -= listRect.top + pad - itemRect.top
+  else if (itemRect.bottom > listRect.bottom - pad) container.scrollTop += itemRect.bottom - (listRect.bottom - pad)
 }
 
 function close() { emit('close') }
@@ -109,11 +122,22 @@ function onKeydown(event: KeyboardEvent) {
 .palette-search { flex: none; width: calc(100% - 24px); margin: 0 12px 8px; padding: 6px 8px; font-size: var(--font-size-value); font-family: var(--font-sans); border: 1px solid var(--hairline); border-radius: var(--radius-control); background: var(--surface-sunken); color: var(--ink); box-sizing: border-box; }
 .palette-search:focus { outline: 1px solid var(--accent-steel); border-color: var(--accent-steel); }
 /* #73: the list owns the remaining height and scrolls inside the dialog
-   (flex + min-height: 0), so long catalogs stay reachable. */
-.palette-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; }
+   (flex + min-height: 0), so long catalogs stay reachable. The scrollbar
+   is a thin, always-visible classic scrollbar (overlay scrollbars render
+   at width 0 and read as "no scrollbar"). */
+.palette-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 8px 8px; scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+.palette-list::-webkit-scrollbar { width: 8px; }
+.palette-list::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 4px; }
+.palette-list::-webkit-scrollbar-track { background: transparent; }
 .palette-category { font-size: var(--font-size-section); font-weight: var(--font-weight-section); padding: 8px 4px 4px; color: var(--ink); opacity: var(--opacity-secondary); }
 .palette-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; width: 100%; padding: 6px 4px; border: none; background: transparent; cursor: pointer; font-family: var(--font-sans); text-align: left; }
-.palette-item--active { background: var(--surface-sunken); }
+/* The keyboard-active row reads at a glance: a clearly darker tint than
+   the white panel (the old --surface-sunken was one step off white and
+   read as "no selection"), an accent-steel keyline, and every text span
+   at full opacity — no reduced-opacity text on the active row. */
+.palette-item--active { background: var(--active-tint); box-shadow: inset 3px 0 0 var(--accent-steel); }
+.palette-item--active .palette-item-name { color: var(--ink); opacity: 1; }
+.palette-item--active .palette-item-meta { color: var(--ink-soft); opacity: 1; }
 .palette-item-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-size-value); color: var(--ink); }
 .palette-item-meta { flex: 0 0 auto; white-space: nowrap; font-size: var(--font-size-meta); color: var(--ink-soft); }
 .palette-empty { font-size: var(--font-size-label); padding: 8px 4px; color: var(--ink); opacity: var(--opacity-secondary); }

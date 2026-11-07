@@ -146,6 +146,8 @@ body {
     max-width: min(380px, 80vw);
     max-height: min(70vh, 520px);
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hairline-strong) transparent;
     margin-top: 0;
     margin-left: 0;
     background: var(--surface);
@@ -159,6 +161,21 @@ body {
 .menu[rete-context-menu][rete-context-menu]::after {
     content: none;
     display: none;
+}
+
+/* Same thin classic scrollbar as the palettes, so search hits that
+ * overflow the 70vh cap stay reachable and visibly scrollable. */
+.menu[rete-context-menu][rete-context-menu]::-webkit-scrollbar {
+    width: 8px;
+}
+
+.menu[rete-context-menu][rete-context-menu]::-webkit-scrollbar-thumb {
+    background: var(--hairline-strong);
+    border-radius: 4px;
+}
+
+.menu[rete-context-menu][rete-context-menu]::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .menu[rete-context-menu][rete-context-menu] .block {
@@ -226,6 +243,8 @@ body {
     width: 260px;
     max-height: min(70vh, 520px);
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hairline-strong) transparent;
     z-index: 1001;
     max-width: min(380px, 80vw);
     background: var(--surface);
