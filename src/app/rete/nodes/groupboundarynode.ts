@@ -24,6 +24,19 @@ import type { GroupDefinition } from "../groups/groupmodel";
 
 export type GroupBoundaryRole = "input" | "output";
 
+/**
+ * Drag-to-create placeholder sockets (Blender-style). They are NOT group
+ * interface sockets: they never appear in a definition's saved
+ * `inputs`/`outputs`. Dragging the Start placeholder into a member input
+ * creates a real group input bound to that member (and vice versa for End);
+ * the placeholder itself remains for another drag. Their `unknown` value
+ * type is compatible with every member type.
+ */
+export const GROUP_INPUT_PLACEHOLDER_KEY = "__group_input_placeholder";
+export const GROUP_OUTPUT_PLACEHOLDER_KEY = "__group_output_placeholder";
+export const GROUP_INPUT_PLACEHOLDER_LABEL = "+ Input";
+export const GROUP_OUTPUT_PLACEHOLDER_LABEL = "+ Output";
+
 export abstract class GroupBoundaryNode extends OnshapeNode {
     protected definition: GroupDefinition;
     public readonly boundaryRole: GroupBoundaryRole;
@@ -86,6 +99,14 @@ export class GroupInputNode extends GroupBoundaryNode {
                 ),
             );
         }
+        // Drag-to-create placeholder (not a saved interface socket).
+        this.addOutput(
+            GROUP_INPUT_PLACEHOLDER_KEY,
+            new OnshapeOutput(
+                new OnshapeSocket(GROUP_INPUT_PLACEHOLDER_LABEL, parseValueType("unknown")),
+                GROUP_INPUT_PLACEHOLDER_LABEL,
+            ),
+        );
     }
 }
 
@@ -109,5 +130,13 @@ export class GroupOutputNode extends GroupBoundaryNode {
                 ),
             );
         }
+        // Drag-to-create placeholder (not a saved interface socket).
+        this.addInput(
+            GROUP_OUTPUT_PLACEHOLDER_KEY,
+            new ClassicPreset.Input(
+                new OnshapeSocket(GROUP_OUTPUT_PLACEHOLDER_LABEL, parseValueType("unknown")),
+                GROUP_OUTPUT_PLACEHOLDER_LABEL,
+            ),
+        );
     }
 }

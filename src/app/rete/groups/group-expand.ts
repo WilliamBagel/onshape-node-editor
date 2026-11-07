@@ -30,7 +30,7 @@ import { MathExpressionNode } from "../nodes/mathexpressionnode";
 import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { createUtilityNode } from "../catalog-node-factory";
 import { connectGraphNodes } from "../serialization/graph-serializer";
-import type { GroupDefinition } from "./groupmodel";
+import { isGroupSocketBound, type GroupDefinition } from "./groupmodel";
 
 interface BoundaryTarget {
     node: OnshapeNode;
@@ -242,9 +242,16 @@ export async function expandGroupInstances(
         }
 
         for (const socket of definition.inputs) {
+            if (!isGroupSocketBound(socket)) continue; // unbound input: unused
             result.inputs.set(socket.id, resolveMember(socket.nodeId, socket.socketKey, "input"));
         }
         for (const socket of definition.outputs) {
+            if (!isGroupSocketBound(socket)) {
+                throw new Error(
+                    `Group "${definition.id}" boundary output "${socket.label}" (${socket.id}) is not bound to a member output; ` +
+                        `bind it by dragging a member output onto the End Feature before building.`,
+                );
+            }
             result.outputs.set(socket.id, resolveMember(socket.nodeId, socket.socketKey, "output"));
         }
         return result;

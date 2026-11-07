@@ -162,6 +162,32 @@ describe("GroupConfigPanel", () => {
     wrapper.unmount();
   });
 
+  it("renders an unbound socket row and emits add-any for a new arbitrary socket", async () => {
+    const unbound: GroupBoundaryState = {
+      ...fakeState,
+      inputs: [{ id: "def-1.input.threshold", label: "threshold", direction: "input", valueType: "unknown" }],
+      outputs: [{ id: "def-1.output.result", label: "result", direction: "output", valueType: "unknown" }],
+    }
+    const wrapper = mountPanel(unbound)
+    const rows = wrapper.findAll('[data-testid="group-input-row"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].attributes('data-bound')).toBe('false')
+    expect(rows[0].text()).toContain('Unbound')
+
+    const labelInput = wrapper.find('input[aria-label="Label for a new arbitrary group input"]')
+    await labelInput.setValue('depth')
+    await wrapper.find('[data-testid="group-add-any-input"]').trigger('click')
+    expect(wrapper.emitted('add-any')).toEqual([
+      [{ direction: 'input', label: 'depth', valueType: 'unknown' }],
+    ])
+
+    await wrapper.find('[data-testid="group-add-any-output"]').trigger('click')
+    expect(wrapper.emitted('add-any')?.[1]).toEqual([
+      { direction: 'output', label: 'output', valueType: 'unknown' },
+    ])
+    wrapper.unmount()
+  })
+
   it("renders nothing when state is null (top level)", () => {
     const wrapper = mountPanel(null);
     expect(wrapper.find('[data-testid="group-config-panel"]').exists()).toBe(false);

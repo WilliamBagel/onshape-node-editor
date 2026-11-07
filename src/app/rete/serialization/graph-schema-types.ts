@@ -207,8 +207,10 @@ export interface SerializedGroupSocket {
     id: string;
     label: string;
     direction: "input" | "output";
-    nodeId: string;
-    socketKey: string;
+    /** Absent when the interface socket is unbound (arbitrary socket). */
+    nodeId?: string;
+    /** Absent when the interface socket is unbound (arbitrary socket). */
+    socketKey?: string;
     valueType?: string;
     defaultLiteral?: string;
 }
