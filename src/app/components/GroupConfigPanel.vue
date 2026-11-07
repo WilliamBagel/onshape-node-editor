@@ -11,6 +11,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
+import TypePicker from './TypePicker.vue'
 import type { GroupBoundaryState } from '../rete/groups/group-editor'
 import type { GroupSocketDefinition } from '../rete/groups/groupmodel'
 
@@ -19,59 +20,12 @@ const props = defineProps<{
   state: GroupBoundaryState | null
 }>()
 
-/**
- * Socket data-colour for a value type, from the --socket-* tokens in
- * common.css (the same palette the canvas sockets use). Unknown types
- * fall back to the neutral socket ink.
- */
-const SOCKET_COLORS: Readonly<Record<string, string>> = {
-  Query: 'var(--socket-query)',
-  QueryList: 'var(--socket-query)',
-  Id: 'var(--socket-id)',
-  ValueWithUnits: 'var(--socket-quantity)',
-  Enum: 'var(--socket-enum)',
-  Boolean: 'var(--socket-boolean)',
-  boolean: 'var(--socket-boolean)',
-  String: 'var(--socket-string)',
-  string: 'var(--socket-string)',
-  Vector: 'var(--socket-vector)',
-  Matrix: 'var(--socket-matrix)',
-  Transform: 'var(--socket-transform)',
-  CoordSystem: 'var(--socket-coordsystem)',
-  number: 'var(--socket-number)',
-  map: 'var(--socket-map)',
-  Context: 'var(--socket-context)',
-}
-
-function socketColor(valueType: string | undefined): string {
-  return SOCKET_COLORS[valueType ?? 'unknown'] ?? 'var(--socket-ink)'
-}
-
 const emit = defineEmits<{
   (e: 'update', payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }): void
   (e: 'add-any', payload: { direction: 'input' | 'output'; label: string; valueType: string }): void
   (e: 'remove', payload: { socketId: string; direction: 'input' | 'output' }): void
   (e: 'close'): void
 }>()
-
-/** Value type choices offered for a boundary socket (display-only labels). */
-const VALUE_TYPES: readonly string[] = [
-  'unknown',
-  'number',
-  'ValueWithUnits',
-  'boolean',
-  'string',
-  'Query',
-  'Id',
-  'Context',
-  'Vector',
-  'Matrix',
-  'Transform',
-  'CoordSystem',
-  'map',
-  'Enum',
-  'array',
-]
 
 /** Draft label text per socket id, so typing does not fight the parent refresh. */
 const labelDrafts = ref<Record<string, string>>({})
@@ -109,8 +63,7 @@ function onLabelBlur(socket: GroupSocketDefinition): void {
   }
 }
 
-function onTypeChange(socket: GroupSocketDefinition, event: Event): void {
-  const next = (event.target as HTMLSelectElement).value
+function onTypeChange(socket: GroupSocketDefinition, next: string): void {
   if (next !== (socket.valueType ?? 'unknown')) {
     emit('update', { socketId: socket.id, direction: socket.direction, patch: { valueType: next } })
   }
@@ -194,22 +147,12 @@ function removeSocket(socket: GroupSocketDefinition): void {
           :aria-label="`Input name for ${socket.label}`"
           @blur="onLabelBlur(socket)"
         />
-        <span class="type-dot-wrap">
-          <span class="type-dot" data-testid="group-row-type-dot" :style="{ background: socketColor(socket.valueType) }"></span>
-          <select
-            class="type-select"
-            :aria-label="`Type for input ${socket.label}`"
-            :value="socket.valueType ?? 'unknown'"
-            @change="onTypeChange(socket, $event)"
-          >
-            <option
-              v-for="t in VALUE_TYPES"
-              :key="t"
-              :value="t"
-              :style="{ color: socketColor(t) }"
-            >{{ t }}</option>
-          </select>
-        </span>
+        <TypePicker
+          :model-value="socket.valueType ?? 'unknown'"
+          :aria-label="`Type for input ${socket.label}`"
+          test-id="group-row-type-picker"
+          @update:model-value="(value: string) => onTypeChange(socket, value)"
+        />
         <span class="source-label" :title="isBound(socket) ? `Bound to ${socket.nodeId}.${socket.socketKey}` : 'Unbound'">
           {{ sourceLabel(socket) }}
         </span>
@@ -230,21 +173,11 @@ function removeSocket(socket: GroupSocketDefinition): void {
           placeholder="New input name…"
           aria-label="Label for a new group input"
         />
-        <span class="type-dot-wrap">
-          <span class="type-dot" data-testid="group-add-input-type-dot" :style="{ background: socketColor(anyInputType) }"></span>
-          <select
-            v-model="anyInputType"
-            class="type-select"
-            aria-label="Type for a new group input"
-          >
-            <option
-              v-for="t in VALUE_TYPES"
-              :key="t"
-              :value="t"
-              :style="{ color: socketColor(t) }"
-            >{{ t }}</option>
-          </select>
-        </span>
+        <TypePicker
+          v-model="anyInputType"
+          aria-label="Type for a new group input"
+          test-id="group-add-input-type"
+        />
         <button
           type="button"
           data-testid="group-add-input"
@@ -276,22 +209,12 @@ function removeSocket(socket: GroupSocketDefinition): void {
           :aria-label="`Output name for ${socket.label}`"
           @blur="onLabelBlur(socket)"
         />
-        <span class="type-dot-wrap">
-          <span class="type-dot" data-testid="group-row-type-dot" :style="{ background: socketColor(socket.valueType) }"></span>
-          <select
-            class="type-select"
-            :aria-label="`Type for output ${socket.label}`"
-            :value="socket.valueType ?? 'unknown'"
-            @change="onTypeChange(socket, $event)"
-          >
-            <option
-              v-for="t in VALUE_TYPES"
-              :key="t"
-              :value="t"
-              :style="{ color: socketColor(t) }"
-            >{{ t }}</option>
-          </select>
-        </span>
+        <TypePicker
+          :model-value="socket.valueType ?? 'unknown'"
+          :aria-label="`Type for output ${socket.label}`"
+          test-id="group-row-type-picker"
+          @update:model-value="(value: string) => onTypeChange(socket, value)"
+        />
         <span class="source-label" :title="isBound(socket) ? `Bound to ${socket.nodeId}.${socket.socketKey}` : 'Unbound'">
           {{ sourceLabel(socket) }}
         </span>
@@ -312,21 +235,11 @@ function removeSocket(socket: GroupSocketDefinition): void {
           placeholder="New output name…"
           aria-label="Label for a new group output"
         />
-        <span class="type-dot-wrap">
-          <span class="type-dot" data-testid="group-add-output-type-dot" :style="{ background: socketColor(anyOutputType) }"></span>
-          <select
-            v-model="anyOutputType"
-            class="type-select"
-            aria-label="Type for a new group output"
-          >
-            <option
-              v-for="t in VALUE_TYPES"
-              :key="t"
-              :value="t"
-              :style="{ color: socketColor(t) }"
-            >{{ t }}</option>
-          </select>
-        </span>
+        <TypePicker
+          v-model="anyOutputType"
+          aria-label="Type for a new group output"
+          test-id="group-add-output-type"
+        />
         <button
           type="button"
           data-testid="group-add-output"
@@ -406,7 +319,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 
 .socket-row {
   display: grid;
-  grid-template-columns: 1fr 150px 24px;
+  grid-template-columns: 1fr 168px 24px;
   grid-template-rows: auto auto;
   gap: 4px 6px;
   align-items: center;
@@ -414,8 +327,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
   border-top: 1px solid var(--border-subtle);
 }
 
-.name-input,
-.type-select {
+.name-input {
   font-family: var(--font-sans);
   font-size: var(--font-size-label);
   color: var(--text-primary);
@@ -428,26 +340,9 @@ function removeSocket(socket: GroupSocketDefinition): void {
   min-width: 0;
 }
 
-.type-dot-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-}
+.type-picker { min-width: 0; }
 
-.type-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.type-select {
-  width: 100%;
-}
-
-.name-input:focus-visible,
-.type-select:focus-visible {
+.name-input:focus-visible {
   border-color: var(--accent-steel);
   outline: none;
 }
