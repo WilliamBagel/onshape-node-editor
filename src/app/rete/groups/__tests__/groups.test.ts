@@ -20,6 +20,7 @@ import {
 } from "../../serialization/graph-serializer";
 import { GroupNode } from "../../nodes/groupinstancenode";
 import { GroupInputNode, GroupOutputNode } from "../../nodes/groupboundarynode";
+import { OnshapeInput } from "../../inputoutput/onshapeinput";
 import {
     commonGroupParent,
     createGroupDefinition,
@@ -724,6 +725,143 @@ describe("grouping v2 (#14)", () => {
         expect(removeGroupSocket(definition, "n.context", "output")).toBe(true);
         expect(definition.inputs).toHaveLength(1);
         expect(definition.outputs).toHaveLength(0);
+    });
+
+    it("Toggle: nested enter via toggle keeps breadcrumb depth, then exits level-by-level", async () => {
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        const cross = utility("cross");
+        const transform = utility("transform");
+        const innerDef = createGroupDefinition("group-inner-toggle", "InnerToggle");
+        innerDef.nodes = [cross, transform];
+        innerDef.connections = [{ source: cross.id, sourceOutput: "return", target: transform.id, targetInput: "translation" }];
+        innerDef.inputs = [{ id: `${cross.id}.vector1`, label: "vector1", direction: "input", nodeId: cross.id, socketKey: "vector1" }];
+        innerDef.outputs = [{ id: `${transform.id}.return`, label: "return", direction: "output", nodeId: transform.id, socketKey: "return" }];
+        const innerInstance = new GroupNode(innerDef);
+        const outerDef = createGroupDefinition("group-outer-toggle", "OuterToggle");
+        outerDef.nodes = [innerInstance];
+        const outerInstance2 = new GroupNode(outerDef);
+        await editor.addNode(outerInstance2);
+        editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(editor, positions, editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...editor.getConnections()]) await editor.removeConnection(connection.id);
+                for (const node of [...editor.getNodes()]) await editor.removeNode(node.id);
+                await applyGraph(editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.toggle(outerInstance2.id)).toBe("entered");
+        expect(controller.depth).toBe(1);
+        expect(controller.breadcrumb()).toEqual(["Top level", "OuterToggle"]);
+        const nestedId = editor.getNodes().find((n) => n instanceof GroupNode)?.id;
+        expect(nestedId).toBeTruthy();
+        // While inside outer, selecting nested instance and toggling should enter nested, not exit
+        expect(await controller.toggle(nestedId!)).toBe("entered");
+        expect(controller.depth).toBe(2);
+        expect(controller.breadcrumb()).toEqual(["Top level", "OuterToggle", "InnerToggle"]);
+        // Tab with nothing selected exits one level
+        expect(await controller.toggle()).toBe("exited");
+        expect(controller.depth).toBe(1);
+        expect(controller.breadcrumb()).toEqual(["Top level", "OuterToggle"]);
+        expect(await controller.toggle()).toBe("exited");
+        expect(controller.depth).toBe(0);
+        expect(controller.breadcrumb()).toEqual(["Top level"]);
+    });
+
+    it("panel add then exit shows new output on instance; remove leaves no stale socket/wire", async () => {
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        const cross = utility("cross");
+        const transform = utility("transform");
+        const def = createGroupDefinition("group-panel-exit", "PanelGroup");
+        def.nodes = [cross, transform];
+        def.connections = [{ source: cross.id, sourceOutput: "return", target: transform.id, targetInput: "translation" }];
+        def.inputs = [{ id: `${cross.id}.vector1`, label: "vector1", direction: "input", nodeId: cross.id, socketKey: "vector1" }];
+        def.outputs = [{ id: `${transform.id}.return`, label: "return", direction: "output", nodeId: transform.id, socketKey: "return" }];
+        const instance = new GroupNode(def);
+        const consumer = utility("transform");
+        await editor.addNode(instance);
+        await editor.addNode(consumer);
+        editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        // External wire from instance output to consumer input (created via addConnection later after exit check for remove case)
+        const controller = new GroupEditorController(editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(editor, positions, editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...editor.getConnections()]) await editor.removeConnection(connection.id);
+                for (const node of [...editor.getNodes()]) await editor.removeNode(node.id);
+                await applyGraph(editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.enter(instance.id)).toBe(true);
+        expect(await controller.addBoundarySocketAny("output", "anyout", "unknown")).toBe(true);
+        const added = def.outputs.find((o) => o.label === "anyout");
+        expect(added).toBeTruthy();
+        // Expose the new output externally will need wire – create external wire after exit below; first exit now
+        expect(await controller.exit()).toBe(true);
+        const restored = editor.getNodes().find((n) => n instanceof GroupNode) as GroupNode;
+        expect(restored).toBeTruthy();
+        expect(Object.values(restored.outputs).map((o) => o.label)).toContain("anyout");
+        // Wire the new output to consumer input, then re-enter, remove, exit -> no stale
+        const consumerNode = editor.getNodes().find((n) => n.id === consumer.id) as FunctionNode;
+        // restore may have new consumer node id same? consumer id is stable from snapshot
+        const anyId = `${restored.id}.anyout`;
+        // Actually socket id is group socket id (uuid-like) – find by label
+        const anyOutputKey = Object.entries(restored.outputs).find(([, o]) => o.label === "anyout")?.[0];
+        expect(anyOutputKey).toBeTruthy();
+        // Use editor addConnection with consumer input if exists
+        const targetInputKey = Object.keys(consumerNode?.inputs ?? {})[0];
+        if (anyOutputKey && targetInputKey && consumerNode) {
+            await editor.addConnection(new Connection(restored, anyOutputKey, restored.outputs[anyOutputKey].socket.name, consumerNode, targetInputKey, consumerNode.inputs[targetInputKey].socket.name, new StyleSettings()));
+            expect(editor.getConnections().some((c) => c.source === restored.id && c.sourceOutput === anyOutputKey)).toBe(true);
+        }
+        // Re-enter and remove the any-output
+        expect(await controller.enter(restored.id)).toBe(true);
+        expect(await controller.removeBoundarySocket(added!.id)).toBe(true);
+        // Give it an external wire check: after remove inside, exit should drop stale wire
+        expect(await controller.exit()).toBe(true);
+        const restored2 = editor.getNodes().find((n) => n instanceof GroupNode) as GroupNode;
+        expect(restored2).toBeTruthy();
+        expect(Object.values(restored2.outputs).map((o) => o.label)).not.toContain("anyout");
+        // no connection references removed socket
+        for (const c of editor.getConnections()) {
+            if (c.source === restored2.id) {
+                expect(restored2.outputs[c.sourceOutput]).not.toBeUndefined();
+            }
+            if (c.target === restored2.id) {
+                expect(restored2.inputs[c.targetInput]).not.toBeUndefined();
+            }
+        }
+    });
+
+    it("group instance inputs are OnshapeInput with showControl false/showLabel true", () => {
+        const def = createGroupDefinition("group-instance-labels", "Labels");
+        def.inputs = [{ id: "n.vec1", label: "vector1", direction: "input", nodeId: "n", socketKey: "vector1", valueType: "Vector" }];
+        def.outputs = [{ id: "n.return", label: "return", direction: "output", nodeId: "n", socketKey: "return" }];
+        const instance = new GroupNode(def);
+        for (const key of Object.keys(instance.inputs)) {
+            expect(instance.inputs[key]).toBeInstanceOf(OnshapeInput);
+            expect((instance.inputs[key] as InstanceType<typeof OnshapeInput>).showControl).toBe(false);
+            expect((instance.inputs[key] as InstanceType<typeof OnshapeInput>).showLabel).toBe(true);
+        }
+        // ids preserved
+        expect(Object.keys(instance.inputs)).toContain("n.vec1");
     });
 });
 

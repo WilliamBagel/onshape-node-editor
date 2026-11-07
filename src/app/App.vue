@@ -416,7 +416,11 @@ export default defineComponent({
           target?.closest?.(
             'button, a, input, textarea, select, [contenteditable], [role="button"], dialog, [role="dialog"], .group-config-panel, .action-palette',
           ) != null;
-        if (onCanvas && !chrome) {
+        // Only hijack Tab when it can actually enter/exit a group — otherwise
+        // the browser's normal focus navigation (into the toolbar, etc.) must
+        // happen so Tab from body is not trapped on BODY.
+        const canToggle = this.controls?.canToggleGroupEdit?.() ?? true;
+        if (onCanvas && !chrome && canToggle) {
           event.preventDefault();
           await this.runToggleGroupEdit();
         }

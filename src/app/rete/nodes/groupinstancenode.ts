@@ -26,6 +26,7 @@ import { ClassicPreset } from "rete";
 import { OnshapeNode } from "./onshapenode";
 import { OnshapeSocket } from "../onshapesockets";
 import { OnshapeOutput } from "../inputoutput/onshapeoutput";
+import { OnshapeInput } from "../inputoutput/onshapeinput";
 import { parseValueType } from "../../onshape-utils/valuetypes";
 import type { ValueExpression } from "../../onshape-utils/expressioncodegen";
 import {
@@ -78,7 +79,18 @@ export class GroupNode extends OnshapeNode {
         }
         for (const socket of this.definition.inputs) {
             const valueType = socket.valueType != null ? parseValueType(socket.valueType) : undefined;
-            this.addInput(socket.id, new ClassicPreset.Input(new OnshapeSocket(socket.label, valueType), socket.label));
+            const input = new OnshapeInput(
+                new OnshapeSocket(socket.label, valueType),
+                socket.label,
+                socket.valueType ?? "unknown",
+            );
+            // Group instance inputs are destination ports, not editable
+            // feature parameters: show label but no control, matching
+            // GroupOutputNode's boundary pattern, so rows keep stable
+            // heights and labels are visible.
+            input.showControl = false;
+            input.showLabel = true;
+            this.addInput(socket.id, input);
         }
         for (const socket of this.definition.outputs) {
             const valueType = socket.valueType != null ? parseValueType(socket.valueType) : undefined;

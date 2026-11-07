@@ -145,6 +145,9 @@ async function checkGroupWires() {
     await sleep(300);
     await page.click('button[aria-label="Create group from selection"]', { timeout: 5000 }); await sleep(1000);
     const groupNodes = await page.$$eval('.node', (els) => els.length).catch(() => 0);
+    const afterCreate = await page.evaluate(MEASURE_CONNECTIONS);
+    const afterCreateMax = Math.max(0, ...afterCreate.map((c) => Math.max(c.startErr || 0, c.endErr || 0)));
+    console.log(`group check: immediately after create offsets px=` + JSON.stringify(afterCreate.map((c) => ({ start: c.startErr, end: c.endErr }))) + ` max=${afterCreateMax}px`);
     const editorState = await page.evaluate(() => { const e = window.editor; return e ? { nodes: typeof e.getNodes === 'function' ? e.getNodes().map((n) => ({ id: n.id, label: n.label ?? n.data?.label ?? '' })) : 'no getNodes', conns: typeof e.getConnections === 'function' ? e.getConnections().length : 'no getConnections' } : 'no window.editor'; }).catch(() => 'editor probe failed');
     console.log(`group check: after TopBar Create group nodes=${groupNodes} (was ${pairs.nodeCount}) editor=${JSON.stringify(editorState).slice(0, 300)}`);
     // Select the created group instance (the node whose title is not Chamfer/Feature Type Name
@@ -169,6 +172,9 @@ async function checkGroupWires() {
     }
     const insideShot = await shot('group-inside.png');
     const insideCount = insideTitles.length;
+    const afterEnter = await page.evaluate(MEASURE_CONNECTIONS);
+    const afterEnterMax = Math.max(0, ...afterEnter.map((c) => Math.max(c.startErr || 0, c.endErr || 0)));
+    console.log(`group check: inside group after enter offsets px=` + JSON.stringify(afterEnter.map((c) => ({ start: c.startErr, end: c.endErr }))) + ` max=${afterEnterMax}px`);
     console.log(`group check: inside group nodes=${insideCount} shot=${insideShot}`);
     await page.keyboard.press('Tab'); await sleep(1000);
     const afterShot = await shot('group-after-exit.png');
@@ -177,11 +183,12 @@ async function checkGroupWires() {
     console.log('group check: endpoint offsets px=' + JSON.stringify(after.map((c) => ({ start: c.startErr, end: c.endErr }))));
     const maxErr = Math.max(0, ...after.map((c) => Math.max(c.startErr || 0, c.endErr || 0)));
     console.log(`group check: max endpoint offset = ${maxErr}px (threshold 5px)`);
-    if (maxErr > 5) {
-      const worst = after.map((c, i) => ({ i, e: Math.max(c.startErr || 0, c.endErr || 0) })).sort((a, b) => b.e - a.e)[0];
+    const overallMax = Math.max(afterCreateMax, afterEnterMax, maxErr);
+    if (overallMax > 5) {
+      const worst = after.map((c, i) => ({ i, e: Math.max(c.startErr || 0, c.endErr || 0) })).sort((a, b) => b.e - a.e)[0] ?? { i: 0, e: overallMax };
       await addIssue({
         title: 'Restored wires offset after exiting node group', severity: 'high', category: 'visual', area: 'group',
-        description: `After creating a group from the selection and entering/exiting it with Tab, restored connection endpoints do not meet their sockets. Max endpoint offset ${maxErr}px (worst wire #${worst.i + 1}). Orchestrator probe on master a4e5d62 saw ~47-48px downward offset on the two restored external wires while the group instance wires were correct. Evidence: before=${beforeShot}, inside=${insideShot}, after=${afterShot}.`,
+        description: `After creating a group from the selection and entering/exiting it with Tab, restored connection endpoints do not meet their sockets. Max endpoint offset after-exit ${maxErr}px, after-create ${afterCreateMax}px, after-enter ${afterEnterMax}px (worst wire #${worst.i + 1}). Orchestrator probe on master a4e5d62 saw ~47-48px downward offset on the two restored external wires while the group instance wires were correct. Evidence: before=${beforeShot}, inside=${insideShot}, after=${afterShot}.`,
         expected: 'Every connection endpoint sits on its live socket centre (offset <= 5px) after exiting a group.',
         actual: `Max endpoint offset ${maxErr}px via getScreenCTM path endpoints vs socket centres. Per-wire: ${JSON.stringify(after.map((c) => ({ s: c.startErr, e: c.endErr })))}`,
         steps: ['Boot the sample graph (two Chamfer nodes)', 'Drag to wire an external input/output around the two nodes', 'Select both Chamfer nodes, click TopBar "Create group from selection"', 'Select the group instance, press Tab to enter', 'Press Tab to exit', 'Measure every restored path endpoint against live socket centres'],
