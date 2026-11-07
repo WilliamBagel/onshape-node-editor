@@ -41,6 +41,7 @@ import { FRAME_HEADER_HEIGHT, FRAME_PADDING, areaZoom, computeFrameBounds, insta
 import { clampNodePlacement } from './modified-rete/node-placement';
 import { generateFeatureStudioSource, describeGeneratedFeature, GeneratedFeatureDescription } from "./graph-codegen";
 import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./serialization/graph-serializer";
+import { pruneInvalidNodes, type SanitizeReport } from "./graph-sanitize";
 import type { SpecResolver } from "./serialization/graph-schema-types";
 import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "../ui/editorSettings";
 import { ContextMenuPlugin, Presets as ContextMenuPresets } from "rete-context-menu-plugin";
@@ -93,6 +94,13 @@ export type EditorControls = {
      * cannot be loaded.
      */
     loadGraph: (reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>
+    /**
+     * Prune genuinely invalid/orphaned nodes (transient group boundary cards
+     * outside group editing, duplicate ids, unresolved feature specs, nodes
+     * that cannot produce a FeatureScript line). Logs what was pruned and
+     * why through the app build log. Never prunes validator failures.
+     */
+    sanitizeGraph: () => Promise<SanitizeReport>
     /** The canvas's node paint order, bottom-most first (#27 / DR-007). */
     getNodeOrder: () => string[]
     /**
@@ -211,6 +219,13 @@ type EditorBaseInfo = {
     serializeGraph: () => string
     /** #6: replace the editor's contents with a stored graph. */
     loadGraph: (reteJSON: string, resolveSpec: SpecResolver) => Promise<{ nodes: number; warnings: string[] }>
+    /**
+     * Prune genuinely invalid/orphaned nodes (transient group boundary cards
+     * outside group editing, duplicate ids, unresolved feature specs, nodes
+     * that cannot produce a FeatureScript line). Logs what was pruned and
+     * why through the app build log. Never prunes validator failures.
+     */
+    sanitizeGraph: () => Promise<SanitizeReport>
     /** #30: select a node by id; used by the design-check surface's Locate. */
     selectNode: (nodeId: string) => Promise<void>
     /**
@@ -798,10 +813,39 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         for (const definition of graph.groupDefinitions) {
             groupDefinitions.set(definition.id, definition);
         }
+        // Belt-and-braces: a document that somehow carried transient
+        // boundary cards or other genuinely invalid nodes gets them pruned
+        // (and logged) rather than left orphaned on the canvas. Validator
+        // failures are NOT pruned here — they stay visible to the user.
+        const sanitizeReport = await sanitizeGraph();
+        const warnings = [
+            ...graph.warnings,
+            ...sanitizeReport.pruned.map(
+                (p) => `Pruned invalid node "${p.type}" (id "${p.nodeId}") on load: ${p.reason}`,
+            ),
+        ];
         return {
-            nodes: graph.nodes.filter((node) => !(node instanceof FrameNode)).length,
-            warnings: graph.warnings,
+            nodes: graph.nodes.filter((node) => !(node instanceof FrameNode)).length - sanitizeReport.pruned.length,
+            warnings,
         };
+    };
+
+    /**
+     * Prune genuinely invalid/orphaned nodes from the live editor and log
+     * the result through the app build log (console fallback headless).
+     * In-group-edit state comes from the group controller, so boundary
+     * cards are never pruned while a group is being edited.
+     */
+    const sanitizeGraph = async (): Promise<SanitizeReport> => {
+        const log = (entry: { severity: "info" | "warning" | "error"; message: string; nodeId?: string }): void => {
+            const buildLog = (app as { log?: { add: (e: unknown) => void } } | null | undefined)?.log;
+            if (buildLog != null) {
+                buildLog.add({ severity: entry.severity, source: "editor", message: entry.message, nodeId: entry.nodeId });
+            } else {
+                console.warn(`[graph-sanitize] ${entry.message}`);
+            }
+        };
+        return pruneInvalidNodes(editor, { inGroupEdit: groupController.depth > 0 }, log);
     };
 
     // #14 grouping v2: definitions, instances, editing mode, mute -------
@@ -1210,6 +1254,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         addUtilityNode,
         serializeGraph,
         loadGraph,
+        sanitizeGraph,
         studioEvents: { build: buildStudio, describe: describeStudio },
         debugSources,
         selectNode

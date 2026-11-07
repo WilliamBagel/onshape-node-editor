@@ -9,6 +9,7 @@ Permanent exploratory UI QA: harness + real dashboard app + visual-review packet
 qa/
   harness/    explorer.mjs · tasks.mjs · tasks.smoke.mjs · annotate-ui-shots.py
               ui-verify.mjs · report.mjs (markdown only) · sample-report.json
+              default-graph-check.mjs
   dashboard/  Vite app: index.html · vite.config.ts · src/main.ts · src/styles.css
               dashboard.smoke.mjs (Playwright http smoke)
   review/     review-packet.mjs · visual-review-prompt.md
@@ -28,6 +29,7 @@ pnpm run build:qa-dashboard          # -> dist/qa-dashboard
 pnpm run smoke:qa-dashboard          # http + Playwright, sample report
 pnpm run qa:node-chrome              # node chrome regression check (needs a dev server; QA_URL optional)
 pnpm run qa:defects -- --url http://127.0.0.1:5173/onshape-node-editor/   # group-wire + palette defect checks (exits 1 on defects; --advisory to stay green)
+pnpm run qa:default-graph                     # default debug graph must open clean (exits 1 on invalid/orphaned nodes or console errors)
 pnpm run qa:report -- --report tmp/qa-runs/<id>/report.json --out qa/runs/<id>   # report.md (includes the Activity timeline)
 pnpm run qa:review -- --report tmp/qa-runs/<id>/report.json   # -> qa/runs/<id>/review-packet.md
 ```
@@ -88,6 +90,18 @@ skipped, and exits 1 when found (pass `--advisory` to report without failing):
 3. **Standard Library case:** the same lowercase searches must return the
    match while its displayed name is capitalized (`Chamfer`, not `chamfer`).
    Violations join the palette issue above.
+
+## Default graph check (`qa:default-graph`)
+
+Opens the debug/default editor (dev server, `developerMode`) and asserts
+against the live graph (`window.editor` + rendered DOM): no transient
+`group-input`/`group-output` boundary nodes outside group editing, no
+duplicate node ids, no node with a missing feature spec, every node produces
+a FeatureScript line and passes graph validation, and no console/page
+errors. Exits 1 on any failure. The sample is sanitized on open
+(`sanitizeGraph` in `src/app/rete/graph-sanitize.ts`, also run by
+`loadGraph`); genuinely invalid/orphaned nodes are pruned and logged through
+the build log, validator failures are kept and reported, never swallowed.
 
 ## Review packet (free subagents)
 
