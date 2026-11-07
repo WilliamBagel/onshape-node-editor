@@ -442,3 +442,227 @@ export function validateGroupDefinition(
     }
     return null;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Group -> FeatureScript function signature planning                */
+/*                                                                    */
+/*  Each group definition compiles to one reusable FeatureScript      */
+/*  function (see group-function.ts); each instance is a call to it.  */
+/*  The helpers below are the pure, string-based half of that plan:   */
+/*  they need no node classes, so both the instance node (codegen     */
+/*  call sites) and the function-body generator can share them.       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Member kinds that make a group a "statement" group: calling the group
+ * function runs statements, so it needs `context`/`id` parameters. The
+ * check is by `type` string, like {@link isGroupableKind}, so this module
+ * stays free of node-class imports.
+ */
+const STATEMENT_MEMBER_TYPES: ReadonlySet<string> = new Set([
+    "utility-statement",
+    "CustomFeature",
+    "for-each",
+    "bounded-for",
+]);
+
+/**
+ * Whether a definition is a statement group: it has a statement member, a
+ * `context`/`id` boundary socket, or a nested statement group. Statement
+ * groups get implicit `context is Context, id is Id` parameters (unless a
+ * boundary socket already provides them) and are always called as
+ * statements — never hoisted as value expressions — so their position
+ * relative to other statements is preserved.
+ */
+export function definitionIsStatementKind(definition: GroupDefinition, trail: readonly string[] = []): boolean {
+    for (const socket of [...definition.inputs, ...definition.outputs]) {
+        if (socket.socketKey === "context" || socket.socketKey === "id" || socket.valueType === "Context" || socket.valueType === "Id") {
+            return true;
+        }
+    }
+    for (const member of definition.nodes) {
+        if (STATEMENT_MEMBER_TYPES.has(member.type)) {
+            return true;
+        }
+        const nested = (member as { getDefinition?: () => GroupDefinition }).getDefinition?.();
+        if (nested != null && !trail.includes(nested.id)) {
+            if (definitionIsStatementKind(nested, [...trail, definition.id])) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Boundary outputs that carry a value back to the caller. `context`/`id`
+ * outputs are excluded: statement functions mutate the context in place,
+ * so the caller's `context`/`id` variables already hold the result and
+ * no return channel is needed for them.
+ */
+export function valuedBoundaryOutputs(definition: GroupDefinition): GroupSocketDefinition[] {
+    return definition.outputs.filter((socket) => socket.socketKey !== "context" && socket.socketKey !== "id");
+}
+
+/**
+ * Map keys for a multi-output group's return map, aligned with
+ * {@link valuedBoundaryOutputs}. The key is the output's label; a
+ * duplicate label is suffixed deterministically (`label0`, `label1`, ...)
+ * so every output has a unique key. Call sites unpack with the same
+ * helper, so body and callers always agree.
+ */
+export function groupOutputKeys(definition: GroupDefinition): string[] {
+    const used = new Set<string>();
+    return valuedBoundaryOutputs(definition).map((socket) => {
+        let key = socket.label;
+        let counter = 0;
+        while (used.has(key)) {
+            key = `${socket.label}${counter}`;
+            counter += 1;
+        }
+        used.add(key);
+        return key;
+    });
+}
+
+/** Whether this definition's instances codegen through the value-expression path. */
+export function groupUsesExpressionPath(definition: GroupDefinition): boolean {
+    return !definitionIsStatementKind(definition) && valuedBoundaryOutputs(definition).length === 1;
+}
+
+/** Sanitize arbitrary text (a label, a node id) into a FeatureScript identifier fragment. */
+export function sanitizeFsIdentifier(text: string, fallback: string): string {
+    const cleaned = text.replace(/[^A-Za-z0-9_$]/g, "_").replace(/^_+/, "");
+    if (cleaned === "" || /^[0-9]/.test(cleaned)) {
+        return fallback;
+    }
+    return cleaned;
+}
+
+/**
+ * The `let` variable a statement-style group call stores its result in.
+ * Derived from the instance's node id, which is unique per placement and
+ * stable across serialization, so call sites and consumers agree without
+ * sharing allocator state.
+ */
+export function groupResultVariable(instanceId: string): string {
+    return `groupResult_${sanitizeFsIdentifier(instanceId, "instance")}`;
+}
+
+/** Escape a string for use as a FeatureScript string literal key. */
+export function escapeFsString(text: string): string {
+    return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Default FeatureScript function name for a definition, from its display
+ * name (`Cross to transform` -> `groupCrossToTransform`). Definitions
+ * that share a name are disambiguated by the planner in group-function.ts;
+ * this is the per-definition base name.
+ */
+export function defaultGroupFunctionName(definition: GroupDefinition): string {
+    const words = definition.name
+        .replace(/[^A-Za-z0-9]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter((word) => word !== "");
+    const pascal = words.map((word) => word[0].toUpperCase() + word.slice(1)).join("");
+    if (pascal === "") {
+        return `groupFn${sanitizeFsIdentifier(definition.id, "group")}`;
+    }
+    return `group${pascal}`;
+}
+
+/** FeatureScript value type names a boundary socket's `valueType` can map to. */
+const FS_TYPE_NAMES: ReadonlySet<string> = new Set([
+    "Vector",
+    "Matrix",
+    "Transform",
+    "CoordSystem",
+    "number",
+    "ValueWithUnits",
+    "boolean",
+    "string",
+    "Query",
+    "Id",
+    "Context",
+    "map",
+]);
+
+export interface GroupFunctionParam {
+    /** The boundary input socket, or null for an implicit `context`/`id` parameter. */
+    socket: GroupSocketDefinition | null;
+    /** `context`/`id` for an implicit parameter; null when sourced from a boundary socket. */
+    implicit: "context" | "id" | null;
+    /** Parameter identifier in the generated function. */
+    name: string;
+    /** The `is <Type>` annotation, when the boundary socket declares a known FeatureScript type. */
+    fsType?: string;
+}
+
+export interface GroupFunctionSignature {
+    kind: "value" | "statement";
+    params: GroupFunctionParam[];
+    /** Boundary outputs returned by the function (context/id pass-throughs excluded). */
+    valuedOutputs: GroupSocketDefinition[];
+    /** Map keys aligned with `valuedOutputs` (used when there is more than one). */
+    outputKeys: string[];
+}
+
+/**
+ * The callable signature for a definition's FeatureScript function.
+ *
+ * Parameter order: implicit `context`, `id` first (statement groups),
+ * then the boundary inputs in definition order. A boundary socket bound
+ * to a member's `context`/`id` input supplies that implicit parameter
+ * instead of adding a second one. Boundary input names come from their
+ * labels, made unique deterministically; a known FeatureScript
+ * `valueType` becomes an `is <Type>` annotation, an unknown one leaves
+ * the parameter untyped (FeatureScript allows untyped parameters, as in
+ * `mapArray`'s generated `function(item)`).
+ */
+export function groupFunctionSignature(definition: GroupDefinition): GroupFunctionSignature {
+    const statement = definitionIsStatementKind(definition);
+    const usedNames = new Set<string>();
+    const uniqueName = (desired: string): string => {
+        let name = desired;
+        let counter = 0;
+        while (usedNames.has(name)) {
+            name = `${desired}${counter}`;
+            counter += 1;
+        }
+        usedNames.add(name);
+        return name;
+    };
+    const fsTypeOf = (socket: GroupSocketDefinition): string | undefined =>
+        socket.valueType != null && FS_TYPE_NAMES.has(socket.valueType) ? socket.valueType : undefined;
+
+    const params: GroupFunctionParam[] = [];
+    const consumedSockets = new Set<string>();
+    if (statement) {
+        for (const key of ["context", "id"] as const) {
+            const socket = definition.inputs.find((entry) => entry.socketKey === key);
+            if (socket != null) {
+                usedNames.add(key);
+                params.push({ socket, implicit: null, name: key, fsType: fsTypeOf(socket) });
+                consumedSockets.add(socket.id);
+            } else {
+                usedNames.add(key);
+                params.push({ socket: null, implicit: key, name: key, fsType: key === "context" ? "Context" : "Id" });
+            }
+        }
+    }
+    for (const socket of definition.inputs) {
+        if (consumedSockets.has(socket.id)) {
+            continue;
+        }
+        const desired = sanitizeFsIdentifier(socket.label, sanitizeFsIdentifier(socket.socketKey, "input"));
+        params.push({ socket, implicit: null, name: uniqueName(desired), fsType: fsTypeOf(socket) });
+    }
+    return {
+        kind: statement ? "statement" : "value",
+        params,
+        valuedOutputs: valuedBoundaryOutputs(definition),
+        outputKeys: groupOutputKeys(definition),
+    };
+}

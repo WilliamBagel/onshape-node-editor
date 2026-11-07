@@ -163,13 +163,16 @@ describe("grouping v2 (#14)", () => {
         expect(fixture.instance1.definitionId).toBe("group-cross-transform");
     });
 
-    it("a two-node subgraph, placed twice, generates inlined FeatureScript", async () => {
+    it("a two-node subgraph, placed twice, compiles to one function and two calls", async () => {
         const fixture = await buildFixture();
         const source = await generateFeatureStudioSource(fixture.editor, fixture.engine);
         expect(source).toBeDefined();
-        // Inlined once per placement: cross and transform each appear twice.
-        expect(source?.match(/cross\(/g)).toHaveLength(2);
-        expect(source?.match(/transform\(/g)).toHaveLength(2);
+        // One reusable function; cross and transform each appear once, inside it.
+        expect(source?.match(/function groupCrossToTransform\(/g)).toHaveLength(1);
+        expect(source?.match(/cross\(/g)).toHaveLength(1);
+        expect(source?.match(/transform\(/g)).toHaveLength(1);
+        // One call per placement.
+        expect(source?.match(/groupCrossToTransform\(/g)).toHaveLength(3);
         expect(source).toContain("opTransform");
     });
 
@@ -321,8 +324,13 @@ describe("grouping v2 (#14)", () => {
         const fixture = await buildFixture();
         fixture.instance2.muted = true;
         const source = await generateFeatureStudioSource(fixture.editor, fixture.engine);
+        // The definition still compiles (instance1 places it), once.
         expect(source?.match(/cross\(/g)).toHaveLength(1);
         expect(source?.match(/transform\(/g)).toHaveLength(1);
+        // Exactly one call: the non-muted instance's. The muted instance
+        // emits none, and its consumer falls back to its own literal.
+        expect(source?.match(/groupCrossToTransform\(/g)).toHaveLength(2);
+        expect(source).toContain("opTransform");
     });
 
     it("a nesting cycle is rejected", async () => {
@@ -369,7 +377,7 @@ describe("grouping v2 (#14)", () => {
         }
     });
 
-    it("groups nest: a group inside a group inlines recursively", async () => {
+    it("groups nest: the outer function calls the inner function per placement", async () => {
         const fixture = await buildFixture();
         // Wrap the whole graph's instances in an outer group definition
         // whose members are the two instances, exposed end to end.
@@ -415,8 +423,11 @@ describe("grouping v2 (#14)", () => {
 
         const source = await generateFeatureStudioSource(editor, engine);
         expect(source).toBeDefined();
-        // The outer group inlines both inner instances: two crosses in total.
-        expect(source?.match(/cross\(/g)).toHaveLength(2);
+        // One function per definition: the inner cross appears once; the
+        // outer function body contains two inner calls (both placements).
+        expect(source?.match(/cross\(/g)).toHaveLength(1);
+        expect(source?.match(/groupCrossToTransform\(/g)).toHaveLength(3);
+        expect(source?.match(/groupOuter\(/g)).toHaveLength(2);
     });
 
     it("exposes boundary sockets and lets the editor add, rename, retype and remove them", async () => {
