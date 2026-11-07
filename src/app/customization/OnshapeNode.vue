@@ -690,34 +690,48 @@ export default defineComponent({
   pointer-events: auto;
 }
 
-// Compact socket strip while collapsed: sockets run vertically down the card
-// — inputs in a left column hugging the left edge, outputs in a right column
-// hugging the right edge, Blender-style, so wires can still attach. Tighter
-// than the expanded rows (1px row gap, 2px/4px padding, no min-height) because
-// a collapsed card must not reserve expanded space.
+// Compact socket strip while collapsed: sockets run horizontally under the
+// header — inputs left-aligned, outputs right-aligned, wrapping only when a
+// node has too many sockets to fit one row. A vertical column looked like a
+// half-expanded card (seven inputs still produced a ~159px tall node with a
+// blank right side), so the strip is deliberately a row: header + one short
+// band, no reserved body space, wires still attach to every dot.
 .collapsed-socket-strip {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
+  gap: 2px 6px;
   min-height: 0;
-  padding: 2px 4px;
+  padding: 2px 6px 4px;
 }
 
 .collapsed-socket-group {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1px;
+  gap: 2px 4px;
+  min-width: 0;
+}
+
+.collapsed-socket-inputs {
+  margin-right: auto;
+}
+
+.collapsed-socket-outputs {
+  margin-left: auto;
 }
 
 .collapsed-socket {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 12px;
   min-width: 8px;
   // Fixed (not min-) height: the port box inside OnshapeSocket is 24px
   // tall, so a min-height here never compacted the strip — each collapsed
-  // socket measured 24px and a 7-socket node collapsed to ~229px, only
+  // socket measured 24px and a 7-socket Chamfer collapsed to ~229px, only
   // 38px shorter than its 267px expanded frame (and taller than small
   // expanded cards). Pin the row and its port box to the intended 14px.
   height: 14px;
@@ -730,6 +744,7 @@ export default defineComponent({
 // other). The colour/scale from OnshapeSocket is unchanged, so the dot
 // stays fully visible and unclipped inside its 14px row.
 .collapsed-socket :deep(.socket-container) {
+  width: 12px;
   height: 14px;
 }
 
