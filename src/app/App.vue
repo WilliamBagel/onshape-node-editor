@@ -22,6 +22,8 @@ import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 import NodePalette from './components/NodePalette.vue';
 import ActionPalette from './components/ActionPalette.vue';
 import GroupConfigPanel from './components/GroupConfigPanel.vue';
+import FeatureConfigPanel from './components/FeatureConfigPanel.vue';
+import type { DefineFeatureState } from './rete/nodes/definefeaturenode';
 import { buildPaletteInsertables, type PaletteInsertable } from './rete/catalog-node-factory';
 import { canDispatchAction } from './ui/actionPalette';
 import type { CommandId } from './ui/editorSettings';
@@ -84,6 +86,7 @@ export default defineComponent({
     NodePalette: NodePalette,
     ActionPalette: ActionPalette,
     GroupConfigPanel: GroupConfigPanel,
+    FeatureConfigPanel: FeatureConfigPanel,
     ToolTip: ToolTip
   },
   // Options-API injection: `provide('app', this)` in `App.startVueApp()`.
@@ -111,6 +114,12 @@ export default defineComponent({
       groupPanelOpen: false,
       /** Group config: live boundary state for the panel; null at top level. */
       groupBoundaryState: null as GroupBoundaryState | null,
+      /** Feature config: the Define Feature node currently selected. */
+      selectedDefineFeatureId: null as string | null,
+      /** Feature config: FeatureConfigPanel visibility. */
+      featurePanelOpen: false,
+      /** Feature config: live parameter state for the panel. */
+      featureState: null as DefineFeatureState | null,
       /** #16: debug grid panel visibility plus a graph-change pulse the panel debounces. */
       debugGridOpen: false,
       debugGraphVersion: 0,
@@ -183,7 +192,11 @@ export default defineComponent({
     // Blender-style: selecting a group's Start/End card opens the config
     // panel. Subscribes to the shared `selectedNodeIds` ref (no document
     // listeners); selecting an unrelated node never opens the panel.
-    watch(selectedNodeIds, (ids: string[]) => this.onBoundarySelected(ids));
+    // Selecting a Define Feature node opens the feature-parameter panel.
+    watch(selectedNodeIds, (ids: string[]) => {
+      this.onBoundarySelected(ids);
+      this.onDefineFeatureSelected(ids);
+    });
     let editorControls: EditorControls;
     const dev = inject('developerMode');
 
@@ -557,6 +570,62 @@ export default defineComponent({
       await this.controls?.removeGroupBoundarySocket(payload.socketId, payload.direction);
       this.refreshGroupBoundaryState();
     },
+    /** Feature config: refresh the panel state from the editor controls. */
+    refreshFeatureState(nodeId?: string) {
+      const state = this.controls?.getDefineFeatureState(nodeId ?? this.selectedDefineFeatureId ?? undefined) ?? null;
+      this.featureState = state;
+      this.selectedDefineFeatureId = state?.nodeId ?? null;
+    },
+    /**
+     * Feature config: selecting a Define Feature node opens the parameter
+     * panel. Moving the selection away closes it (the TopBar "Feature
+     * parameters" button reopens it for the current selection).
+     */
+    onDefineFeatureSelected(ids: string[]) {
+      const defineId = ids.find((id) => (this.controls?.isDefineFeatureNode?.(id) ?? false)) ?? null;
+      this.selectedDefineFeatureId = defineId;
+      if (defineId != null) {
+        this.refreshFeatureState(defineId);
+        this.featurePanelOpen = true;
+      } else if (this.featurePanelOpen) {
+        this.featurePanelOpen = false;
+        this.featureState = null;
+      }
+    },
+    /** Feature config: toolbar/rail button toggles the parameter panel for the current selection. */
+    toggleFeatureConfigPanel() {
+      if (this.featurePanelOpen && this.featureState != null) {
+        this.closeFeatureConfigPanel();
+        return;
+      }
+      this.refreshFeatureState();
+      this.featurePanelOpen = this.featureState != null;
+    },
+    /** Feature config: panel closed; state is refreshed on next open. */
+    closeFeatureConfigPanel() {
+      this.featurePanelOpen = false;
+      this.featureState = null;
+    },
+    /** Feature config: rename the feature (annotation + node title apply). */
+    async onFeatureNameUpdate(name: string) {
+      await this.controls?.setDefineFeatureName(name, this.selectedDefineFeatureId ?? undefined);
+      this.refreshFeatureState();
+    },
+    /** Feature config: add a parameter, then refresh. */
+    async onFeatureParamAdd(payload: { name: string; valueType: string }) {
+      await this.controls?.addDefineFeatureParameter(payload.name, payload.valueType, this.selectedDefineFeatureId ?? undefined);
+      this.refreshFeatureState();
+    },
+    /** Feature config: rename/retype a parameter, then refresh. */
+    async onFeatureParamUpdate(payload: { socketKey: string; patch: { name?: string; valueType?: string } }) {
+      await this.controls?.updateDefineFeatureParameter(payload.socketKey, payload.patch, this.selectedDefineFeatureId ?? undefined);
+      this.refreshFeatureState();
+    },
+    /** Feature config: remove a parameter, then refresh. */
+    async onFeatureParamRemove(payload: { socketKey: string }) {
+      await this.controls?.removeDefineFeatureParameter(payload.socketKey, this.selectedDefineFeatureId ?? undefined);
+      this.refreshFeatureState();
+    },
     /** #73: group instances are runtime state; snapshot them when a palette opens. */
     refreshPaletteGroupDefs() {
       this.paletteGroupDefs = this.controls?.listGroupDefinitions().map(d => ({ id: d.id, name: d.name })) ?? [];
@@ -597,10 +666,30 @@ export default defineComponent({
 </script>
 
 <template>
-  <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :group-editing="groupEditing" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
+  <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :group-editing="groupEditing" :feature-selected="selectedDefineFeatureId != null" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
-    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" @toggle-group-config="toggleGroupConfigPanel" />
+    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" @toggle-group-config="toggleGroupConfigPanel" @toggle-feature-config="toggleFeatureConfigPanel" />
   <main class="rete" ref="rete"></main>
+  <!-- Slim rail tabs: explicit, always-visible affordances for the two config
+       panels, shown only when the matching panel is closed. -->
+  <button
+    v-if="groupEditing && !groupPanelOpen"
+    type="button"
+    data-testid="group-panel-open-rail"
+    class="panel-rail panel-rail--group"
+    @click="toggleGroupConfigPanel"
+  >
+    Group inputs &amp; outputs
+  </button>
+  <button
+    v-if="selectedDefineFeatureId != null && !featurePanelOpen"
+    type="button"
+    data-testid="feature-panel-open-rail"
+    class="panel-rail panel-rail--feature"
+    @click="toggleFeatureConfigPanel"
+  >
+    Feature parameters
+  </button>
   <GroupConfigPanel
     v-if="groupPanelOpen && groupEditing"
     :state="groupBoundaryState"
@@ -608,6 +697,15 @@ export default defineComponent({
     @add-any="onGroupConfigAddAny"
     @remove="onGroupConfigRemove"
     @close="closeGroupConfigPanel"
+  />
+  <FeatureConfigPanel
+    v-if="featurePanelOpen"
+    :state="featureState"
+    @update-name="onFeatureNameUpdate"
+    @add="onFeatureParamAdd"
+    @update-param="onFeatureParamUpdate"
+    @remove-param="onFeatureParamRemove"
+    @close="closeFeatureConfigPanel"
   />
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
@@ -646,4 +744,40 @@ header {
   border: none;
   line-height: 1;
 }
+
+/* Slim panel rails: explicit text affordances for the two config panels,
+   shown only when the matching panel is closed. */
+.panel-rail {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 19;
+  writing-mode: vertical-rl;
+  padding: 10px 4px;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-section);
+  line-height: var(--line-height-title);
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-hairline);
+  border-right: none;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.panel-rail:hover {
+  background: var(--hover-tint);
+}
+
+.panel-rail:focus-visible {
+  border-color: var(--accent-steel);
+  outline: none;
+}
+
+.panel-rail--feature { top: calc(50% - 80px); }
+.panel-rail--group { top: calc(50% + 80px); }
 </style>

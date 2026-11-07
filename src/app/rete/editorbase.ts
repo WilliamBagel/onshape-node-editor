@@ -50,6 +50,7 @@ import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
 import { cachedSpecResolver } from "../onshape/feature-spec-cache";
 import { GroupNode } from "./nodes/groupinstancenode";
+import { DefineFeatureNode, type DefineFeatureState } from "./nodes/definefeaturenode";
 import { assertGroupableSelection, commonGroupParent, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition, type GroupSocketPatch } from "./groups/groupmodel";
 import { GroupEditorController, type GroupBoundaryState } from "./groups/group-editor";
 
@@ -134,6 +135,19 @@ export type EditorControls = {
     removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
     /** #14: register the callback fired on live boundary changes. */
     setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
+    /** Feature-signature editor: true when `nodeId` is a Define Feature node. */
+    isDefineFeatureNode: (nodeId: string) => boolean
+    /** Feature parameters for the targeted node (explicit id, else the
+     *  selected Define Feature node, else the first one in the graph). */
+    getDefineFeatureState: (nodeId?: string) => DefineFeatureState | null
+    /** Rename the feature (annotation + node title). */
+    setDefineFeatureName: (name: string, nodeId?: string) => Promise<boolean>
+    /** Add a feature parameter; rebuilds the `definition.*` output sockets. */
+    addDefineFeatureParameter: (name: string, valueType: string, nodeId?: string) => Promise<boolean>
+    /** Rename/retype one feature parameter by its output socket key. */
+    updateDefineFeatureParameter: (socketKey: string, patch: { name?: string; valueType?: string }, nodeId?: string) => Promise<boolean>
+    /** Remove one feature parameter by its output socket key. */
+    removeDefineFeatureParameter: (socketKey: string, nodeId?: string) => Promise<boolean>
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
@@ -195,6 +209,19 @@ type EditorBaseInfo = {
     removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
     /** #14: register the callback fired on live boundary changes. */
     setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
+    /** Feature-signature editor: true when `nodeId` is a Define Feature node. */
+    isDefineFeatureNode: (nodeId: string) => boolean
+    /** Feature parameters for the targeted node (explicit id, else the
+     *  selected Define Feature node, else the first one in the graph). */
+    getDefineFeatureState: (nodeId?: string) => DefineFeatureState | null
+    /** Rename the feature (annotation + node title). */
+    setDefineFeatureName: (name: string, nodeId?: string) => Promise<boolean>
+    /** Add a feature parameter; rebuilds the `definition.*` output sockets. */
+    addDefineFeatureParameter: (name: string, valueType: string, nodeId?: string) => Promise<boolean>
+    /** Rename/retype one feature parameter by its output socket key. */
+    updateDefineFeatureParameter: (socketKey: string, patch: { name?: string; valueType?: string }, nodeId?: string) => Promise<boolean>
+    /** Remove one feature parameter by its output socket key. */
+    removeDefineFeatureParameter: (socketKey: string, nodeId?: string) => Promise<boolean>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #14: Tab hint — true when Tab can actually enter/exit a group. */
@@ -1179,6 +1206,96 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return { nodes, selections };
     };
 
+    // ── Feature-signature editor (DefineFeatureNode parameters) ──────────
+    /**
+     * Remove every connection whose source or target socket no longer exists
+     * (socket renamed away, removed, or never rebuilt). Called after a
+     * DefineFeatureNode rebuild so no dangling wire survives.
+     */
+    const pruneDanglingConnections = async (): Promise<void> => {
+        for (const connection of [...editor.getConnections()]) {
+            const source = editor.getNode(connection.source);
+            const target = editor.getNode(connection.target);
+            const sourceGone = source == null || source.outputs?.[connection.sourceOutput] == null;
+            const targetGone = target == null || target.inputs?.[connection.targetInput] == null;
+            if (sourceGone || targetGone) {
+                try {
+                    await editor.removeConnection(connection.id);
+                } catch {
+                    // Already gone (concurrent prune); nothing to do.
+                }
+            }
+        }
+    };
+
+    const resolveDefineNode = (nodeId?: string): DefineFeatureNode | null => {
+        if (nodeId != null) {
+            const node = editor.getNode(nodeId);
+            return node instanceof DefineFeatureNode ? node : null;
+        }
+        for (const entity of Array.from(selector.entities.values())) {
+            if (entity.label !== 'node') continue;
+            const node = editor.getNode(entity.id);
+            if (node instanceof DefineFeatureNode) return node;
+        }
+        for (const node of editor.getNodes()) {
+            if (node instanceof DefineFeatureNode) return node;
+        }
+        return null;
+    };
+
+    const isDefineFeatureNode = (nodeId: string): boolean =>
+        editor.getNode(nodeId) instanceof DefineFeatureNode;
+
+    const getDefineFeatureState = (nodeId?: string): DefineFeatureState | null =>
+        resolveDefineNode(nodeId)?.getDefineFeatureState() ?? null;
+
+    /** After a parameter mutation: repaint the node + settle/prune wires. */
+    const refreshDefineNode = async (node: DefineFeatureNode): Promise<void> => {
+        await area.update("node", node.id);
+        await settleConnections();
+        await pruneDanglingConnections();
+    };
+
+    const setDefineFeatureName = async (name: string, nodeId?: string): Promise<boolean> => {
+        const node = resolveDefineNode(nodeId);
+        if (node == null || name.trim() === "") return false;
+        node.setFeatureName(name);
+        await refreshDefineNode(node);
+        return true;
+    };
+
+    const addDefineFeatureParameter = async (name: string, valueType: string, nodeId?: string): Promise<boolean> => {
+        const node = resolveDefineNode(nodeId);
+        if (node == null) return false;
+        const key = node.addParameter(name, valueType);
+        if (key == null) return false;
+        await refreshDefineNode(node);
+        return true;
+    };
+
+    const updateDefineFeatureParameter = async (
+        socketKey: string,
+        patch: { name?: string; valueType?: string },
+        nodeId?: string,
+    ): Promise<boolean> => {
+        const node = resolveDefineNode(nodeId);
+        if (node == null) return false;
+        const changed = node.updateParameter(socketKey, patch);
+        if (!changed) return false;
+        await refreshDefineNode(node);
+        return true;
+    };
+
+    const removeDefineFeatureParameter = async (socketKey: string, nodeId?: string): Promise<boolean> => {
+        const node = resolveDefineNode(nodeId);
+        if (node == null) return false;
+        const changed = node.removeParameter(socketKey);
+        if (!changed) return false;
+        await refreshDefineNode(node);
+        return true;
+    };
+
     return {
         editor,
         area,
@@ -1203,6 +1320,12 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         updateGroupBoundarySocket,
         removeGroupBoundarySocket,
         setGroupBoundaryChangedCallback,
+        isDefineFeatureNode,
+        getDefineFeatureState,
+        setDefineFeatureName,
+        addDefineFeatureParameter,
+        updateDefineFeatureParameter,
+        removeDefineFeatureParameter,
         applyPreferences,
         addNodeFromCatalog,
         addArrayNode,

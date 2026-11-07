@@ -11,6 +11,49 @@ import type {
     SerializedNodeBase,
 } from "../serialization/graph-schema-types";
 
+const PARAMETER_BT_TYPE: Record<string, string> = {
+    numberValueWithUnits: "BTParameterSpecQuantity-173",
+    ValueWithUnits: "BTParameterSpecQuantity-173",
+    number: "BTParameterSpecQuantity-173",
+    boolean: "BTParameterSpecBoolean-170",
+    Boolean: "BTParameterSpecBoolean-170",
+    string: "BTParameterSpecString-175",
+    String: "BTParameterSpecString-175",
+    Query: "BTParameterSpecQuery-174",
+    QueryList: "BTParameterSpecQuery-174",
+    Enum: "BTParameterSpecEnum-171",
+};
+
+const BT_TYPE_VALUE_TYPE: Record<string, string> = {
+    "BTParameterSpecQuantity-173": "numberValueWithUnits",
+    "BTParameterSpecBoolean-170": "boolean",
+    "BTParameterSpecString-175": "string",
+    "BTParameterSpecString-169": "string",
+    "BTParameterSpecQuery-174": "Query",
+    "BTParameterSpecEnum-171": "Enum",
+};
+
+export function valueTypeToBtType(valueType: string): string {
+    return PARAMETER_BT_TYPE[valueType] ?? "BTParameterSpecString-175";
+}
+
+export function btTypeToValueType(btType: string): string {
+    return BT_TYPE_VALUE_TYPE[btType] ?? "unknown";
+}
+
+export interface DefineFeatureParameterState {
+    socketKey: string;
+    name: string;
+    valueType: string;
+    btType: string;
+}
+
+export interface DefineFeatureState {
+    nodeId: string;
+    featureName: string;
+    parameters: DefineFeatureParameterState[];
+}
+
 
 export interface Precondition {
     annotation: Annotation
@@ -54,8 +97,127 @@ export class DefineFeatureNode extends OnshapeNode {
 
     private validatePreconditionIdentifiers(): void {
         for (const precondition of this.preconditions) {
-            this.validPreconditionIdentifierMap[precondition.annotation.value] = 'definition.' + precondition.annotation.value.replaceAll(/\s+/g, "");
+            this.validPreconditionIdentifierMap[precondition.annotation.value] = DefineFeatureNode.socketKeyFor(precondition.annotation.value);
         }
+    }
+
+    /** The output-socket key for a parameter name: `definition.<sanitized>`. */
+    static socketKeyFor(name: string): string {
+        return 'definition.' + name.replaceAll(/\s+/g, "");
+    }
+
+    /** Current feature name (annotation value, mirrored on the node title). */
+    getFeatureName(): string {
+        return this.annotation.value;
+    }
+
+    /** Rename the feature: annotation + visible node title follow. */
+    setFeatureName(name: string): void {
+        const trimmed = name.trim();
+        if (trimmed === "") return;
+        this.annotation.value = trimmed;
+        this.setTitle(trimmed);
+    }
+
+    /** Deduped output keys for the current preconditions (mirrors rebuildOutputs). */
+    private parameterKeys(): string[] {
+        const taken = new Set<string>(["context", "id"]);
+        return this.preconditions.map((precondition) => {
+            const base = DefineFeatureNode.socketKeyFor(precondition.annotation.value);
+            let key = base;
+            let n = 2;
+            while (taken.has(key)) key = `${base}_${n++}`;
+            taken.add(key);
+            return key;
+        });
+    }
+
+    /** Panel state: feature name + one entry per precondition parameter. */
+    getDefineFeatureState(): DefineFeatureState {
+        const keys = this.parameterKeys();
+        return {
+            nodeId: this.id,
+            featureName: this.getFeatureName(),
+            parameters: this.preconditions.map((precondition, index) => ({
+                socketKey: keys[index],
+                name: precondition.annotation.value,
+                valueType: btTypeToValueType(precondition.btType),
+                btType: precondition.btType,
+            })),
+        };
+    }
+
+    /**
+     * Rebuild the precondition output sockets from the current preconditions,
+     * preserving the `context`/`id` outputs. Keys stay
+     * `definition.<sanitizedName>`; duplicate names get numeric suffixes so
+     * two parameters never share one socket. The editor host prunes wires
+     * whose socket disappeared (rename/remove) after this runs.
+     */
+    rebuildOutputs(): void {
+        // Preserve context/id output objects so their connections survive a
+        // retype (same keys); everything else is rebuilt from preconditions.
+        const preserved: Record<string, OnshapeOutput> = {};
+        for (const key of ["context", "id"]) {
+            const output = this.outputs[key];
+            if (output != null) preserved[key] = output;
+        }
+        for (const key of Object.keys(this.outputs)) {
+            if (key === "context" || key === "id") continue;
+            this.removeOutput(key);
+        }
+        if (preserved["context"] == null) preserved["context"] = new OnshapeOutput(new OnshapeSocket("Context"), "Context");
+        if (preserved["id"] == null) preserved["id"] = new OnshapeOutput(new OnshapeSocket("Id"), "Id");
+        // Re-add defaults if somehow missing (fresh node built by constructor
+        // already has them; this keeps rebuild total).
+        for (const [key, output] of Object.entries(preserved)) {
+            if (this.outputs[key] == null) this.addOutput(key, output);
+        }
+        const taken = new Set<string>(["context", "id"]);
+        for (const precondition of this.preconditions) {
+            const base = DefineFeatureNode.socketKeyFor(precondition.annotation.value);
+            let key = base;
+            let n = 2;
+            while (taken.has(key)) key = `${base}_${n++}`;
+            taken.add(key);
+            this.addOutput(key, new OnshapeOutput(new OnshapeSocket(precondition.annotation.value), precondition.btType));
+        }
+    }
+
+    /** Add a new precondition parameter; returns its socket key. */
+    addParameter(name: string, valueType: string): string | null {
+        const trimmed = name.trim();
+        if (trimmed === "") return null;
+        this.preconditions.push({
+            annotation: { type: "Property Function Name", value: trimmed },
+            btType: valueTypeToBtType(valueType),
+        });
+        this.rebuildOutputs();
+        return DefineFeatureNode.socketKeyFor(trimmed);
+    }
+
+    /** Rename/retype the parameter currently exposed as `socketKey`. */
+    updateParameter(socketKey: string, patch: { name?: string; valueType?: string }): boolean {
+        const index = this.parameterKeys().indexOf(socketKey);
+        if (index < 0) return false;
+        const precondition = this.preconditions[index];
+        if (patch.name != null && patch.name.trim() !== "") {
+            precondition.annotation.value = patch.name.trim();
+        }
+        if (patch.valueType != null) {
+            precondition.btType = valueTypeToBtType(patch.valueType);
+        }
+        this.rebuildOutputs();
+        return true;
+    }
+
+    /** Remove the parameter currently exposed as `socketKey`. */
+    removeParameter(socketKey: string): boolean {
+        const index = this.parameterKeys().indexOf(socketKey);
+        if (index < 0) return false;
+        this.preconditions.splice(index, 1);
+        this.rebuildOutputs();
+        return true;
     }
 
     // public data(inputs: Record<string, any>): Record<string, any> {

@@ -34,6 +34,8 @@ defineProps<{
   groupBreadcrumb?: string[]
   /** Group config: true while editing a group; shows the Start/End Feature panel button. */
   groupEditing?: boolean
+  /** Feature config: true when a Define Feature node is selected. */
+  featureSelected?: boolean
   /** #30: the build/upload/run log; present when the design-check tab is shown. */
   log?: BuildLogStore
 }>()
@@ -55,6 +57,8 @@ const emit = defineEmits<{
   (e: 'createGroup'): void
   /** Group config: toggle the Start/End Feature (inputs/outputs) panel. */
   (e: 'toggleGroupConfig'): void
+  /** Feature config: toggle the Define Feature parameter panel. */
+  (e: 'toggleFeatureConfig'): void
 }>()
 
 /* ── Tooltip hover state ────────────────────────────────────────── */
@@ -127,12 +131,24 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
         </button>
       </div>
 
-      <!-- Group inputs/outputs (Start/End Feature) — only while editing a group -->
+      <!-- Group inputs/outputs (Start/End Feature) — only while editing a group.
+           Icon + text: the icon alone was not discoverable. -->
       <div v-if="groupEditing" class="toolbar-btn-wrap">
         <button class="toolbar-btn" aria-label="Group inputs and outputs"
           v-tooltip="{ label: 'Group Inputs and Outputs', description: 'Configure the Start Feature and End Feature sockets: add, rename, and retype the group inputs and outputs.' }"
           @click="emit('toggleGroupConfig')">
           <SvgIcon href="#svg-icon-mateGroup" :size="16" aria-label="Group inputs and outputs" />
+          <span class="toolbar-btn-label">Group I/O</span>
+        </button>
+      </div>
+
+      <!-- Feature parameters — only while a Define Feature node is selected -->
+      <div v-if="featureSelected" class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Feature parameters" data-testid="feature-parameters-button"
+          v-tooltip="{ label: 'Feature Parameters', description: 'Edit the Define Feature node: feature name and its input parameters (name + type).' }"
+          @click="emit('toggleFeatureConfig')">
+          <SvgIcon href="#svg-icon-feature-studio-element" :size="16" aria-label="Feature parameters" />
+          <span class="toolbar-btn-label">Feature parameters</span>
         </button>
       </div>
 
@@ -322,5 +338,14 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
 .btn-label {
   font-size: var(--font-size-field);
   font-weight: 500;
+}
+
+/* Section affordance labels (Group I/O, Feature parameters): visible text
+   so the panel they open is discoverable. */
+.toolbar-btn-label {
+  font-size: var(--font-size-field);
+  font-weight: var(--font-weight-section);
+  line-height: var(--line-height-title);
+  white-space: nowrap;
 }
 </style>
