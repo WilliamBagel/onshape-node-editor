@@ -47,6 +47,9 @@
           data-testid="generic-definition-warning" role="note">
           Generic definition — definition map schema not known; generated code uses an empty map.
         </p>
+        <p v-if="boundaryEmptyText != null" class="boundary-empty-hint" data-testid="boundary-empty-hint">
+          {{ boundaryEmptyText }}
+        </p>
         <!-- Outputs-->
         <div class="output os-parameter-list-item os-param-fill-first-column" v-for="[key, output] in outputs()"
           :key="'output' + key + seed" :data-testid="'output-' + key">
@@ -179,6 +182,24 @@ export default defineComponent({
     },
     collapsedOutputs() {
       return collectCollapsedOutputSockets(Object.fromEntries(this.outputs()) as any, this.data.id);
+    },
+    /** Explain an empty Start/End card instead of leaving a blank body. */
+    boundaryEmptyText(): string | null {
+      const type = (this.data as any).type;
+      if (type === "group-input" && Object.keys(this.data.outputs).length === 0) {
+        return "No inputs exposed — use Group inputs and outputs.";
+      }
+      if (type === "group-output" && Object.keys(this.data.inputs).length === 0) {
+        return "No outputs exposed — use Group inputs and outputs.";
+      }
+      if (
+        type === "group-instance" &&
+        Object.keys(this.data.inputs).length === 0 &&
+        Object.keys(this.data.outputs).length === 0
+      ) {
+        return "No inputs or outputs exposed — open the group to configure.";
+      }
+      return null;
     }
   },
   methods: {
@@ -524,6 +545,15 @@ export default defineComponent({
   padding: 6px 8px;
   border-bottom: 1px solid var(--hairline);
   color: var(--warning);
+  font-family: var(--node-font-sans);
+  font-size: var(--font-size-label);
+  line-height: 1.35;
+}
+
+.boundary-empty-hint {
+  margin: 0;
+  padding: 8px;
+  color: var(--ink-soft);
   font-family: var(--node-font-sans);
   font-size: var(--font-size-label);
   line-height: 1.35;

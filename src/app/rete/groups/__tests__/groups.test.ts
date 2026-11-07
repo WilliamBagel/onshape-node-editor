@@ -19,9 +19,15 @@ import {
     serializeGraph,
 } from "../../serialization/graph-serializer";
 import { GroupNode } from "../../nodes/groupinstancenode";
+import { GroupInputNode, GroupOutputNode } from "../../nodes/groupboundarynode";
 import {
+    commonGroupParent,
     createGroupDefinition,
+    listGroupSocketCandidates,
     extractBoundarySockets,
+    addGroupSocket,
+    updateGroupSocket,
+    removeGroupSocket,
     findGroupCycle,
     renameGroupSocket,
     reorderGroupSockets,
@@ -243,9 +249,14 @@ describe("grouping v2 (#14)", () => {
 
         expect(await controller.enter(fixture.instance1.id)).toBe(true);
         expect(controller.breadcrumb()).toEqual(["Top level", "Cross to transform"]);
-        // Inside: only the two member nodes, with their internal connection.
-        expect(fixture.editor.getNodes().map((node) => node.id).sort()).toEqual([fixture.cross.id, fixture.transform.id].sort());
-        expect(fixture.editor.getConnections()).toHaveLength(1);
+        // Inside: the member nodes plus the visible Start Feature / End Feature
+        // boundary cards. Boundary wiring is created for each exposed socket.
+        const insideIds = fixture.editor.getNodes().map((node) => node.id).sort();
+        expect(insideIds).toContain(fixture.cross.id);
+        expect(insideIds).toContain(fixture.transform.id);
+        expect(fixture.editor.getNodes().some((node) => node instanceof GroupInputNode && node.getTitle() === "Start Feature")).toBe(true);
+        expect(fixture.editor.getNodes().some((node) => node instanceof GroupOutputNode && node.getTitle() === "End Feature")).toBe(true);
+        expect(fixture.editor.getConnections()).toHaveLength(3);
 
         // Move a member while inside; the new position is captured on exit.
         positions[fixture.cross.id] = { x: 777, y: 888 };
@@ -293,7 +304,10 @@ describe("grouping v2 (#14)", () => {
             expect(instanceId).toBeTruthy();
             expect(await controller.toggle(instanceId)).toBe("entered");
             expect(controller.breadcrumb()).toEqual(["Top level", "Cross to transform"]);
-            expect(fixture.editor.getNodes().map((node) => node.id).sort()).toEqual([fixture.cross.id, fixture.transform.id].sort());
+            expect(fixture.editor.getNodes().map((node) => node.id)).toContain(fixture.cross.id);
+            expect(fixture.editor.getNodes().map((node) => node.id)).toContain(fixture.transform.id);
+            expect(fixture.editor.getNodes().some((node) => node instanceof GroupInputNode)).toBe(true);
+            expect(fixture.editor.getNodes().some((node) => node instanceof GroupOutputNode)).toBe(true);
             expect(await controller.toggle()).toBe("exited");
             expect(controller.breadcrumb()).toEqual(["Top level"]);
         }
@@ -404,4 +418,161 @@ describe("grouping v2 (#14)", () => {
         // The outer group inlines both inner instances: two crosses in total.
         expect(source?.match(/cross\(/g)).toHaveLength(2);
     });
+
+    it("exposes boundary sockets and lets the editor add, rename, retype and remove them", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...fixture.editor.getConnections()]) await fixture.editor.removeConnection(connection.id);
+                for (const node of [...fixture.editor.getNodes()]) await fixture.editor.removeNode(node.id);
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.enter(fixture.instance1.id)).toBe(true);
+        const state = controller.boundaryState();
+        expect(state?.name).toBe("Cross to transform");
+        expect(state?.candidates?.inputs.some((candidate) => candidate.socketKey === "vector2")).toBe(true);
+        expect(await controller.addBoundarySocket("input", fixture.cross.id, "vector2")).toBe(true);
+        const added = fixture.definition.inputs.find((socket) => socket.socketKey === "vector2");
+        expect(added).toBeDefined();
+        expect(await controller.updateBoundarySocket(added!.id, { label: "direction", valueType: "Vector" })).toBe(true);
+        expect(added?.label).toBe("direction");
+        expect(added?.valueType).toBe("Vector");
+        const inputNode = fixture.editor.getNodes().find((node) => node instanceof GroupInputNode) as GroupInputNode;
+        expect(Object.keys(inputNode.outputs)).toContain(added!.id);
+        expect(await controller.removeBoundarySocket(added!.id)).toBe(true);
+        expect(fixture.definition.inputs.some((socket) => socket.id === added!.id)).toBe(false);
+        expect(await controller.exit()).toBe(true);
+    });
+
+    it("commonGroupParent returns the shared frame only when all members share it", () => {
+        expect(commonGroupParent([{ group: "f1" }, { group: "f1" }])).toBe("f1");
+        expect(commonGroupParent([{ group: "f1" }, { group: null }])).toBeNull();
+        expect(commonGroupParent([{ group: "f1" }, { group: "f2" }])).toBeNull();
+        expect(commonGroupParent([{ group: null }, { group: null }])).toBeNull();
+        expect(commonGroupParent([])).toBeNull();
+    });
+
+    it("groupmodel boundary APIs: add, rename/retype, remove and candidates", () => {
+        const fixtureNode = utility("cross");
+        const definition = createGroupDefinition("g-test", "Test");
+        definition.nodes = [fixtureNode];
+        const candidates = listGroupSocketCandidates(definition);
+        expect(candidates.inputs.length + candidates.outputs.length).toBeGreaterThan(0);
+        const added = addGroupSocket(definition, "input", fixtureNode.id, "vector1");
+        expect(added).not.toBeNull();
+        expect(addGroupSocket(definition, "input", fixtureNode.id, "vector1")).toBeNull();
+        expect(addGroupSocket(definition, "input", fixtureNode.id, "missing")).toBeNull();
+        expect(updateGroupSocket(definition, added!.id, { label: "inVec", valueType: "Vector" })).toBe(true);
+        expect(added?.label).toBe("inVec");
+        expect(removeGroupSocket(definition, added!.id)).toBe(true);
+        expect(removeGroupSocket(definition, added!.id)).toBe(false);
+    });
+
+    it("snapshots omit transient boundary cards", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...fixture.editor.getConnections()]) await fixture.editor.removeConnection(connection.id);
+                for (const node of [...fixture.editor.getNodes()]) await fixture.editor.removeNode(node.id);
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.enter(fixture.instance1.id)).toBe(true);
+        const docInside = serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id)) as { nodes: { kind: string }[]; connections: unknown[] };
+        const kinds = docInside.nodes.map((node) => node.kind);
+        expect(kinds).not.toContain("group-input");
+        expect(kinds).not.toContain("group-output");
+        // Boundary wiring connections must also be omitted (transient endpoints).
+        const nodesInside = fixture.editor.getNodes();
+        const boundaryIds = new Set(nodesInside.filter((n) => n.transient).map((n) => n.id));
+        for (const connection of docInside.connections as { source: string; target: string }[]) {
+            expect(boundaryIds.has(connection.source)).toBe(false);
+            expect(boundaryIds.has(connection.target)).toBe(false);
+        }
+        expect(await controller.exit()).toBe(true);
+    });
+
+    it("nested group enter/exit keeps the outer boundary cards", async () => {
+        // Isolated editor (no leftover define/output chains) so the nested
+        // snapshot round-trip exercises only the controller.
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        const cross = utility("cross");
+        const transform = utility("transform");
+        const innerDef = createGroupDefinition("group-inner", "Inner");
+        innerDef.nodes = [cross, transform];
+        innerDef.connections = [{ source: cross.id, sourceOutput: "return", target: transform.id, targetInput: "translation" }];
+        innerDef.inputs = [{ id: `${cross.id}.vector1`, label: "vector1", direction: "input", nodeId: cross.id, socketKey: "vector1" }];
+        innerDef.outputs = [{ id: `${transform.id}.return`, label: "return", direction: "output", nodeId: transform.id, socketKey: "return" }];
+        const innerInstance = new GroupNode(innerDef);
+        const outerDef = createGroupDefinition("group-outer2", "Outer");
+        outerDef.nodes = [innerInstance];
+        outerDef.connections = [];
+        outerDef.inputs = [];
+        outerDef.outputs = [];
+        const outerInstance = new GroupNode(outerDef);
+        await editor.addNode(outerInstance);
+        editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(editor, positions, editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...editor.getConnections()]) await editor.removeConnection(connection.id);
+                for (const node of [...editor.getNodes()]) await editor.removeNode(node.id);
+                await applyGraph(editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.enter(outerInstance.id)).toBe(true);
+        expect(editor.getNodes().some((n) => n instanceof GroupNode)).toBe(true);
+        const outerInnerId = editor.getNodes().find((n) => n instanceof GroupNode)?.id;
+        expect(outerInnerId).toBeTruthy();
+        expect(await controller.enter(outerInnerId!)).toBe(true);
+        expect(controller.depth).toBe(2);
+        expect(editor.getNodes().some((n) => n instanceof GroupInputNode)).toBe(true);
+        expect(await controller.exit()).toBe(true);
+        expect(controller.depth).toBe(1);
+        expect(editor.getNodes().some((n) => n instanceof GroupInputNode)).toBe(true);
+        expect(editor.getNodes().some((n) => n instanceof GroupOutputNode)).toBe(true);
+        expect(await controller.exit()).toBe(true);
+        expect(controller.depth).toBe(0);
+    });
+
+    it("keeps same-id input and output boundary edits separate", () => {
+        const definition = createGroupDefinition("d", "Same socket both ways");
+        definition.inputs = [{ id: "n.context", label: "in", direction: "input", nodeId: "n", socketKey: "context" }];
+        definition.outputs = [{ id: "n.context", label: "out", direction: "output", nodeId: "n", socketKey: "context" }];
+        expect(updateGroupSocket(definition, "n.context", { label: "renamed-in" }, "input")).toBe(true);
+        expect(definition.inputs[0].label).toBe("renamed-in");
+        expect(definition.outputs[0].label).toBe("out");
+        expect(removeGroupSocket(definition, "n.context", "output")).toBe(true);
+        expect(definition.inputs).toHaveLength(1);
+        expect(definition.outputs).toHaveLength(0);
+    });
 });
+

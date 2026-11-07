@@ -50,8 +50,8 @@ import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
 import { cachedSpecResolver } from "../onshape/feature-spec-cache";
 import { GroupNode } from "./nodes/groupinstancenode";
-import { assertGroupableSelection, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition } from "./groups/groupmodel";
-import { GroupEditorController } from "./groups/group-editor";
+import { assertGroupableSelection, commonGroupParent, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition, type GroupSocketPatch } from "./groups/groupmodel";
+import { GroupEditorController, type GroupBoundaryState } from "./groups/group-editor";
 
 /** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
 export function modifierCheckKey(modifier: string): string {
@@ -118,6 +118,14 @@ export type EditorControls = {
     addGroupInstance: (definitionId: string) => Promise<GroupNode | null>
     /** #14: wrap the selected non-frame nodes in a new group definition. */
     createGroupFromSelection: () => Promise<GroupNode | null>
+    /** #14: boundary configuration for the group currently being edited. */
+    getGroupBoundaryState: () => GroupBoundaryState | null
+    /** #14: expose one member socket as a group input/output. */
+    addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
+    /** #14: rename or retype an existing group boundary socket. */
+    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
+    /** #14: remove a group boundary socket. */
+    removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
     /** #36: apply live canvas preferences (grid visibility) without a reload. */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry at a canvas position (default: viewport centre). */
@@ -165,6 +173,14 @@ type EditorBaseInfo = {
     addGroupInstance: (definitionId: string) => Promise<GroupNode | null>
     /** #14: wrap the selected non-frame nodes in a new group definition. */
     createGroupFromSelection: () => Promise<GroupNode | null>
+    /** #14: boundary configuration for the group currently being edited. */
+    getGroupBoundaryState: () => GroupBoundaryState | null
+    /** #14: expose one member socket as a group input/output. */
+    addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
+    /** #14: rename or retype an existing group boundary socket. */
+    updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
+    /** #14: remove a group boundary socket. */
+    removeGroupBoundarySocket: (socketId: string, direction?: "input" | "output") => Promise<boolean>
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
     /** #8: create a node from a catalog entry. */
@@ -824,6 +840,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
             }
         },
+        updateNode: async (nodeId) => {
+            if (editor.getNode(nodeId) != null) {
+                await area.update("node", nodeId);
+            }
+        },
     });
 
     const selectedInstanceId = (): string | undefined => {
@@ -835,6 +856,14 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         await groupController.toggle(selectedInstanceId());
         return groupController.breadcrumb();
     };
+
+    const getGroupBoundaryState = (): GroupBoundaryState | null => groupController.boundaryState();
+    const addGroupBoundarySocket = (direction: "input" | "output", nodeId: string, socketKey: string): Promise<boolean> =>
+        groupController.addBoundarySocket(direction, nodeId, socketKey);
+    const updateGroupBoundarySocket = (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output"): Promise<boolean> =>
+        groupController.updateBoundarySocket(socketId, patch, direction);
+    const removeGroupBoundarySocket = (socketId: string, direction?: "input" | "output"): Promise<boolean> =>
+        groupController.removeBoundarySocket(socketId, direction);
 
     const toggleMuteSelected = async (): Promise<number> => {
         const selected = editor.getNodes().filter((node) => node.selected && !(node instanceof FrameNode));
@@ -885,6 +914,10 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         definition.inputs = inputs;
         definition.outputs = outputs;
         definition.positions = canvasPositions();
+        // A group created from nodes inside one frame stays inside that frame;
+        // removing the members otherwise leaves an empty frame that the scopes
+        // plugin shrinks to its header. Mixed-parent selections stay unparented.
+        const parentFrame = commonGroupParent(selected);
         // A fresh definition cannot be part of a cycle, but a member that
         // is an instance of a definition that (transitively) contains one
         // of the selected nodes would be — refuse rather than build it.
@@ -898,12 +931,20 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         groupDefinitions.set(definition.id, definition);
 
         const instance = new GroupNode(definition);
+        instance.group = parentFrame;
         // External connections are rewired to the instance's boundary
         // sockets; the members leave the editor (they live in the
         // definition until the group is entered).
         const external = allConnections.filter(
             (connection) => memberIds.has(connection.source) !== memberIds.has(connection.target),
         );
+        // Detach the members from their frames before removal. rete-scopes
+        // refuses to remove a parent node that still has children; and an
+        // empty frame would otherwise collapse to its header. The instance
+        // inherits the shared parent frame below.
+        for (const node of selected) {
+            node.group = null;
+        }
         for (const connection of [...editor.getConnections()]) {
             if (memberIds.has(connection.source) || memberIds.has(connection.target)) {
                 await editor.removeConnection(connection.id);
@@ -955,6 +996,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 );
                 await editor.addConnection(rewired);
             }
+        }
+        if (parentFrame != null) {
+            // Re-fit the frame around the surviving group instance instead of
+            // letting an empty scope collapse to its header.
+            await scopes.update(parentFrame);
         }
         return instance;
     };
@@ -1108,6 +1154,10 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         listGroupDefinitions,
         addGroupInstance,
         createGroupFromSelection,
+        getGroupBoundaryState,
+        addGroupBoundarySocket,
+        updateGroupBoundarySocket,
+        removeGroupBoundarySocket,
         applyPreferences,
         addNodeFromCatalog,
         addArrayNode,

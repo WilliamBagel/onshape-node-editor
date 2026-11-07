@@ -17,10 +17,21 @@
 import type { NodeEditor } from "rete";
 import type { Schemes } from "../types";
 import { GroupNode } from "../nodes/groupinstancenode";
+import { GroupInputNode, GroupOutputNode } from "../nodes/groupboundarynode";
+import type { OnshapeNode } from "../nodes/onshapenode";
+import { FrameNode } from "../nodes/framenode";
 import { Connection } from "../types";
 import { StyleSettings } from "../stylesettings";
 import { connectGraphNodes } from "../serialization/graph-serializer";
-import type { GroupDefinition } from "./groupmodel";
+import {
+    addGroupSocket,
+    listGroupSocketCandidates,
+    removeGroupSocket,
+    updateGroupSocket,
+    type GroupDefinition,
+    type GroupSocketCandidate,
+    type GroupSocketPatch,
+} from "./groupmodel";
 import type { Vec2 } from "../serialization/graph-schema-types";
 
 export interface GroupSnapshot {
@@ -39,16 +50,37 @@ export interface GroupEditHost {
     getPositions: () => Record<string, Vec2 | null>;
     /** Place nodes at the given canvas positions, by node id. */
     setPositions: (positions: Record<string, Vec2 | null>) => Promise<void>;
+    /** Re-measure/repaint a node after its sockets changed. */
+    updateNode?: (nodeId: string) => Promise<void>;
 }
 
 interface EditLevel {
     instanceId: string;
     definition: GroupDefinition;
     snapshot: GroupSnapshot;
+    /** Frame memberships temporarily removed while their owner frame is not in the editor. */
+    memberFrames: Record<string, string | null>;
+    /** Visible Start/End cards for this level (removed on exit). */
+    boundaryInput: GroupInputNode | null;
+    boundaryOutput: GroupOutputNode | null;
+}
+
+export interface GroupBoundaryState {
+    definitionId: string;
+    name: string;
+    inputs: GroupDefinition["inputs"];
+    outputs: GroupDefinition["outputs"];
+    candidates: {
+        inputs: GroupSocketCandidate[];
+        outputs: GroupSocketCandidate[];
+    } | null;
+    boundaryNodeIds: { input: string | null; output: string | null };
 }
 
 export class GroupEditorController {
     private readonly levels: EditLevel[] = [];
+    private groupInput: GroupInputNode | null = null;
+    private groupOutput: GroupOutputNode | null = null;
 
     constructor(
         private readonly editor: NodeEditor<Schemes>,
@@ -76,16 +108,34 @@ export class GroupEditorController {
         }
         const definition = node.getDefinition();
         const snapshot = this.host.snapshot();
-        this.levels.push({ instanceId, definition, snapshot });
+        const level: EditLevel = {
+            instanceId,
+            definition,
+            snapshot,
+            memberFrames: {},
+            boundaryInput: null,
+            boundaryOutput: null,
+        };
+        this.levels.push(level);
 
         // Connections first: `removeNode` alone leaves them behind.
         for (const connection of [...this.editor.getConnections()]) {
             await this.editor.removeConnection(connection.id);
         }
-        for (const current of [...this.editor.getNodes()]) {
+        // Frames must be removed last: the scopes plugin refuses to remove a
+        // parent while it still has children. A group instance inside a frame
+        // is a child, so it must leave first.
+        for (const current of [...this.editor.getNodes()].sort(
+            (a, b) => Number(a instanceof FrameNode) - Number(b instanceof FrameNode),
+        )) {
             await this.editor.removeNode(current.id);
         }
         for (const member of definition.nodes) {
+            // The outer frame is not part of the group editor; a stale parent
+            // id would make the scopes plugin try to fit a frame that is not
+            // here. Restore these memberships on exit.
+            level.memberFrames[member.id] = member.group;
+            member.group = null;
             await this.editor.addNode(member);
         }
         // Rebuild the definition's internal connections between members.
@@ -109,7 +159,155 @@ export class GroupEditorController {
             connectGraphNodes(this.editor, rebuilt);
         }
         await this.host.setPositions({ ...definition.positions });
+        await this.createBoundaryNodes(definition);
+        level.boundaryInput = this.groupInput;
+        level.boundaryOutput = this.groupOutput;
         return true;
+    }
+
+    /** Current boundary state for the group editor UI, or null at the top level. */
+    boundaryState(): GroupBoundaryState | null {
+        const definition = this.currentDefinition;
+        if (definition == null) {
+            return null;
+        }
+        const candidates = listGroupSocketCandidates(definition);
+        return {
+            definitionId: definition.id,
+            name: definition.name,
+            inputs: definition.inputs,
+            outputs: definition.outputs,
+            candidates,
+            boundaryNodeIds: {
+                input: this.groupInput?.id ?? null,
+                output: this.groupOutput?.id ?? null,
+            },
+        };
+    }
+
+    /** Add one boundary socket by binding a member input/output socket. */
+    async addBoundarySocket(
+        direction: "input" | "output",
+        nodeId: string,
+        socketKey: string,
+    ): Promise<boolean> {
+        const definition = this.currentDefinition;
+        if (definition == null) return false;
+        if (addGroupSocket(definition, direction, nodeId, socketKey) == null) {
+            return false;
+        }
+        await this.refreshBoundary();
+        return true;
+    }
+
+    /** Rename/retype an existing boundary socket. */
+    async updateBoundarySocket(
+        socketId: string,
+        patch: GroupSocketPatch,
+        direction?: "input" | "output",
+    ): Promise<boolean> {
+        const definition = this.currentDefinition;
+        if (definition == null) return false;
+        if (!updateGroupSocket(definition, socketId, patch, direction)) {
+            return false;
+        }
+        await this.refreshBoundary();
+        return true;
+    }
+
+    /** Remove a boundary socket from the group interface. */
+    async removeBoundarySocket(socketId: string, direction?: "input" | "output"): Promise<boolean> {
+        const definition = this.currentDefinition;
+        if (definition == null) return false;
+        if (!removeGroupSocket(definition, socketId, direction)) {
+            return false;
+        }
+        await this.refreshBoundary();
+        return true;
+    }
+
+    /** Recreate/repaint the Start Feature and End Feature cards and their wiring. */
+    async refreshBoundary(): Promise<void> {
+        const definition = this.currentDefinition;
+        if (definition == null) return;
+        this.groupInput?.setDefinition(definition);
+        this.groupOutput?.setDefinition(definition);
+        for (const node of this.editor.getNodes()) {
+            if (node instanceof GroupNode && node.definitionId === definition.id) {
+                node.setDefinition(definition);
+                await this.host.updateNode?.(node.id);
+            }
+        }
+        if (this.groupInput != null) {
+            await this.host.updateNode?.(this.groupInput.id);
+        }
+        if (this.groupOutput != null) {
+            await this.host.updateNode?.(this.groupOutput.id);
+        }
+        await this.rebuildBoundaryWiring();
+    }
+
+    private async createBoundaryNodes(definition: GroupDefinition): Promise<void> {
+        this.groupInput = new GroupInputNode(definition);
+        this.groupOutput = new GroupOutputNode(definition);
+        await this.editor.addNode(this.groupInput);
+        await this.editor.addNode(this.groupOutput);
+        const memberPositions = Object.values(definition.positions)
+            .filter((position): position is Vec2 => position != null);
+        const minX = memberPositions.length > 0 ? Math.min(...memberPositions.map((position) => position.x)) : 0;
+        const minY = memberPositions.length > 0 ? Math.min(...memberPositions.map((position) => position.y)) : 0;
+        const maxX = memberPositions.length > 0 ? Math.max(...memberPositions.map((position) => position.x)) : 640;
+        const startX = Math.max(20, minX - 280);
+        const endX = maxX + 40;
+        await this.host.setPositions({
+            ...definition.positions,
+            [this.groupInput.id]: { x: startX, y: minY },
+            [this.groupOutput.id]: { x: endX, y: minY },
+        });
+        await this.rebuildBoundaryWiring();
+    }
+
+    private async rebuildBoundaryWiring(): Promise<void> {
+        if (this.groupInput == null || this.groupOutput == null) return;
+        const boundaryIds = new Set([this.groupInput.id, this.groupOutput.id]);
+        for (const connection of [...this.editor.getConnections()]) {
+            if (boundaryIds.has(connection.source) || boundaryIds.has(connection.target)) {
+                await this.editor.removeConnection(connection.id);
+            }
+        }
+        const styleSettings = new StyleSettings();
+        const connect = async (
+            source: OnshapeNode,
+            sourceOutput: string,
+            target: OnshapeNode,
+            targetInput: string,
+        ): Promise<void> => {
+            const rebuilt = new Connection(
+                source,
+                sourceOutput,
+                source.outputs[sourceOutput]?.socket.name ?? sourceOutput,
+                target,
+                targetInput,
+                target.inputs[targetInput]?.socket.name ?? targetInput,
+                styleSettings,
+            );
+            await this.editor.addConnection(rebuilt);
+            connectGraphNodes(this.editor, rebuilt);
+        };
+        const definition = this.currentDefinition;
+        if (definition == null) return;
+        for (const socket of definition.inputs) {
+            const member = this.editor.getNode(socket.nodeId);
+            if (member != null && member.inputs[socket.socketKey] != null) {
+                await connect(this.groupInput, socket.id, member, socket.socketKey);
+            }
+        }
+        for (const socket of definition.outputs) {
+            const member = this.editor.getNode(socket.nodeId);
+            if (member != null && member.outputs[socket.socketKey] != null) {
+                await connect(member, socket.socketKey, this.groupOutput, socket.id);
+            }
+        }
     }
 
     /**
@@ -144,6 +342,11 @@ export class GroupEditorController {
         for (const current of [...this.editor.getNodes()]) {
             await this.editor.removeNode(current.id);
         }
+        this.groupInput = null;
+        this.groupOutput = null;
+        for (const member of level.definition.nodes) {
+            member.group = level.memberFrames[member.id] ?? null;
+        }
         await this.host.restore(level.snapshot);
         await this.host.setPositions({ ...level.snapshot.positions });
         // The restore rebuilt instance nodes from the snapshot's copy of
@@ -153,6 +356,14 @@ export class GroupEditorController {
             if (node instanceof GroupNode && node.definitionId === level.definition.id) {
                 node.setDefinition(level.definition);
             }
+        }
+        // Recreate the parent level's visible Start/End cards after a nested
+        // group exit (they were omitted from the snapshot as transient UI).
+        const parent = this.levels[this.levels.length - 1];
+        if (parent != null) {
+            await this.createBoundaryNodes(parent.definition);
+            parent.boundaryInput = this.groupInput;
+            parent.boundaryOutput = this.groupOutput;
         }
         return true;
     }
