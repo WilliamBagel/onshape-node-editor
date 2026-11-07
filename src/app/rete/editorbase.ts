@@ -110,6 +110,8 @@ export type EditorControls = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #14: Tab — enter the selected group instance, or exit one level. */
     toggleGroupEdit: () => Promise<string[]>
+    /** #14: Tab hint — true when Tab can actually enter/exit a group. */
+    canToggleGroupEdit: () => boolean
     /** #14: M — mute the selected nodes; returns how many changed. */
     toggleMuteSelected: () => Promise<number>
     /** #14: known group definitions, for placing another instance. */
@@ -195,6 +197,8 @@ type EditorBaseInfo = {
     setGroupBoundaryChangedCallback?: (cb: (() => void) | null) => void
     /** #36: apply live canvas preferences (grid visibility). */
     applyPreferences: (prefs: EditorPreferences) => void
+    /** #14: Tab hint — true when Tab can actually enter/exit a group. */
+    canToggleGroupEdit: () => boolean
     /** #8: create a node from a catalog entry. */
     addNodeFromCatalog: (entry: CatalogEntry, position?: { x: number; y: number }) => Promise<OnshapeNode | null>
     /** #73: create an array/iteration node by variant. */
@@ -837,6 +841,15 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     };
 
     let boundaryChangedCb: (() => void) | null = null;
+    const settleConnections = async (): Promise<void> => {
+        if (typeof document === "undefined") return;
+        if (typeof requestAnimationFrame === "function") {
+            await new Promise<void>((resolve) => {
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+            });
+        }
+        await connection.socketPositionWatcher.recalcAll();
+    };
     const groupController = new GroupEditorController(editor, {
         snapshot: () => ({ document: serializeGraph(), positions: canvasPositions(), specs: collectSpecs() }),
         restore: async (snap) => {
@@ -858,6 +871,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 await area.update("node", nodeId);
             }
         },
+        settleConnections,
         onBoundaryChanged: () => boundaryChangedCb?.(),
     });
 
@@ -870,8 +884,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return selected?.id;
     };
 
+    const canToggleGroupEdit = (): boolean => {
+        return groupController.depth > 0 || selectedInstanceId() != null;
+    };
+
     const toggleGroupEdit = async (): Promise<string[]> => {
         await groupController.toggle(selectedInstanceId());
+        await settleConnections();
         return groupController.breadcrumb();
     };
 
@@ -1023,6 +1042,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             // letting an empty scope collapse to its header.
             await scopes.update(parentFrame);
         }
+        await settleConnections();
         return instance;
     };
 
@@ -1171,6 +1191,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         createFrameFromSelection,
         toggleFrameCollapsed,
         toggleGroupEdit,
+        canToggleGroupEdit,
         toggleMuteSelected,
         listGroupDefinitions,
         addGroupInstance,

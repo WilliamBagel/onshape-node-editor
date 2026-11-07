@@ -347,10 +347,10 @@ function removeSocket(socket: GroupSocketDefinition): void {
   top: auto;
   bottom: 160px;
   right: 8px;
-  width: 300px;
+  width: 340px;
   max-height: calc(100vh - 220px);
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px;
   background: var(--surface-panel);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-card);
@@ -406,9 +406,9 @@ function removeSocket(socket: GroupSocketDefinition): void {
 
 .socket-row {
   display: grid;
-  grid-template-columns: 1fr 96px 16px;
+  grid-template-columns: 1fr 150px 24px;
   grid-template-rows: auto auto;
-  gap: 4px 8px;
+  gap: 4px 6px;
   align-items: center;
   padding: 8px 0;
   border-top: 1px solid var(--border-subtle);
@@ -423,7 +423,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-control);
   height: 24px;
-  padding: 0 4px;
+  padding: 0 2px;
   box-sizing: border-box;
   min-width: 0;
 }
@@ -431,7 +431,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
 .type-dot-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -487,8 +487,9 @@ function removeSocket(socket: GroupSocketDefinition): void {
 }
 
 .add-row {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr 150px 24px;
+  gap: 6px;
   align-items: center;
   margin-top: 8px;
 }

@@ -61,6 +61,11 @@ export interface GroupEditHost {
      * refresh its panel state. Must not write back into the editor
      * (read-only state refresh), so it cannot recurse into this driver. */
     onBoundaryChanged?: () => void;
+    /** Wait for socket geometry to settle and force connection views to repaint.
+     * Double requestAnimationFrame + connection.socketPositionWatcher.recalcAll()
+     * in the real host. Needed after boundary wiring / positions change, otherwise
+     * wires paint before the new nodes settle and stay offset until a drag. */
+    settleConnections?: () => Promise<void>;
 }
 
 interface EditLevel {
@@ -195,6 +200,7 @@ export class GroupEditorController {
         await this.createBoundaryNodes(definition);
         level.boundaryInput = this.groupInput;
         level.boundaryOutput = this.groupOutput;
+        await this.host.settleConnections?.();
         return true;
     }
 
@@ -451,7 +457,33 @@ export class GroupEditorController {
             await this.host.updateNode?.(this.groupOutput.id);
         }
         await this.rebuildBoundaryWiring();
+        // Panel add/remove/retype changes the instance's sockets: prune
+        // wires that referenced a removed socket (nested instance case),
+        // so stale paths do not survive a refresh.
+        await this.pruneStaleInstanceConnections(definition.id);
+        await this.host.settleConnections?.();
         this.notifyBoundaryChanged();
+    }
+
+    /** Remove connections that reference a socket the instance no longer has.
+     * After a boundary remove + setDefinition, editor connection records for
+     * the removed socket would otherwise linger as stale/dangling wires. */
+    private async pruneStaleInstanceConnections(definitionId?: string): Promise<void> {
+        const stale: string[] = [];
+        for (const node of this.editor.getNodes()) {
+            if (!(node instanceof GroupNode)) continue;
+            if (definitionId != null && node.definitionId !== definitionId) continue;
+            for (const connection of this.editor.getConnections()) {
+                if (connection.source === node.id && node.outputs[connection.sourceOutput] == null) {
+                    stale.push(connection.id);
+                } else if (connection.target === node.id && node.inputs[connection.targetInput] == null) {
+                    stale.push(connection.id);
+                }
+            }
+        }
+        for (const id of [...new Set(stale)]) {
+            await this.editor.removeConnection(id);
+        }
     }
 
     /** Notify the host (e.g. App) so the open panel refreshes live.
@@ -577,11 +609,16 @@ export class GroupEditorController {
         // The restore rebuilt instance nodes from the snapshot's copy of
         // the definition; rebind them to the edited definition object so
         // edits made in the group session are the ones that survive.
+        // updateNode forces a repaint so added sockets appear immediately;
+        // pruneStaleInstanceConnections drops wires for sockets removed in
+        // the session (they were restored from the snapshot's copy).
         for (const node of this.editor.getNodes()) {
             if (node instanceof GroupNode && node.definitionId === level.definition.id) {
                 node.setDefinition(level.definition);
+                await this.host.updateNode?.(node.id);
             }
         }
+        await this.pruneStaleInstanceConnections(level.definition.id);
         // Recreate the parent level's visible Start/End cards after a nested
         // group exit (they were omitted from the snapshot as transient UI).
         const parent = this.levels[this.levels.length - 1];
@@ -590,20 +627,22 @@ export class GroupEditorController {
             parent.boundaryInput = this.groupInput;
             parent.boundaryOutput = this.groupOutput;
         }
+        await this.host.settleConnections?.();
         return true;
     }
 
     /**
-     * Tab behaviour: inside a group, exit one level; otherwise enter the
-     * instance `instanceId` (the selected node, when it is an instance).
+     * Tab behaviour: when a GroupNode instance is selected, enter it (including
+     * nested — entering a group instance inside an edited group pushes another
+     * level); otherwise, inside a group, exit one level; otherwise noop.
      */
     async toggle(instanceId?: string): Promise<"entered" | "exited" | "noop"> {
+        if (instanceId != null && (await this.enter(instanceId))) {
+            return "entered";
+        }
         if (this.levels.length > 0) {
             await this.exit();
             return "exited";
-        }
-        if (instanceId != null && (await this.enter(instanceId))) {
-            return "entered";
         }
         return "noop";
     }
