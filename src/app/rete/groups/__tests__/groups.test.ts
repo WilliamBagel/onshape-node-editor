@@ -562,5 +562,17 @@ describe("grouping v2 (#14)", () => {
         expect(await controller.exit()).toBe(true);
         expect(controller.depth).toBe(0);
     });
+
+    it("keeps same-id input and output boundary edits separate", () => {
+        const definition = createGroupDefinition("d", "Same socket both ways");
+        definition.inputs = [{ id: "n.context", label: "in", direction: "input", nodeId: "n", socketKey: "context" }];
+        definition.outputs = [{ id: "n.context", label: "out", direction: "output", nodeId: "n", socketKey: "context" }];
+        expect(updateGroupSocket(definition, "n.context", { label: "renamed-in" }, "input")).toBe(true);
+        expect(definition.inputs[0].label).toBe("renamed-in");
+        expect(definition.outputs[0].label).toBe("out");
+        expect(removeGroupSocket(definition, "n.context", "output")).toBe(true);
+        expect(definition.inputs).toHaveLength(1);
+        expect(definition.outputs).toHaveLength(0);
+    });
 });
 
