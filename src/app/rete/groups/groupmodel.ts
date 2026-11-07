@@ -50,6 +50,14 @@ export interface GroupSocketPatch {
 }
 
 
+/** Stable identity and placement of a group's Start/End Feature cards. */
+export interface GroupBoundaryNodes {
+    inputId: string;
+    outputId: string;
+    inputPosition: Vec2 | null;
+    outputPosition: Vec2 | null;
+}
+
 export interface GroupDefinition {
     id: string;
     name: string;
@@ -61,10 +69,42 @@ export interface GroupDefinition {
     outputs: GroupSocketDefinition[];
     /** Canvas positions of member nodes while editing, by node id. */
     positions: Record<string, Vec2 | null>;
+    /**
+     * Permanent Start/End Feature boundary identity. The boundary cards
+     * are definition-owned, not ordinary graph nodes: they are recreated
+     * on every group entry with these stable ids and positions, and
+     * serialized inside this definition (never as top-level nodes).
+     * `inputs`/`outputs` remain the single source of truth for sockets.
+     */
+    boundaryNodes: GroupBoundaryNodes;
+}
+
+/** Stable boundary ids derived from the definition id (unique per definition). */
+export function defaultBoundaryNodes(definitionId: string): GroupBoundaryNodes {
+    return {
+        inputId: `${definitionId}:boundary-input`,
+        outputId: `${definitionId}:boundary-output`,
+        inputPosition: null,
+        outputPosition: null,
+    };
+}
+
+/** Fill in a missing boundary record (legacy/manual definitions). */
+export function ensureBoundaryNodes(definition: GroupDefinition): GroupBoundaryNodes {
+    const existing = definition.boundaryNodes;
+    if (existing == null || existing.inputId == null || existing.inputId === "" || existing.outputId == null || existing.outputId === "") {
+        definition.boundaryNodes = {
+            ...(existing ?? {}),
+            ...defaultBoundaryNodes(definition.id),
+            inputPosition: existing?.inputPosition ?? null,
+            outputPosition: existing?.outputPosition ?? null,
+        } as GroupBoundaryNodes;
+    }
+    return definition.boundaryNodes;
 }
 
 export function createGroupDefinition(id: string, name: string): GroupDefinition {
-    return { id, name, nodes: [], connections: [], inputs: [], outputs: [], positions: {} };
+    return { id, name, nodes: [], connections: [], inputs: [], outputs: [], positions: {}, boundaryNodes: defaultBoundaryNodes(id) };
 }
 
 export function groupSocketId(nodeId: string, socketKey: string): string {

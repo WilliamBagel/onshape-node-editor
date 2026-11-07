@@ -120,6 +120,8 @@ export type EditorControls = {
     createGroupFromSelection: () => Promise<GroupNode | null>
     /** #14: boundary configuration for the group currently being edited. */
     getGroupBoundaryState: () => GroupBoundaryState | null
+    /** #14: true when `nodeId` is the Start/End card of the group being edited. */
+    isGroupBoundaryNode: (nodeId: string) => boolean
     /** #14: expose one member socket as a group input/output. */
     addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
     /** #14: rename or retype an existing group boundary socket. */
@@ -175,6 +177,8 @@ type EditorBaseInfo = {
     createGroupFromSelection: () => Promise<GroupNode | null>
     /** #14: boundary configuration for the group currently being edited. */
     getGroupBoundaryState: () => GroupBoundaryState | null
+    /** #14: true when `nodeId` is the Start/End card of the group being edited. */
+    isGroupBoundaryNode: (nodeId: string) => boolean
     /** #14: expose one member socket as a group input/output. */
     addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
     /** #14: rename or retype an existing group boundary socket. */
@@ -858,6 +862,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     };
 
     const getGroupBoundaryState = (): GroupBoundaryState | null => groupController.boundaryState();
+    const isGroupBoundaryNode = (nodeId: string): boolean => groupController.isBoundaryNode(nodeId);
     const addGroupBoundarySocket = (direction: "input" | "output", nodeId: string, socketKey: string): Promise<boolean> =>
         groupController.addBoundarySocket(direction, nodeId, socketKey);
     const updateGroupBoundarySocket = (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output"): Promise<boolean> =>
@@ -1155,6 +1160,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         addGroupInstance,
         createGroupFromSelection,
         getGroupBoundaryState,
+        isGroupBoundaryNode,
         addGroupBoundarySocket,
         updateGroupBoundarySocket,
         removeGroupBoundarySocket,
