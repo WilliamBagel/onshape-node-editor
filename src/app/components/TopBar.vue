@@ -32,6 +32,8 @@ defineProps<{
   projectName?: string
   /** #14: group editing breadcrumb ("Top level / Group A / Group B"); empty at the top level. */
   groupBreadcrumb?: string[]
+  /** Group config: true while editing a group; shows the Start/End Feature panel button. */
+  groupEditing?: boolean
   /** #30: the build/upload/run log; present when the design-check tab is shown. */
   log?: BuildLogStore
 }>()
@@ -51,6 +53,8 @@ const emit = defineEmits<{
   (e: 'locateNode', nodeId: string): void
   /** #14: create a node group from the current selection. */
   (e: 'createGroup'): void
+  /** Group config: toggle the Start/End Feature (inputs/outputs) panel. */
+  (e: 'toggleGroupConfig'): void
 }>()
 
 /* ── Tooltip hover state ────────────────────────────────────────── */
@@ -120,6 +124,15 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
           v-tooltip="{ label: 'Create Group from Selection', description: 'Turn the selected nodes into a reusable node group. Select the instance and press Tab to edit it.' }"
           @click="emit('createGroup')">
           <SvgIcon href="#svg-icon-mateGroup" :size="16" aria-label="Create group from selection" />
+        </button>
+      </div>
+
+      <!-- Group inputs/outputs (Start/End Feature) — only while editing a group -->
+      <div v-if="groupEditing" class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Group inputs and outputs"
+          v-tooltip="{ label: 'Group Inputs and Outputs', description: 'Configure the Start Feature and End Feature sockets: add, rename, and retype the group inputs and outputs.' }"
+          @click="emit('toggleGroupConfig')">
+          <SvgIcon href="#svg-icon-mateGroup" :size="16" aria-label="Group inputs and outputs" />
         </button>
       </div>
 
