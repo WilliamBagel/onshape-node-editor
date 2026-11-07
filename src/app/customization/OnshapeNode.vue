@@ -1,7 +1,10 @@
 <template>
   <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected, collapsed }" :style="{
     'width': Number.isFinite(width) ? `${width}px` : '',
-    'height': Number.isFinite(height) ? `${height}px` : '',
+    // Collapsed nodes are content-sized: skip the expanded height
+    // entirely instead of pinning it inline and relying on
+    // `height:auto !important` to beat it. Expanding restores it.
+    'height': !collapsed && Number.isFinite(height) ? `${height}px` : '',
     'min-width': Number.isFinite(data.minWidth) ? `${data.minWidth}px` : '',
     'max-width': Number.isFinite(data.maxWidth) ? `${data.maxWidth}px` : ''
   }" data-testid="node">
@@ -710,7 +713,35 @@ export default defineComponent({
 .collapsed-socket {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-width: 8px;
-  min-height: 14px;
+  // Fixed (not min-) height: the port box inside OnshapeSocket is 24px
+  // tall, so a min-height here never compacted the strip — each collapsed
+  // socket measured 24px and a 7-socket node collapsed to ~229px, only
+  // 38px shorter than its 267px expanded frame (and taller than small
+  // expanded cards). Pin the row and its port box to the intended 14px.
+  height: 14px;
+  min-height: 0;
+}
+
+// The port box and its snap target are 24px / 40x30px in the expanded
+// rows; in the strip they must shrink with the row or they re-inflate it
+// (and the 30px snap targets of stacked sockets would overlap each
+// other). The colour/scale from OnshapeSocket is unchanged, so the dot
+// stays fully visible and unclipped inside its 14px row.
+.collapsed-socket :deep(.socket-container) {
+  height: 14px;
+}
+
+.collapsed-socket :deep(.socket) {
+  width: 12px;
+  height: 14px;
+}
+
+.collapsed-socket :deep(.snap-target) {
+  width: 20px;
+  height: 14px;
+  top: 0;
+  left: -4px;
 }
 </style>
