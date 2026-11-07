@@ -64,6 +64,10 @@ export class OnshapeNode extends ClassicPreset.Node implements DataflowNode {
    */
   public group: string | null = null;
 
+  /** Transient editor chrome (e.g. group Start/End boundary cards) that must
+   * be omitted from serialized graphs and snapshots. */
+  public transient = false;
+
   /** #14/#43: muted nodes emit nothing in codegen (toggled with M). Not serialized for ordinary nodes. A consumer of a muted node's value output fails validation naming both nodes; pass-through sockets (e.g. `context`) resolve through the muted node. See `graph-validation.ts`. */
   public muted = false;
 
