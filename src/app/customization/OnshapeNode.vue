@@ -192,6 +192,13 @@ export default defineComponent({
       if (type === "group-output" && Object.keys(this.data.inputs).length === 0) {
         return "No outputs exposed — use Group inputs and outputs.";
       }
+      if (
+        type === "group-instance" &&
+        Object.keys(this.data.inputs).length === 0 &&
+        Object.keys(this.data.outputs).length === 0
+      ) {
+        return "No inputs or outputs exposed — open the group to configure.";
+      }
       return null;
     }
   },
