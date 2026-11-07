@@ -15,14 +15,27 @@
  * They deliberately emit no FeatureScript: group expansion rewires the
  * instance's external connections directly to the cloned member sockets.
  */
-import { ClassicPreset } from "rete";
 import { OnshapeOutput } from "../inputoutput/onshapeoutput";
+import { OnshapeInput } from "../inputoutput/onshapeinput";
 import { OnshapeSocket } from "../onshapesockets";
 import { parseValueType } from "../../onshape-utils/valuetypes";
 import { OnshapeNode } from "./onshapenode";
 import type { GroupDefinition } from "../groups/groupmodel";
 
 export type GroupBoundaryRole = "input" | "output";
+
+/**
+ * Drag-to-create placeholder sockets (Blender-style). They are NOT group
+ * interface sockets: they never appear in a definition's saved
+ * `inputs`/`outputs`. Dragging the Start placeholder into a member input
+ * creates a real group input bound to that member (and vice versa for End);
+ * the placeholder itself remains for another drag. Their `unknown` value
+ * type is compatible with every member type.
+ */
+export const GROUP_INPUT_PLACEHOLDER_KEY = "__group_input_placeholder";
+export const GROUP_OUTPUT_PLACEHOLDER_KEY = "__group_output_placeholder";
+export const GROUP_INPUT_PLACEHOLDER_LABEL = "+ Input";
+export const GROUP_OUTPUT_PLACEHOLDER_LABEL = "+ Output";
 
 export abstract class GroupBoundaryNode extends OnshapeNode {
     protected definition: GroupDefinition;
@@ -86,6 +99,14 @@ export class GroupInputNode extends GroupBoundaryNode {
                 ),
             );
         }
+        // Drag-to-create placeholder (not a saved interface socket).
+        this.addOutput(
+            GROUP_INPUT_PLACEHOLDER_KEY,
+            new OnshapeOutput(
+                new OnshapeSocket(GROUP_INPUT_PLACEHOLDER_LABEL, parseValueType("unknown")),
+                GROUP_INPUT_PLACEHOLDER_LABEL,
+            ),
+        );
     }
 }
 
@@ -101,13 +122,26 @@ export class GroupOutputNode extends GroupBoundaryNode {
             this.removeInput(key);
         }
         for (const socket of this.definition.outputs) {
-            this.addInput(
-                socket.id,
-                new ClassicPreset.Input(
-                    new OnshapeSocket(socket.label, socketValueType(socket.valueType)),
-                    socket.label,
-                ),
+            const input = new OnshapeInput(
+                new OnshapeSocket(socket.label, socketValueType(socket.valueType)),
+                socket.label,
+                socket.valueType ?? "unknown",
             );
+            // A boundary output is a destination port, not an editable
+            // feature parameter: show its label but no control.
+            input.showControl = false;
+            input.showLabel = true;
+            this.addInput(socket.id, input);
         }
+        // Drag-to-create placeholder, rendered like a feature input with
+        // its label visible (no control).
+        const placeholder = new OnshapeInput(
+            new OnshapeSocket(GROUP_OUTPUT_PLACEHOLDER_LABEL, parseValueType("unknown")),
+            GROUP_OUTPUT_PLACEHOLDER_LABEL,
+            "unknown",
+        );
+        placeholder.showControl = false;
+        placeholder.showLabel = true;
+        this.addInput(GROUP_OUTPUT_PLACEHOLDER_KEY, placeholder);
     }
 }

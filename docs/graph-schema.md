@@ -79,7 +79,14 @@ optional `boundaryNodes` object (`inputId`, `outputId`, `inputPosition`,
 top-level nodes, and `inputs`/`outputs` remain the single source of truth for
 sockets. A document without `boundaryNodes` loads by deriving stable ids
 from the definition id. Add/rename/retype/remove of boundary sockets go
-through the definition's socket arrays exactly as before.
+through the definition's socket arrays exactly as before. A boundary socket's
+`nodeId`/`socketKey` binding is optional: an arbitrary interface socket may be
+created unbound (label + value type, `unknown` = any) and bound later by
+dragging a wire to/from the Start/End card; removing the wire unbinds it while
+the socket remains. An unbound input is allowed unused; an unbound output is
+a build error. The Start card also shows a `+ Input` and the End card a
+`+ Output` drag-to-create placeholder (`unknown`-typed); placeholders are
+never serialized as interface sockets.
 
 `nodeOrder` is the canvas paint order and nothing else. It is one list for the
 whole graph rather than a per-node `order` ordinal, because a single list cannot

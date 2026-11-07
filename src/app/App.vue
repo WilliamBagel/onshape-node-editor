@@ -530,6 +530,11 @@ export default defineComponent({
       await this.controls?.addGroupBoundarySocket(payload.direction, payload.nodeId, payload.socketKey);
       this.refreshGroupBoundaryState();
     },
+    /** Group config: create an arbitrary (unbound) socket, then refresh. */
+    async onGroupConfigAddAny(payload: { direction: 'input' | 'output'; label: string; valueType: string }) {
+      await this.controls?.addGroupBoundarySocketAny(payload.direction, payload.label, payload.valueType);
+      this.refreshGroupBoundaryState();
+    },
     /** Group config: remove a boundary socket, then refresh. */
     async onGroupConfigRemove(payload: { socketId: string; direction: 'input' | 'output' }) {
       await this.controls?.removeGroupBoundarySocket(payload.socketId, payload.direction);
@@ -584,6 +589,7 @@ export default defineComponent({
     :state="groupBoundaryState"
     @update="onGroupConfigUpdate"
     @add="onGroupConfigAdd"
+    @add-any="onGroupConfigAddAny"
     @remove="onGroupConfigRemove"
     @close="closeGroupConfigPanel"
   />

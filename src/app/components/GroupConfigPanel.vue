@@ -22,6 +22,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update', payload: { socketId: string; direction: 'input' | 'output'; patch: { label?: string; valueType?: string } }): void
   (e: 'add', payload: { direction: 'input' | 'output'; nodeId: string; socketKey: string }): void
+  (e: 'add-any', payload: { direction: 'input' | 'output'; label: string; valueType: string }): void
   (e: 'remove', payload: { socketId: string; direction: 'input' | 'output' }): void
   (e: 'close'): void
 }>()
@@ -64,12 +65,19 @@ function rowKey(socket: GroupSocketDefinition): string {
   return `${socket.direction}:${socket.id}`
 }
 
+function isBound(socket: GroupSocketDefinition): boolean {
+  return socket.nodeId != null && socket.socketKey != null
+}
+
 function sourceLabel(socket: GroupSocketDefinition): string {
+  if (!isBound(socket)) {
+    return 'Unbound — drag it onto a member node to bind it'
+  }
   const all = props.state?.candidates
   const found = [...(all?.inputs ?? []), ...(all?.outputs ?? [])].find(
     (c) => c.nodeId === socket.nodeId && c.socketKey === socket.socketKey,
   )
-  return found != null ? `${found.nodeTitle} › ${found.label}` : socket.socketKey
+  return found != null ? `${found.nodeTitle} › ${found.label}` : socket.socketKey ?? ''
 }
 
 /** Debounce-free path: rename emits on blur, retype emits on change. */
@@ -111,6 +119,20 @@ function addSelected(direction: 'input' | 'output'): void {
   emit('add', { direction, nodeId, socketKey })
   if (direction === 'input') selectedInput.value = ''
   else selectedOutput.value = ''
+}
+
+const anyInputLabel = ref('')
+const anyOutputLabel = ref('')
+const anyInputType = ref('unknown')
+const anyOutputType = ref('unknown')
+
+/** Create an arbitrary (unbound) socket; the user binds it by dragging. */
+function addAny(direction: 'input' | 'output'): void {
+  const label = direction === 'input' ? anyInputLabel.value : anyOutputLabel.value
+  const valueType = direction === 'input' ? anyInputType.value : anyOutputType.value
+  emit('add-any', { direction, label: label.trim() || (direction === 'input' ? 'input' : 'output'), valueType })
+  if (direction === 'input') anyInputLabel.value = ''
+  else anyOutputLabel.value = ''
 }
 
 function removeSocket(socket: GroupSocketDefinition): void {
@@ -156,6 +178,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
         v-for="socket in state.inputs"
         :key="rowKey(socket)"
         data-testid="group-input-row"
+        :data-bound="isBound(socket)"
         class="socket-row"
       >
         <input
@@ -173,7 +196,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
         >
           <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
         </select>
-        <span class="source-label" :title="`Bound to ${socket.nodeId}.${socket.socketKey}`">
+        <span class="source-label" :title="isBound(socket) ? `Bound to ${socket.nodeId}.${socket.socketKey}` : 'Unbound'">
           {{ sourceLabel(socket) }}
         </span>
         <button
@@ -209,6 +232,31 @@ function removeSocket(socket: GroupSocketDefinition): void {
           + Input
         </button>
       </div>
+      <div class="add-row">
+        <input
+          v-model="anyInputLabel"
+          class="name-input"
+          type="text"
+          placeholder="New input name…"
+          aria-label="Label for a new arbitrary group input"
+        />
+        <select
+          v-model="anyInputType"
+          class="type-select"
+          aria-label="Type for a new arbitrary group input"
+        >
+          <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
+        </select>
+        <button
+          type="button"
+          data-testid="group-add-any-input"
+          class="add-btn"
+          aria-label="Add a new unbound group input"
+          @click="addAny('input')"
+        >
+          + Any input
+        </button>
+      </div>
     </section>
 
     <section aria-labelledby="group-outputs-heading">
@@ -220,6 +268,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
         v-for="socket in state.outputs"
         :key="rowKey(socket)"
         data-testid="group-output-row"
+        :data-bound="isBound(socket)"
         class="socket-row"
       >
         <input
@@ -237,7 +286,7 @@ function removeSocket(socket: GroupSocketDefinition): void {
         >
           <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
         </select>
-        <span class="source-label" :title="`Bound to ${socket.nodeId}.${socket.socketKey}`">
+        <span class="source-label" :title="isBound(socket) ? `Bound to ${socket.nodeId}.${socket.socketKey}` : 'Unbound'">
           {{ sourceLabel(socket) }}
         </span>
         <button
@@ -271,6 +320,31 @@ function removeSocket(socket: GroupSocketDefinition): void {
           @click="addSelected('output')"
         >
           + Output
+        </button>
+      </div>
+      <div class="add-row">
+        <input
+          v-model="anyOutputLabel"
+          class="name-input"
+          type="text"
+          placeholder="New output name…"
+          aria-label="Label for a new arbitrary group output"
+        />
+        <select
+          v-model="anyOutputType"
+          class="type-select"
+          aria-label="Type for a new arbitrary group output"
+        >
+          <option v-for="t in VALUE_TYPES" :key="t" :value="t">{{ t }}</option>
+        </select>
+        <button
+          type="button"
+          data-testid="group-add-any-output"
+          class="add-btn"
+          aria-label="Add a new unbound group output"
+          @click="addAny('output')"
+        >
+          + Any output
         </button>
       </div>
     </section>

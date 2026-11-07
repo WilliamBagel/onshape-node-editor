@@ -17,7 +17,7 @@
 import type { NodeEditor } from "rete";
 import type { Schemes } from "../types";
 import { GroupNode } from "../nodes/groupinstancenode";
-import { GroupInputNode, GroupOutputNode } from "../nodes/groupboundarynode";
+import { GroupInputNode, GroupOutputNode, GROUP_INPUT_PLACEHOLDER_KEY, GROUP_OUTPUT_PLACEHOLDER_KEY } from "../nodes/groupboundarynode";
 import type { OnshapeNode } from "../nodes/onshapenode";
 import { FrameNode } from "../nodes/framenode";
 import { Connection } from "../types";
@@ -25,9 +25,13 @@ import { StyleSettings } from "../stylesettings";
 import { connectGraphNodes } from "../serialization/graph-serializer";
 import {
     addGroupSocket,
+    bindGroupSocket,
+    createAnyGroupSocket,
     ensureBoundaryNodes,
+    isGroupSocketBound,
     listGroupSocketCandidates,
     removeGroupSocket,
+    unbindGroupSocket,
     updateGroupSocket,
     type GroupDefinition,
     type GroupSocketCandidate,
@@ -82,11 +86,29 @@ export class GroupEditorController {
     private readonly levels: EditLevel[] = [];
     private groupInput: GroupInputNode | null = null;
     private groupOutput: GroupOutputNode | null = null;
+    /**
+     * Re-entrancy guard: while the controller itself removes/recreates
+     * boundary connections (refresh, placeholder replacement, enter/exit
+     * teardown), boundary sync must not reinterpret those as user drags —
+     * otherwise a refresh would unbind the very sockets it is restoring.
+     */
+    private suspendBoundarySync = false;
 
     constructor(
         private readonly editor: NodeEditor<Schemes>,
         private readonly host: GroupEditHost,
-    ) {}
+    ) {
+        // User wiring is authoritative: teach the definition from boundary
+        // connections the user draws while editing (see the handlers below).
+        this.editor.addPipe(async (context) => {
+            if (context.type === "connectioncreated") {
+                await this.onBoundaryConnectionCreated(context.data);
+            } else if (context.type === "connectionremove") {
+                this.onBoundaryConnectionRemoved(context.data);
+            }
+            return context;
+        });
+    }
 
     /** Breadcrumb trail, outermost first: ["Top level", ...group names]. */
     breadcrumb(): string[] {
@@ -120,8 +142,14 @@ export class GroupEditorController {
         this.levels.push(level);
 
         // Connections first: `removeNode` alone leaves them behind.
-        for (const connection of [...this.editor.getConnections()]) {
-            await this.editor.removeConnection(connection.id);
+        // Suspended: tearing down the outer view must not unbind its wires.
+        this.suspendBoundarySync = true;
+        try {
+            for (const connection of [...this.editor.getConnections()]) {
+                await this.editor.removeConnection(connection.id);
+            }
+        } finally {
+            this.suspendBoundarySync = false;
         }
         // Frames must be removed last: the scopes plugin refuses to remove a
         // parent while it still has children. A group instance inside a frame
@@ -235,6 +263,161 @@ export class GroupEditorController {
         return true;
     }
 
+    /** Rebuild every instance's exposed sockets from the definition. */
+    private syncBoundaryInstances(definition: GroupDefinition): void {
+        for (const node of this.editor.getNodes()) {
+            if (node instanceof GroupNode && node.definitionId === definition.id) {
+                node.rebuildSockets();
+                void this.host.updateNode?.(node.id);
+            }
+        }
+    }
+
+    /** Add one editor connection (with graph-engine wiring) between nodes. */
+    private async connect(
+        source: OnshapeNode,
+        sourceOutput: string,
+        target: OnshapeNode,
+        targetInput: string,
+    ): Promise<void> {
+        const rebuilt = new Connection(
+            source,
+            sourceOutput,
+            source.outputs[sourceOutput]?.socket.name ?? sourceOutput,
+            target,
+            targetInput,
+            target.inputs[targetInput]?.socket.name ?? targetInput,
+            new StyleSettings(),
+        );
+        await this.editor.addConnection(rebuilt);
+        connectGraphNodes(this.editor, rebuilt);
+    }
+
+    /**
+     * A user drew a connection while editing. Boundary connections teach the
+     * definition (Blender semantics):
+     * - placeholder drag: create a real interface socket bound to the member
+     *   socket and replace the temporary connection with the real one;
+     * - existing interface socket drag: (re)bind that socket to the member.
+     * Member-to-member connections are untouched.
+     */
+    private async onBoundaryConnectionCreated(connection: {
+        id: string;
+        source: string;
+        sourceOutput: string;
+        target: string;
+        targetInput: string;
+    }): Promise<void> {
+        if (this.suspendBoundarySync) return;
+        const level = this.levels[this.levels.length - 1];
+        if (level == null || this.groupInput == null || this.groupOutput == null) return;
+        const definition = level.definition;
+
+        if (connection.source === this.groupInput.id) {
+            const member = this.editor.getNode(connection.target);
+            if (member == null || member === this.groupOutput) return;
+            if (connection.sourceOutput === GROUP_INPUT_PLACEHOLDER_KEY) {
+                const socket = addGroupSocket(definition, "input", member.id, connection.targetInput);
+                if (socket != null) {
+                    this.groupInput.rebuildSockets();
+                    this.syncBoundaryInstances(definition);
+                    await this.host.updateNode?.(this.groupInput.id);
+                }
+                // Replace the temporary placeholder connection with the real
+                // boundary connection (or drop it if that member input is
+                // already exposed). Suspended so the sync above does not
+                // reinterpret our own rewiring as another user drag.
+                this.suspendBoundarySync = true;
+                try {
+                    await this.editor.removeConnection(connection.id);
+                    if (socket != null) {
+                        await this.connect(this.groupInput, socket.id, member, connection.targetInput);
+                    }
+                } finally {
+                    this.suspendBoundarySync = false;
+                }
+                return;
+            }
+            if (definition.inputs.some((entry) => entry.id === connection.sourceOutput)) {
+                bindGroupSocket(definition, connection.sourceOutput, member.id, connection.targetInput, "input");
+            }
+            return;
+        }
+
+        if (connection.target === this.groupOutput.id) {
+            const member = this.editor.getNode(connection.source);
+            if (member == null || member === this.groupInput) return;
+            if (connection.targetInput === GROUP_OUTPUT_PLACEHOLDER_KEY) {
+                const socket = addGroupSocket(definition, "output", member.id, connection.sourceOutput);
+                if (socket != null) {
+                    this.groupOutput.rebuildSockets();
+                    this.syncBoundaryInstances(definition);
+                    await this.host.updateNode?.(this.groupOutput.id);
+                }
+                this.suspendBoundarySync = true;
+                try {
+                    await this.editor.removeConnection(connection.id);
+                    if (socket != null) {
+                        await this.connect(member, connection.sourceOutput, this.groupOutput, socket.id);
+                    }
+                } finally {
+                    this.suspendBoundarySync = false;
+                }
+                return;
+            }
+            if (definition.outputs.some((entry) => entry.id === connection.targetInput)) {
+                bindGroupSocket(definition, connection.targetInput, member.id, connection.sourceOutput, "output");
+            }
+        }
+    }
+
+    /**
+     * A user removed a connection while editing. If it was the wire feeding
+     * a boundary socket's current binding, that socket becomes unbound (the
+     * interface socket itself remains). The binding-match check matters when
+     * a wire is dragged to a new member: the new connection rebinds first,
+     * so removing the old wire must not unbind the new binding.
+     */
+    private onBoundaryConnectionRemoved(connection: {
+        source: string;
+        sourceOutput: string;
+        target: string;
+        targetInput: string;
+    }): void {
+        if (this.suspendBoundarySync) return;
+        const level = this.levels[this.levels.length - 1];
+        if (level == null || this.groupInput == null || this.groupOutput == null) return;
+        const definition = level.definition;
+        if (connection.source === this.groupInput.id) {
+            const socket = definition.inputs.find((entry) => entry.id === connection.sourceOutput);
+            if (socket != null && isGroupSocketBound(socket)
+                && socket.nodeId === connection.target && socket.socketKey === connection.targetInput) {
+                unbindGroupSocket(definition, socket.id, "input");
+            }
+            return;
+        }
+        if (connection.target === this.groupOutput.id) {
+            const socket = definition.outputs.find((entry) => entry.id === connection.targetInput);
+            if (socket != null && isGroupSocketBound(socket)
+                && socket.nodeId === connection.source && socket.socketKey === connection.sourceOutput) {
+                unbindGroupSocket(definition, socket.id, "output");
+            }
+        }
+    }
+
+    /** Add an arbitrary (unbound) boundary socket with a chosen label/type. */
+    async addBoundarySocketAny(
+        direction: "input" | "output",
+        label: string,
+        valueType = "unknown",
+    ): Promise<boolean> {
+        const level = this.levels[this.levels.length - 1];
+        if (level == null) return false;
+        createAnyGroupSocket(level.definition, direction, label, valueType);
+        await this.refreshBoundary();
+        return true;
+    }
+
     /** Recreate/repaint the Start Feature and End Feature cards and their wiring. */
     async refreshBoundary(): Promise<void> {
         const definition = this.currentDefinition;
@@ -286,44 +469,34 @@ export class GroupEditorController {
 
     private async rebuildBoundaryWiring(): Promise<void> {
         if (this.groupInput == null || this.groupOutput == null) return;
-        const boundaryIds = new Set([this.groupInput.id, this.groupOutput.id]);
-        for (const connection of [...this.editor.getConnections()]) {
-            if (boundaryIds.has(connection.source) || boundaryIds.has(connection.target)) {
-                await this.editor.removeConnection(connection.id);
+        // Suspended: this restores exactly the saved boundary connections;
+        // the sync must not read our own deletions as user unbinds.
+        this.suspendBoundarySync = true;
+        try {
+            const boundaryIds = new Set([this.groupInput.id, this.groupOutput.id]);
+            for (const connection of [...this.editor.getConnections()]) {
+                if (boundaryIds.has(connection.source) || boundaryIds.has(connection.target)) {
+                    await this.editor.removeConnection(connection.id);
+                }
             }
-        }
-        const styleSettings = new StyleSettings();
-        const connect = async (
-            source: OnshapeNode,
-            sourceOutput: string,
-            target: OnshapeNode,
-            targetInput: string,
-        ): Promise<void> => {
-            const rebuilt = new Connection(
-                source,
-                sourceOutput,
-                source.outputs[sourceOutput]?.socket.name ?? sourceOutput,
-                target,
-                targetInput,
-                target.inputs[targetInput]?.socket.name ?? targetInput,
-                styleSettings,
-            );
-            await this.editor.addConnection(rebuilt);
-            connectGraphNodes(this.editor, rebuilt);
-        };
-        const definition = this.currentDefinition;
-        if (definition == null) return;
-        for (const socket of definition.inputs) {
-            const member = this.editor.getNode(socket.nodeId);
-            if (member != null && member.inputs[socket.socketKey] != null) {
-                await connect(this.groupInput, socket.id, member, socket.socketKey);
+            const definition = this.currentDefinition;
+            if (definition == null) return;
+            for (const socket of definition.inputs) {
+                if (!isGroupSocketBound(socket)) continue;
+                const member = this.editor.getNode(socket.nodeId);
+                if (member != null && member.inputs[socket.socketKey] != null) {
+                    await this.connect(this.groupInput, socket.id, member, socket.socketKey);
+                }
             }
-        }
-        for (const socket of definition.outputs) {
-            const member = this.editor.getNode(socket.nodeId);
-            if (member != null && member.outputs[socket.socketKey] != null) {
-                await connect(member, socket.socketKey, this.groupOutput, socket.id);
+            for (const socket of definition.outputs) {
+                if (!isGroupSocketBound(socket)) continue;
+                const member = this.editor.getNode(socket.nodeId);
+                if (member != null && member.outputs[socket.socketKey] != null) {
+                    await this.connect(member, socket.socketKey, this.groupOutput, socket.id);
+                }
             }
+        } finally {
+            this.suspendBoundarySync = false;
         }
     }
 
@@ -362,8 +535,13 @@ export class GroupEditorController {
                 targetInput: connection.targetInput,
             }));
 
-        for (const connection of [...this.editor.getConnections()]) {
-            await this.editor.removeConnection(connection.id);
+        this.suspendBoundarySync = true;
+        try {
+            for (const connection of [...this.editor.getConnections()]) {
+                await this.editor.removeConnection(connection.id);
+            }
+        } finally {
+            this.suspendBoundarySync = false;
         }
         for (const current of [...this.editor.getNodes()]) {
             await this.editor.removeNode(current.id);

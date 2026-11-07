@@ -124,6 +124,8 @@ export type EditorControls = {
     isGroupBoundaryNode: (nodeId: string) => boolean
     /** #14: expose one member socket as a group input/output. */
     addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
+    /** #14: create an arbitrary (unbound) group input/output. */
+    addGroupBoundarySocketAny: (direction: "input" | "output", label: string, valueType?: string) => Promise<boolean>
     /** #14: rename or retype an existing group boundary socket. */
     updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
     /** #14: remove a group boundary socket. */
@@ -181,6 +183,8 @@ type EditorBaseInfo = {
     isGroupBoundaryNode: (nodeId: string) => boolean
     /** #14: expose one member socket as a group input/output. */
     addGroupBoundarySocket: (direction: "input" | "output", nodeId: string, socketKey: string) => Promise<boolean>
+    /** #14: create an arbitrary (unbound) group input/output. */
+    addGroupBoundarySocketAny: (direction: "input" | "output", label: string, valueType?: string) => Promise<boolean>
     /** #14: rename or retype an existing group boundary socket. */
     updateGroupBoundarySocket: (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output") => Promise<boolean>
     /** #14: remove a group boundary socket. */
@@ -865,6 +869,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     const isGroupBoundaryNode = (nodeId: string): boolean => groupController.isBoundaryNode(nodeId);
     const addGroupBoundarySocket = (direction: "input" | "output", nodeId: string, socketKey: string): Promise<boolean> =>
         groupController.addBoundarySocket(direction, nodeId, socketKey);
+    const addGroupBoundarySocketAny = (direction: "input" | "output", label: string, valueType = "unknown"): Promise<boolean> =>
+        groupController.addBoundarySocketAny(direction, label, valueType);
     const updateGroupBoundarySocket = (socketId: string, patch: GroupSocketPatch, direction?: "input" | "output"): Promise<boolean> =>
         groupController.updateBoundarySocket(socketId, patch, direction);
     const removeGroupBoundarySocket = (socketId: string, direction?: "input" | "output"): Promise<boolean> =>
@@ -1162,6 +1168,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         getGroupBoundaryState,
         isGroupBoundaryNode,
         addGroupBoundarySocket,
+        addGroupBoundarySocketAny,
         updateGroupBoundarySocket,
         removeGroupBoundarySocket,
         applyPreferences,

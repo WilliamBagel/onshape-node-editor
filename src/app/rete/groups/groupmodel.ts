@@ -18,19 +18,32 @@ import type { OnshapeNode } from "../nodes/onshapenode";
 import type { SerializedConnection, Vec2 } from "../serialization/graph-schema-types";
 
 export interface GroupSocketDefinition {
-    /** Stable id, also the instance node's socket key: `${nodeId}.${socketKey}`. */
+    /** Stable id, also the instance node's socket key: `${nodeId}.${socketKey}` when bound. */
     id: string;
     /** Display label on the instance node; defaults to the member socket key. */
     label: string;
     direction: "input" | "output";
-    /** Id of the member node this socket is bound to. */
-    nodeId: string;
+    /**
+     * Id of the member node this socket is bound to. Optional: an arbitrary
+     * interface socket may exist without a member binding yet (Blender-style)
+     * and is then "unbound" — it still shows on the Start/End card and on
+     * instances, and can be bound later by dragging a wire to/from it.
+     * Unbound inputs are allowed unused; unbound outputs are a build error.
+     */
+    nodeId?: string;
     /** Socket key on that member node. */
-    socketKey: string;
+    socketKey?: string;
     /** FeatureScript value type label, for the instance socket's type. */
     valueType?: string;
     /** Literal emitted when an instance leaves this input unconnected. */
     defaultLiteral?: string;
+}
+
+/** Whether this interface socket is bound to a member socket. */
+export function isGroupSocketBound(
+    socket: GroupSocketDefinition,
+): socket is GroupSocketDefinition & { nodeId: string; socketKey: string } {
+    return socket.nodeId != null && socket.socketKey != null;
 }
 
 /** A member socket that can still become a group boundary socket. */
@@ -191,6 +204,72 @@ export function addGroupSocket(
     };
     list.push(result);
     return result;
+}
+
+/**
+ * Create an arbitrary interface socket with no member binding yet
+ * (Blender-style: the parameter/return exists first, wiring comes later).
+ * `valueType` defaults to `unknown` ("any"), which the value-type model
+ * treats as compatible with every member type — no feature-spec
+ * enum/parameter constraints apply.
+ */
+export function createAnyGroupSocket(
+    definition: GroupDefinition,
+    direction: "input" | "output",
+    label: string,
+    valueType = "unknown",
+): GroupSocketDefinition {
+    const list = direction === "input" ? definition.inputs : definition.outputs;
+    const cleaned = label.trim() || (direction === "input" ? "input" : "output");
+    const base = `${definition.id}.${direction}.${sanitizeFsIdentifier(cleaned, direction)}`;
+    let id = base;
+    let counter = 2;
+    while (list.some((entry) => entry.id === id)) {
+        id = `${base}_${counter}`;
+        counter += 1;
+    }
+    const socket: GroupSocketDefinition = {
+        id,
+        label: cleaned,
+        direction,
+        valueType,
+    };
+    list.push(socket);
+    return socket;
+}
+
+/** (Re)bind an interface socket to a member socket. Returns false if unknown. */
+export function bindGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    nodeId: string,
+    socketKey: string,
+    direction?: "input" | "output",
+): boolean {
+    const list = direction == null
+        ? [...definition.inputs, ...definition.outputs]
+        : direction === "input" ? definition.inputs : definition.outputs;
+    const socket = list.find((entry) => entry.id === socketId);
+    if (socket == null) return false;
+    socket.nodeId = nodeId;
+    socket.socketKey = socketKey;
+    return true;
+}
+
+/** Clear an interface socket's member binding; the socket itself remains. */
+export function unbindGroupSocket(
+    definition: GroupDefinition,
+    socketId: string,
+    direction?: "input" | "output",
+): boolean {
+    const list = direction == null
+        ? [...definition.inputs, ...definition.outputs]
+        : direction === "input" ? definition.inputs : definition.outputs;
+    const socket = list.find((entry) => entry.id === socketId);
+    if (socket == null) return false;
+    delete socket.nodeId;
+    delete socket.socketKey;
+    return true;
 }
 
 /** Rename and/or retype an existing boundary socket. */
@@ -462,6 +541,9 @@ export function validateGroupDefinition(
 ): string | null {
     const memberIds = new Set(definition.nodes.map((node) => node.id));
     for (const socket of [...definition.inputs, ...definition.outputs]) {
+        if (!isGroupSocketBound(socket)) {
+            continue; // arbitrary interface socket, bound later by wiring
+        }
         const member = definition.nodes.find((node) => node.id === socket.nodeId);
         if (member == null || !memberIds.has(socket.nodeId)) {
             return `Group "${definition.id}" boundary socket "${socket.id}" references missing member node "${socket.nodeId}".`;
@@ -696,7 +778,7 @@ export function groupFunctionSignature(definition: GroupDefinition): GroupFuncti
         if (consumedSockets.has(socket.id)) {
             continue;
         }
-        const desired = sanitizeFsIdentifier(socket.label, sanitizeFsIdentifier(socket.socketKey, "input"));
+        const desired = sanitizeFsIdentifier(socket.label, sanitizeFsIdentifier(socket.socketKey ?? socket.label, "input"));
         params.push({ socket, implicit: null, name: uniqueName(desired), fsType: fsTypeOf(socket) });
     }
     return {

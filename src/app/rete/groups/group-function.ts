@@ -460,6 +460,12 @@ function generateFunctionBody(
 
     // Return the boundary outputs (context/id pass-throughs excluded).
     const returnIdentifier = (socket: GroupSocketDefinition): string => {
+        if (socket.nodeId == null || socket.socketKey == null) {
+            throw new Error(
+                `Group "${definition.id}" boundary output "${socket.label}" (${socket.id}) is not bound to a member output; ` +
+                    `bind it by dragging a member output onto the End Feature before building.`,
+            );
+        }
         const member = byId.get(socket.nodeId);
         if (member == null || member.muted) {
             throw new Error(

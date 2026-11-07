@@ -33,6 +33,7 @@ import {
     groupFunctionSignature,
     groupResultVariable,
     groupUsesExpressionPath,
+    sanitizeFsIdentifier,
     type GroupDefinition,
 } from "../groups/groupmodel";
 import type { SerializedGroupInstanceNode, SerializedNodeBase } from "../serialization/graph-schema-types";
@@ -106,7 +107,7 @@ export class GroupNode extends OnshapeNode {
                 return variableMapping[param.implicit] ?? param.implicit;
             }
             const socket = param.socket as NonNullable<typeof param.socket>;
-            return variableMapping[socket.id] ?? socket.defaultLiteral ?? socket.socketKey;
+            return variableMapping[socket.id] ?? socket.defaultLiteral ?? socket.socketKey ?? sanitizeFsIdentifier(socket.label, "value");
         });
     }
 
@@ -142,7 +143,7 @@ export class GroupNode extends OnshapeNode {
             } else if (context.variableMapping[socket.id] != null) {
                 inputs[socket.id] = context.variableMapping[socket.id];
             } else {
-                inputs[socket.id] = socket.defaultLiteral ?? socket.socketKey;
+                inputs[socket.id] = socket.defaultLiteral ?? socket.socketKey ?? sanitizeFsIdentifier(socket.label, "value");
             }
         }
         const output = signature.valuedOutputs[0];
