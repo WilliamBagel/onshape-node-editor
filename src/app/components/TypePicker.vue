@@ -22,7 +22,7 @@ const props = withDefaults(
     testId?: string
   }>(),
   {
-    options: VALUE_TYPE_OPTIONS,
+    options: () => VALUE_TYPE_OPTIONS,
     ariaLabel: 'Value type',
     testId: 'type-picker',
   },

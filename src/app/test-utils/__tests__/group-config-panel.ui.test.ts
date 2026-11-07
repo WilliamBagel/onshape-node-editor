@@ -8,8 +8,7 @@ import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 
 import GroupConfigPanel from "../../components/GroupConfigPanel.vue";
-
-const VALUE_TYPES = ["unknown", "number", "ValueWithUnits", "boolean", "string", "Query", "Id", "Context", "Vector", "Matrix", "Transform", "CoordSystem", "map", "Enum", "array"];
+import { VALUE_TYPE_OPTIONS } from "../../components/valueTypeMeta";
 
 function buildState() {
   return {
@@ -102,16 +101,21 @@ describe("GroupConfigPanel", () => {
     wrapper.unmount();
   });
 
-  it("type selects offer the full value-type list and keep their values", () => {
+  it("type pickers offer the full value-type list and keep their values", async () => {
     const wrapper = mountPanel();
-    const selects = wrapper.findAll(".type-select");
-    // Two existing inputs, one existing output, one Add row per direction.
-    expect(selects).toHaveLength(5);
-    for (const select of selects) {
-      const options = select.findAll("option");
-      expect(options.map((option) => (option.element as HTMLOptionElement).value)).toEqual(VALUE_TYPES);
-    }
-    expect((selects[0].element as HTMLSelectElement).value).toBe("Query");
+    const pickers = wrapper.findAll('[data-testid="group-row-type-picker"]');
+    // Two existing inputs + one existing output row pickers, plus one Add
+    // row picker per direction.
+    expect(wrapper.findAll('[data-testid="group-add-input-type"]').length).toBe(1);
+    expect(wrapper.findAll('[data-testid="group-add-output-type"]').length).toBe(1);
+    expect(pickers).toHaveLength(3);
+    const firstLabel = pickers[0].find('[data-testid="group-row-type-picker-button"] .type-picker-label');
+    expect(firstLabel.text()).toBe("Query");
+    // Open the first picker: the listbox offers the shared option list.
+    await pickers[0].find('[data-testid="group-row-type-picker-button"]').trigger("click");
+    const options = wrapper.findAll('[data-testid="type-picker-option"]');
+    expect(options.map((option) => option.attributes("data-value"))).toEqual([...VALUE_TYPE_OPTIONS]);
+    expect(options.some((option) => option.attributes("data-value") === "numberValueWithUnits")).toBe(true);
     wrapper.unmount();
   });
 
@@ -120,8 +124,13 @@ describe("GroupConfigPanel", () => {
     const state = buildState();
     await wrapper.setProps({ state: state as never });
 
-    const typeSelect = wrapper.findAll(".type-select")[0];
-    await typeSelect.setValue("Id");
+    // Retype through the TypePicker: open, then pick "Id".
+    await wrapper.find('[data-testid="group-row-type-picker-button"]').trigger("click");
+    const idOption = wrapper
+      .findAll('[data-testid="type-picker-option"]')
+      .find((option) => option.attributes("data-value") === "Id");
+    expect(idOption).toBeDefined();
+    await idOption!.trigger("mousedown");
     expect(wrapper.emitted("update")).toHaveLength(1);
     expect(wrapper.emitted("update")?.[0]?.[0]).toMatchObject({
       socketId: "in-1",
@@ -164,7 +173,13 @@ describe("GroupConfigPanel", () => {
   it("Add output emits add-any with the chosen type", async () => {
     const wrapper = mountPanel();
     await wrapper.find('input[placeholder="New output name…"]').setValue("result");
-    await wrapper.findAll(".type-select").at(-1)!.setValue("Query");
+    // Choose Query via the add-output TypePicker.
+    await wrapper.find('[data-testid="group-add-output-type-button"]').trigger("click");
+    const queryOption = wrapper
+      .findAll('[data-testid="type-picker-option"]')
+      .find((option) => option.attributes("data-value") === "Query");
+    expect(queryOption).toBeDefined();
+    await queryOption!.trigger("mousedown");
     await findByTestId(wrapper, "group-add-output").trigger("click");
     expect(wrapper.emitted("add-any")).toHaveLength(1);
     expect(wrapper.emitted("add-any")?.[0]?.[0]).toMatchObject({ direction: "output", label: "result", valueType: "Query" });
@@ -175,10 +190,10 @@ describe("GroupConfigPanel", () => {
     const wrapper = mountPanel();
     // Add-input row starts as unknown -> socket ink; choosing Query swaps
     // the dot to --socket-query, the Query socket colour.
-    const inputDot = findByTestId(wrapper, "group-add-input-type-dot");
+    const inputDot = wrapper.find('[data-testid="group-add-input-type"] .type-picker-dot');
     expect(inputDot.attributes("style")).toContain("var(--socket-ink)");
     // The in-one row is Query-typed already.
-    const rowDots = wrapper.findAll('[data-testid="group-row-type-dot"]');
+    const rowDots = wrapper.findAll('[data-testid="group-row-type-picker"] .type-picker-dot');
     expect(rowDots[0].attributes("style")).toContain("var(--socket-query)");
     wrapper.unmount();
   });
