@@ -101,6 +101,26 @@ export function nextCollapsed(collapsed: boolean): boolean {
 }
 
 /**
+ * Default maximum socket rows on a collapsed node: 3. A collapsed card grows
+ * horizontally instead of vertically, so a Chamfer's 7 sockets form three
+ * columns of 3/3/1 rather than one long column. Inputs fill
+ * top-to-bottom and overflow rightwards; outputs fill top-to-bottom and
+ * overflow leftwards (each new column starts at its top row).
+ */
+export const COLLAPSED_SOCKET_MAX_ROWS = 3;
+
+/**
+ * Rows a collapsed socket group actually needs: one to the configured limit,
+ * never zero (a `repeat(0, …)` grid template is invalid CSS) and never more
+ * than the sockets present, so a one-socket group stays one 14px row.
+ */
+export function collapsedSocketRows(count: number, maxRows = COLLAPSED_SOCKET_MAX_ROWS): number {
+    const limit = Number.isFinite(maxRows) ? Math.max(1, Math.floor(maxRows)) : COLLAPSED_SOCKET_MAX_ROWS;
+    const n = Number.isFinite(count) ? Math.floor(count) : 0;
+    return Math.max(1, Math.min(n, limit));
+}
+
+/**
  * One socket to render on a collapsed node: exactly the same shape the
  * expanded `Ref` sockets carry (`side/key/btType/nodeId/payload`), so the
  * collapsed card keeps every connection point.

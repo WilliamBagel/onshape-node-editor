@@ -104,14 +104,22 @@ results.collapsed = await page.evaluate(() => {
     const strip = document.querySelector('[data-testid="collapsed-socket-strip"]');
     if (!strip) return null;
     const cols = (el) => {
+        if (!el) return null;
         const kids = [...el.children].map((k) => {
             const r = k.getBoundingClientRect();
-            return { x: r.x, y: r.y };
+            return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
         });
+        const uniq = (vals) => [...new Set(vals.map((v) => Math.round(v)))];
         return {
+            display: getComputedStyle(el).display,
             flexDirection: getComputedStyle(el).flexDirection,
+            direction: getComputedStyle(el).direction,
             rowGap: getComputedStyle(el).rowGap,
             count: kids.length,
+            rows: uniq(kids.map((k) => k.y)).length,
+            columns: uniq(kids.map((k) => k.x)).length,
+            firstColumnX: kids.length ? Math.min(...kids.map((k) => k.x)) : 0,
+            lastColumnX: kids.length ? Math.max(...kids.map((k) => k.x)) : 0,
             xSpread: kids.length ? Math.max(...kids.map((k) => k.x)) - Math.min(...kids.map((k) => k.x)) : 0,
             ySpread: kids.length ? Math.max(...kids.map((k) => k.y)) - Math.min(...kids.map((k) => k.y)) : 0,
         };
@@ -204,10 +212,11 @@ if (!results.typography.qtyFontFamily || /mono|courier/i.test(results.typography
 if (results.typography.qtyFontSize !== '13px') fail(`quantity size ${results.typography.qtyFontSize} != 13px`);
 const caretE = results.caret ? Number((results.caret.caretTransform.match(/matrix\(([^)]+)\)/) || [])[1]?.split(',')[4] ?? 0) : 0;
 if (!(caretE >= 2)) fail(`caret translateX ${caretE}px < 2`);
-if (!results.collapsed?.inCol || results.collapsed.inCol.flexDirection !== 'row') fail('collapsed input sockets are not a row');
-if (!results.collapsed?.inCol || Number(results.collapsed.inCol.rowGap.replace('px','')) > 2) fail('collapsed socket row gap > 2px');
-if (!results.collapsed?.inCol || results.collapsed.inCol.xSpread <= results.collapsed.inCol.ySpread) fail('collapsed sockets do not run horizontally');
-if (!results.collapsed?.strip || results.collapsed.strip.h > 32) fail(`collapsed strip height ${results.collapsed?.strip?.h}px > 32`);
+if (!results.collapsed?.inCol || results.collapsed.inCol.display !== 'grid') fail('collapsed input sockets are not a grid');
+if (!results.collapsed?.inCol || results.collapsed.inCol.rows > 3) fail(`collapsed input rows ${results.collapsed?.inCol?.rows} > 3`);
+if (!results.collapsed?.inCol || results.collapsed.inCol.columns < 2) fail('collapsed input sockets did not overflow into a column');
+if (!results.collapsed?.outCol || results.collapsed.outCol.direction !== 'rtl') fail('collapsed output columns do not grow leftwards');
+if (!results.collapsed?.strip || results.collapsed.strip.h > 52) fail(`collapsed strip height ${results.collapsed?.strip?.h}px > 52`);
 if (!selected || !/connection-node-selected/.test(selected.cls) || Number(selected.z) <= -5) fail(`selected connection not raised: ${JSON.stringify(selected)}`);
 results.failures = failures;
 writeFileSync(`${OUT}results.json`, JSON.stringify(results, null, 2));
