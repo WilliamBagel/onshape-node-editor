@@ -366,25 +366,39 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* The layer must out-rank the top toolbar: src/app/assets/main.css pins
+ * .toolbar at z-index 10000, and at the old z-index 60 the bar painted over the
+ * panel's first 36px — the header, title and close button looked clipped at the
+ * window top. The panel is a real dialog (role=dialog, scrim, Escape); the bar
+ * sits under the scrim with the rest of the app. */
 .docs-layer {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 10100;
   display: flex;
   justify-content: flex-end;
+  align-items: stretch;
   font-family: var(--font-sans);
   color: var(--ink);
 }
 .docs-scrim { position: absolute; inset: 0; background: var(--backdrop-scrim); }
+/* Inset docked sheet: a consistent 12px of window on every edge, 6px corners
+ * and a hairline on all four sides, so the panel reads as a sheet docked to the
+ * right rather than a slice of the window with a cut-off top. overflow:hidden
+ * clips the header/tabs inside the rounded frame; .docs-nav and .docs-article
+ * keep their own overflow-y scrolling. */
 .docs-panel {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(760px, 96vw);
-  height: 100%;
+  width: min(760px, calc(100vw - 24px));
+  margin: 12px;
+  min-height: 0;
   background: var(--surface);
-  border-left: 1px solid var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
   box-shadow: var(--shadow-1);
+  overflow: hidden;
 }
 .docs-head {
   flex: none;
