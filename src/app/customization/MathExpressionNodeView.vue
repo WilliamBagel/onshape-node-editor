@@ -9,7 +9,7 @@
     }"
   >
     <div class="math-header">
-      <span class="math-title" :title="data.source">{{ data.getTitle() }}</span>
+      <span class="math-title" data-testid="math-title" :title="data.source">{{ data.getTitle() }}</span>
       <button
         type="button"
         class="math-toggle"
@@ -19,6 +19,20 @@
       >
         {{ data.collapsed ? "▸" : "▾" }}
       </button>
+    </div>
+
+    <!-- The return socket sits at the node's top-right, outside the
+         collapsible body, so it stays connectable expanded and collapsed —
+         the same top-right position every Onshape node gives its outputs. -->
+    <div class="math-output-row" data-testid="math-output-row">
+      <span class="math-output-label">return</span>
+      <Ref
+        :key="'return-' + seed"
+        class="math-output-socket"
+        data-testid="math-return-socket"
+        :emit="emit"
+        :data="{ type: 'socket', side: 'output', key: 'return', btType: returnOutput()?.socket?.name ?? 'return', nodeId: data.id, payload: returnOutput() }"
+      />
     </div>
 
     <div class="math-body" v-if="!data.collapsed">
@@ -119,18 +133,11 @@
         >
           <Ref
             class="math-socket"
+            :data-testid="`math-input-socket-${key}`"
             :emit="emit"
             :data="{ type: 'socket', side: 'input', key, btType: input.socket?.name ?? key, nodeId: data.id, payload: input }"
           />
           <span class="math-socket-label">{{ key }}</span>
-        </div>
-        <div class="math-socket-row" v-for="[key, output] in outputs()" :key="key">
-          <span class="math-socket-label">{{ key }}</span>
-          <Ref
-            class="math-socket"
-            :emit="emit"
-            :data="{ type: 'socket', side: 'output', key, btType: output.socket?.name ?? key, nodeId: data.id, payload: output }"
-          />
         </div>
       </div>
     </div>
@@ -191,6 +198,10 @@ export default defineComponent({
     emit: { type: Function, required: true },
     width: { type: Number, required: true },
     height: { type: Number, required: true },
+    // rete-vue-plugin passes a fresh random seed on every node re-render;
+    // keying the return port on it remounts the socket component so its
+    // type label/colour follow a retyped output (same trick as OnshapeNode).
+    seed: { type: Number, default: 0 },
   },
   setup(props) {
     /**
@@ -295,7 +306,7 @@ export default defineComponent({
       cancelEdit,
       toggleCollapse,
       inputs: () => Object.entries(props.data.inputs),
-      outputs: () => Object.entries(props.data.outputs),
+      returnOutput: () => props.data.outputs["return"],
     };
   },
 });
@@ -307,6 +318,9 @@ export default defineComponent({
   border: 1px solid var(--border-hairline);
   border-radius: 5px;
   box-sizing: border-box;
+  /* Clip to the card: an overflowing child would otherwise inflate the
+     node width through the frame size observer. The port row's -1px offset
+     keeps the visible socket right against the border without spilling. */
   overflow: hidden;
 }
 
@@ -331,8 +345,13 @@ export default defineComponent({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-label);
+  /* Same 14px/700 sans title scale as every Onshape node (STYLE_GUIDE
+     Typography); the typeset expression is a title, not a literal. */
+  font-family: var(--font-sans, 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif);
+  font-size: var(--font-size-title, 14px);
+  font-weight: var(--font-weight-title, 700);
+  line-height: var(--line-height-title, 1.2);
+  color: var(--text-primary);
 }
 
 .math-toggle {
@@ -340,6 +359,32 @@ export default defineComponent({
   border: none;
   cursor: pointer;
   color: var(--text-secondary);
+}
+
+/* Return socket row: top-right, outside the collapsible body, so the port is
+   available expanded and collapsed and never overlaps the formula field. */
+.math-output-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 2px 0 0 8px;
+}
+
+.math-output-label {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-meta);
+  line-height: 1;
+  color: var(--text-primary);
+  opacity: var(--opacity-secondary);
+}
+
+/* Keep the 12px port box inside the card's right edge (overflow is clipped),
+   so the visible socket hugs the border without inflating the node width. */
+.math-output-socket {
+  margin-right: -1px;
 }
 
 .math-body {
