@@ -21,6 +21,9 @@ import type { GeneratedFeatureDescription } from './rete/graph-codegen';
 import { BuildLogStore, type LogSeverity } from './logging/buildlog';
 import NodePalette from './components/NodePalette.vue';
 import ActionPalette from './components/ActionPalette.vue';
+import DocumentationPanel from './components/DocumentationPanel.vue';
+import { onDocHelp, type DocHelpRequest } from './docs/help-request';
+import type { DocSectionId } from './docs/types';
 import GroupConfigPanel from './components/GroupConfigPanel.vue';
 import FeatureConfigPanel from './components/FeatureConfigPanel.vue';
 import type { DefineFeatureState } from './rete/nodes/definefeaturenode';
@@ -87,6 +90,7 @@ export default defineComponent({
     ActionPalette: ActionPalette,
     GroupConfigPanel: GroupConfigPanel,
     FeatureConfigPanel: FeatureConfigPanel,
+    DocumentationPanel: DocumentationPanel,
     ToolTip: ToolTip
   },
   // Options-API injection: `provide('app', this)` in `App.startVueApp()`.
@@ -125,6 +129,12 @@ export default defineComponent({
       debugGraphVersion: 0,
       debugGraphTimer: null as ReturnType<typeof setInterval> | null,
       debugGraphSignature: '',
+      /** Documentation panel: visibility, plus the section/topic it opens at. */
+      docsOpen: false,
+      docsSection: undefined as DocSectionId | undefined,
+      docsTopic: undefined as string | undefined,
+      /** Documentation: unsubscribe for the node help request bus. */
+      docHelpUnsubscribe: null as (() => void) | null,
       catalogEntries: defaultCatalog.entries
     }
   },
@@ -189,6 +199,9 @@ export default defineComponent({
   },
   async mounted() {
     window.addEventListener('keydown', this.onShortcutKeydown);
+    // Documentation: node cards request their topic through a small
+    // module-level bus (they are rendered by rete, not as App children).
+    this.docHelpUnsubscribe = onDocHelp((request: DocHelpRequest) => this.openDocs(request));
     // Blender-style: selecting a group's Start/End card opens the config
     // panel. Subscribes to the shared `selectedNodeIds` ref (no document
     // listeners); selecting an unrelated node never opens the panel.
@@ -224,6 +237,8 @@ export default defineComponent({
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.onShortcutKeydown);
+    this.docHelpUnsubscribe?.();
+    this.docHelpUnsubscribe = null;
   },
   methods: {
     /** The injected `App` instance (see the `inject: { app }` option above). */
@@ -535,18 +550,49 @@ export default defineComponent({
      * Leaving to the top level closes it. The canvas is never blocked.
      */
     async runToggleGroupEdit() {
-      this.groupBreadcrumb = await this.controls?.toggleGroupEdit() ?? [];
-      this.groupEditing = this.groupBreadcrumb.length > 1;
+      this.applyGroupBreadcrumb(await this.controls?.toggleGroupEdit() ?? []);
       if (this.groupEditing) {
-        this.refreshGroupBoundaryState();
-        this.groupPanelOpen = false;
         // The Start/End cards sit outside the member bounds; fit so the user
         // actually sees the group boundary instead of off-screen chrome.
         await this.controls?.fitView();
+      }
+    },
+    /**
+     * Group config: shared landing for Tab and the breadcrumb. Refreshing the
+     * boundary state keeps the panel honest; leaving a group always closes it.
+     */
+    applyGroupBreadcrumb(breadcrumb: string[]) {
+      this.groupBreadcrumb = breadcrumb;
+      this.groupEditing = breadcrumb.length > 1;
+      if (this.groupEditing) {
+        this.refreshGroupBoundaryState();
+        this.groupPanelOpen = false;
       } else {
         this.groupPanelOpen = false;
         this.groupBoundaryState = null;
       }
+    },
+    /**
+     * Topbar breadcrumb: leave groups until `depth` remain (segment index;
+     * 0 = top level). One-level Tab semantics live in runToggleGroupEdit and
+     * are untouched — this is the explicit "jump out to here" path.
+     */
+    async runExitGroupTo(depth: number) {
+      if (this.controls?.exitGroupTo == null) return;
+      this.applyGroupBreadcrumb(await this.controls.exitGroupTo(depth));
+      await this.controls.fitView();
+    },
+    /** Documentation: open the panel, optionally at a section/topic. */
+    openDocs(request: { topic?: string; section?: DocSectionId } = {}) {
+      this.docsSection = request.section;
+      this.docsTopic = request.topic;
+      this.docsOpen = true;
+    },
+    /** Documentation: close the panel and clear its target for the next open. */
+    closeDocs() {
+      this.docsOpen = false;
+      this.docsSection = undefined;
+      this.docsTopic = undefined;
     },
     /** Group config: toolbar button toggles the panel while editing a group. */
     toggleGroupConfigPanel() {
@@ -671,7 +717,8 @@ export default defineComponent({
 <template>
   <TopBar :project-name="graphName" :group-breadcrumb="groupBreadcrumb" :group-editing="groupEditing" :feature-selected="selectedDefineFeatureId != null" :log="logStore" @build="runBuild" @run="runRun" @save="runSave" @open="runOpen"
     @settings="runSettings" @upload="runUpload" @target="runSelectTarget" @new-graph="runNewGraph"
-    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" @toggle-group-config="toggleGroupConfigPanel" @toggle-feature-config="toggleFeatureConfigPanel" />
+    @run-target="runSelectPartStudioTarget" @locate-node="runLocateNode" @create-group="runCreateGroup" @toggle-group-config="toggleGroupConfigPanel" @toggle-feature-config="toggleFeatureConfigPanel"
+    @help="openDocs()" @exit-group="runToggleGroupEdit" @exit-group-to="runExitGroupTo" />
   <main class="rete" ref="rete"></main>
   <!-- Slim rail tabs: explicit, always-visible affordances for the two config
        panels, shown only when the matching panel is closed. -->
@@ -712,6 +759,12 @@ export default defineComponent({
   />
   <BottomBar :graph-name="graphName" @search="runSearch" />
   <LogPanel :store="logStore" />
+  <DocumentationPanel
+    :open="docsOpen"
+    :initial-section="docsSection"
+    :initial-topic="docsTopic"
+    @close="closeDocs"
+  />
   <ToolTip />
   <ActionPalette :open="actionsOpen" :bindings="bindings" :insertables="paletteInsertables" @select="onActionSelect" @insert="onActionInsert" @close="actionsOpen = false" />
   <NodePalette :open="paletteOpen" :insertables="paletteInsertables" @select="onPaletteSelect" @close="paletteOpen = false" />

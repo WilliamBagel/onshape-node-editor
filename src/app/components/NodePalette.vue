@@ -1,16 +1,17 @@
 <!-- NodePalette.vue — searchable, category-grouped insertable catalog (#8, #73).
-  Opened from the action palette / Ctrl-K; keyboard placement lands at
-  viewport centre. Covers every insertable node: node-able catalog
-  entries (statement, value, function, utility), array nodes, the math
-  expression node and group instances — ranked search over name,
-  category and description.
+  Opened from the action palette / the live "Add node" shortcut (Shift+A by
+  default, rebindable in Settings); keyboard placement lands at viewport
+  centre. Covers every insertable node: node-able catalog entries
+  (statement, value, function, utility), array nodes, the math expression
+  node and group instances — ranked search over name, category and
+  description.
   Styled per STYLE_GUIDE.md: white card, hairline, 14/13/12/11 scale, keycaps. -->
 <template>
   <div v-if="open" class="palette-backdrop" @click.self="close">
     <div ref="panel" class="palette" role="dialog" aria-modal="true" aria-label="Add node" @keydown="onPanelKeydown">
       <div class="palette-header">
         <h2 class="palette-title">Add node</h2>
-        <span class="palette-keycap">Ctrl K</span>
+        <span class="palette-keycap" data-testid="node-palette-keycap" :title="`Shortcut: ${addNodeBinding}`">{{ addNodeKeycap }}</span>
       </div>
       <input
         ref="search"
@@ -51,15 +52,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   groupInsertablesByCategory,
   searchPaletteInsertables,
   type PaletteInsertable,
 } from '../rete/catalog-node-factory'
+import { editorSettings } from '../ui/editorSettings'
 
 const props = defineProps<{ open: boolean; insertables: readonly PaletteInsertable[] }>()
 const emit = defineEmits<{ (e: 'select', item: PaletteInsertable): void; (e: 'close'): void }>()
+
+/**
+ * Live "Add node" binding. The settings store is framework-free, so the
+ * component subscribes to its change notifications and re-reads the binding
+ * after every rebind instead of caching a hardcoded label.
+ */
+const bindingsVersion = ref(0)
+let unsubscribe: (() => void) | null = null
+onMounted(() => {
+  unsubscribe = editorSettings.subscribe(() => { bindingsVersion.value += 1 })
+})
+onUnmounted(() => {
+  unsubscribe?.()
+  unsubscribe = null
+})
+
+const addNodeBinding = computed(() => {
+  void bindingsVersion.value
+  return editorSettings.getBindings().addNode
+})
+
+/** Render a canonical combo (`Shift+A`) the way the keycap has always read (`Shift A`). */
+function keycapLabel(combo: string): string {
+  return combo.split('+').map((part) => part.trim()).filter((part) => part !== '').join(' ')
+}
+
+const addNodeKeycap = computed(() => keycapLabel(addNodeBinding.value))
 
 const term = ref('')
 const activeKey = ref<string | null>(null)

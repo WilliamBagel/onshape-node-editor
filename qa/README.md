@@ -30,6 +30,7 @@ pnpm run smoke:qa-dashboard          # http + Playwright, sample report
 pnpm run qa:node-chrome              # node chrome regression check (needs a dev server; QA_URL optional)
 pnpm run qa:defects -- --url http://127.0.0.1:5173/onshape-node-editor/   # group-wire + palette defect checks (exits 1 on defects; --advisory to stay green)
 pnpm run qa:default-graph                     # default debug graph must open clean (exits 1 on invalid/orphaned nodes or console errors)
+pnpm run qa:build-validation                  # Build on the unwired default graph must fail, never log "Built FeatureScript" (boots vite on 5221; QA_URL skips the boot)
 QA_URL=http://127.0.0.1:5214/onshape-node-editor/ pnpm run qa:feature-panel   # feature/group toolbar + type-picker + live-I/O regression check (see below)
 pnpm run qa:report -- --report tmp/qa-runs/<id>/report.json --out qa/runs/<id>   # report.md (includes the Activity timeline)
 pnpm run qa:review -- --report tmp/qa-runs/<id>/report.json   # -> qa/runs/<id>/review-packet.md
@@ -103,6 +104,19 @@ errors. Exits 1 on any failure. The sample is sanitized on open
 (`sanitizeGraph` in `src/app/rete/graph-sanitize.ts`, also run by
 `loadGraph`); genuinely invalid/orphaned nodes are pruned and logged through
 the build log, validator failures are kept and reported, never swallowed.
+
+## Build validation check (`qa:build-validation`)
+
+`qa/harness/build-validation-check.mjs` — permanent regression check for the
+malformed-build defect. The default graph (two Chamfers, Define Feature, End
+Feature, no connections) flattens to the End Feature alone; the generator used
+to return a header plus one orphan `});` (181 bytes) and Build logged
+`Built FeatureScript (181 bytes)`. The check boots the app on port 5221 (or
+uses `QA_URL`), clicks Build on that unwired graph, and fails unless the Build
+entry is an **error** naming the missing Define Feature / End Feature chain,
+no `Built FeatureScript` entry appears, no malformed source is attached to the
+log, and `studioEvents.build()` itself rejects with that actionable message
+instead of resolving to source.
 
 ## Feature panel check (`qa:feature-panel`)
 

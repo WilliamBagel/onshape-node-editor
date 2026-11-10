@@ -1,12 +1,15 @@
 <template>
   <div id="feature-dialog" class="ns-dialog-panel feature-dialog node" :class="{ selected: data.selected, collapsed }" :style="{
-    'width': Number.isFinite(width) ? `${width}px` : '',
+    // Collapsed nodes are content-sized in BOTH axes: the inline width and
+    // max-width would cap the socket grid's overflow columns, so the card
+    // grows horizontally to fit them instead of clipping.
+    'width': !collapsed && Number.isFinite(width) ? `${width}px` : '',
     // Collapsed nodes are content-sized: skip the expanded height
     // entirely instead of pinning it inline and relying on
     // `height:auto !important` to beat it. Expanding restores it.
     'height': !collapsed && Number.isFinite(height) ? `${height}px` : '',
-    'min-width': Number.isFinite(data.minWidth) ? `${data.minWidth}px` : '',
-    'max-width': Number.isFinite(data.maxWidth) ? `${data.maxWidth}px` : ''
+    'min-width': collapsedMinWidth() != null ? `${collapsedMinWidth()}px` : '',
+    'max-width': !collapsed && Number.isFinite(data.maxWidth) ? `${data.maxWidth}px` : ''
   }" data-testid="node">
     <div class="feature-dialog-main ns-dialog-frame">
       <div class="ns-dialog-header" role="dialog" data-backdrop="false">
@@ -79,27 +82,34 @@
             @value-change="controlValueChange(input, $event)" />
         </template>
       </div>
-      <!-- Compact Blender-style socket strip while collapsed -->
+      <!-- Compact Blender-style socket strip while collapsed: up to three
+           rows per side, overflowing into extra columns (inputs right,
+           outputs left) instead of growing the card downwards. -->
       <div class="collapsed-socket-strip" v-if="collapsed" data-testid="collapsed-socket-strip"
-        :aria-label="`Collapsed ${title} — ${collapsedInputs.length + collapsedOutputs.length} sockets`">
-        <span class="collapsed-socket-group collapsed-socket-inputs">
+        :aria-label="`Collapsed ${title} — ${collapsedInputs().length + collapsedOutputs().length} sockets`">
+        <span class="collapsed-socket-group collapsed-socket-inputs"
+          :style="collapsedRowsStyle(collapsedInputs().length)">
           <Ref v-for="socket in collapsedInputs()" :key="'collapsed-in-' + socket.key + seed" class="collapsed-socket"
             :emit="proxyEmit"
             :data="{ type: 'socket', side: 'input', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
             data-testid="collapsed-input-socket" />
         </span>
-        <span class="collapsed-socket-group collapsed-socket-outputs">
+        <span class="collapsed-socket-group collapsed-socket-outputs"
+          :style="collapsedRowsStyle(collapsedOutputs().length)">
           <Ref v-for="socket in collapsedOutputs()" :key="'collapsed-out-' + socket.key + seed" class="collapsed-socket"
             :emit="proxyEmit"
             :data="{ type: 'socket', side: 'output', key: socket.key, btType: socket.btType, nodeId: data.id, payload: socket.payload }"
             data-testid="collapsed-output-socket" />
         </span>
       </div>
-      <div class="dialog-help-container"><a class="os-help-link os-center-content"
-          href="./probably-a-popup-here-instead.error" target="help" aria-label="Open FeatureScript help" title="Help"><svg class="os-svg-icon os-help-btn"
-            xmlns="http://www.w3.org/2000/svg">
+      <div class="dialog-help-container">
+        <button type="button" class="os-help-link os-center-content node-help-btn"
+          :aria-label="`Open documentation for ${title}`" :title="`Documentation: ${title}`"
+          @pointerdown.stop @click.stop="openNodeHelp">
+          <svg class="os-svg-icon os-help-btn" xmlns="http://www.w3.org/2000/svg">
             <use xlink:href="#svg-icon-help-button"></use>
-          </svg></a>
+          </svg>
+        </button>
       </div>
       <ResizeHandle @resize="onResize" @resize-end="onResizeEnd"></ResizeHandle>
     </div>
@@ -112,6 +122,7 @@ import { defineComponent } from 'vue'
 import type { PropType } from 'vue'
 import { Ref } from 'rete-vue-plugin'
 import ResizeHandle from '../components/ResizeHandle.vue'
+import { requestDocHelp } from '../docs/help-request'
 import OnshapeControl from './OnshapeControl.vue'
 import TranslateLock from '../components/TranslateLock.vue'
 import OnshapeInput from './OnshapeInput.vue'
@@ -121,8 +132,10 @@ import { OnshapeNode } from '../rete/nodes/onshapenode'
 import { OnshapeInput as OnshapeInputType } from '../rete/inputoutput/onshapeinput.js'
 import { OnshapeInput as OnshapeInputClass } from '../rete/inputoutput/onshapeinput.js';
 import {
+  COLLAPSED_SOCKET_MAX_ROWS,
   collectCollapsedOutputSockets,
   collectCollapsedSockets,
+  collapsedSocketRows,
   commitTitleEdit,
   nextCollapsed,
   shouldStartTitleEdit,
@@ -136,7 +149,13 @@ export default defineComponent({
       type: Object as PropType<OnshapeNode>
     },
     emit: Function,
-    seed: Number
+    seed: Number,
+    // Maximum socket rows in the collapsed grid (3 by default); overflow
+    // continues in new columns instead of making the card taller.
+    collapsedRows: {
+      type: Number,
+      default: COLLAPSED_SOCKET_MAX_ROWS,
+    },
   },
   data() {
     return {
@@ -163,6 +182,14 @@ export default defineComponent({
     }
   },
   methods: {
+    /**
+     * In-app help: ask the host to open the documentation at this node's
+     * topic (title resolved against the generated node topics; unknown
+     * titles fall back to the Nodes section). No browser window/tab.
+     */
+    openNodeHelp() {
+      requestDocHelp({ section: 'nodes', topic: this.title })
+    },
     visibleInputs(): Array<[string, OnshapeInputType<any>]> {
       // Method, not computed: graph nodes are raw model objects (markRaw),
       // so socket mutations are not reactive. `area.update('node')` rerenders
@@ -188,6 +215,23 @@ export default defineComponent({
     },
     collapsedOutputs(): any[] {
       return collectCollapsedOutputSockets(Object.fromEntries(this.outputs()) as any, this.data.id);
+    },
+    /**
+     * Grid template for one collapsed socket group: only as many rows as the
+     * sockets need (capped at the configured max, default 3). Inline because
+     * `repeat()` needs an integer and the two groups usually differ.
+     */
+    collapsedRowsStyle(count: number): Record<string, string> {
+      return { '--collapsed-socket-rows': String(collapsedSocketRows(count, this.collapsedRows)) };
+    },
+    /**
+     * Minimum card width. Collapsed cards keep their expanded width as the
+     * floor (so the title does not suddenly truncate) but may grow past it
+     * when the socket grid needs more columns.
+     */
+    collapsedMinWidth(): number | null {
+      const candidate = this.collapsed && Number.isFinite(this.width) ? this.width : this.data.minWidth;
+      return Number.isFinite(candidate) ? candidate : null;
     },
     /** Explain an empty Start/End card instead of leaving a blank body. */
     boundaryEmptyText(): string | null {
@@ -569,6 +613,27 @@ export default defineComponent({
   flex-direction: row-reverse;
 }
 
+/* In-app help: the node's help glyph is a real button (no navigation); the
+   vendored .os-help-link/.os-help-btn classes only supply the glyph box. */
+.node-help-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.node-help-btn:hover .os-help-btn {
+  opacity: 0.72;
+}
+
+.node-help-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .feature-dialog-main {
   position: relative;
   box-sizing: border-box;
@@ -582,11 +647,14 @@ export default defineComponent({
   top: 0px;
 }
 
-// A collapsed node is content-sized: the inline expanded height must not leave
-// a blank card under the socket strip. Re-expanding removes this class and
-// restores the stored expanded height.
+// A collapsed node is content-sized in BOTH axes: the inline expanded height
+// and width are skipped, and the max-width cap is lifted, so the socket grid
+// can overflow into extra columns without clipping. Re-expanding removes this
+// class and restores the stored expanded size.
 .node.collapsed {
   height: auto !important;
+  width: max-content !important;
+  max-width: none !important;
   min-height: 0;
 }
 
@@ -691,36 +759,48 @@ export default defineComponent({
   pointer-events: auto;
 }
 
-// Compact socket strip while collapsed: sockets run horizontally under the
-// header — inputs left-aligned, outputs right-aligned, wrapping only when a
-// node has too many sockets to fit one row. A vertical column looked like a
-// half-expanded card (seven inputs still produced a ~159px tall node with a
-// blank right side), so the strip is deliberately a row: header + one short
-// band, no reserved body space, wires still attach to every dot.
+// Compact socket grid while collapsed: sockets stack top-to-bottom in up to
+// three rows and then overflow sideways — inputs into columns to the RIGHT of
+// their block, outputs into columns to the LEFT of theirs — so a 7-socket
+// Chamfer stays short instead of turning into a tall half-expanded column.
+// The two blocks sit at opposite card edges (space-between) and each column
+// starts at its top row. Every Ref stays a live rete socket.
 .collapsed-socket-strip {
+  --collapsed-socket-rows: 3;
+  --collapsed-socket-row-height: 14px;
+  --collapsed-socket-column-width: 12px;
+  --collapsed-socket-row-gap: 2px;
+  --collapsed-socket-column-gap: 4px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 2px 6px;
+  gap: 2px 10px;
   min-height: 0;
   padding: 2px 6px 4px;
 }
 
 .collapsed-socket-group {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-rows: repeat(var(--collapsed-socket-rows), var(--collapsed-socket-row-height));
+  grid-auto-flow: column;
+  grid-auto-columns: var(--collapsed-socket-column-width);
+  row-gap: var(--collapsed-socket-row-gap);
+  column-gap: var(--collapsed-socket-column-gap);
   align-items: center;
-  gap: 2px 4px;
+  justify-items: center;
   min-width: 0;
 }
 
 .collapsed-socket-inputs {
+  // Column flow fills top-to-bottom, then adds columns to the right.
   margin-right: auto;
 }
 
 .collapsed-socket-outputs {
+  // direction: rtl makes the inline axis run right-to-left, so column flow
+  // fills top-to-bottom and adds overflow columns to the LEFT of the block.
+  direction: rtl;
   margin-left: auto;
 }
 
@@ -743,7 +823,9 @@ export default defineComponent({
 // rows; in the strip they must shrink with the row or they re-inflate it
 // (and the 30px snap targets of stacked sockets would overlap each
 // other). The colour/scale from OnshapeSocket is unchanged, so the dot
-// stays fully visible and unclipped inside its 14px row.
+// stays fully visible and unclipped inside its 14px row. The target is
+// 14px wide in a 12px column with a 4px gap, so neighbouring columns never
+// overlap and every collapsed socket stays individually connectable.
 .collapsed-socket :deep(.socket-container) {
   width: 12px;
   height: 14px;
@@ -755,9 +837,9 @@ export default defineComponent({
 }
 
 .collapsed-socket :deep(.snap-target) {
-  width: 20px;
+  width: 14px;
   height: 14px;
   top: 0;
-  left: -4px;
+  left: -1px;
 }
 </style>

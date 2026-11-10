@@ -54,17 +54,9 @@ import { GroupNode } from "./nodes/groupinstancenode";
 import { DefineFeatureNode, type DefineFeatureState } from "./nodes/definefeaturenode";
 import { assertGroupableSelection, commonGroupParent, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition, type GroupSocketPatch } from "./groups/groupmodel";
 import { GroupEditorController, type GroupBoundaryState } from "./groups/group-editor";
+import { isAccumulateHeld, modifierCheckKey } from "./selection-modifiers";
 
-/** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
-export function modifierCheckKey(modifier: string): string {
-    switch (modifier) {
-        case 'Control': return 'control';
-        case 'Shift': return 'Shift';
-        case 'Meta': return 'meta';
-        case 'Alt': return 'alt';
-        default: return modifier;
-    }
-}
+export { modifierCheckKey } from "./selection-modifiers";
 
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
@@ -119,6 +111,8 @@ export type EditorControls = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #14: Tab — enter the selected group instance, or exit one level. */
     toggleGroupEdit: () => Promise<string[]>
+    /** #14: topbar breadcrumb — exit until `depth` levels remain (0 = top level). */
+    exitGroupTo: (depth: number) => Promise<string[]>
     /** #14: Tab hint — true when Tab can actually enter/exit a group. */
     canToggleGroupEdit: () => boolean
     /** #14: M — mute the selected nodes; returns how many changed. */
@@ -195,6 +189,8 @@ type EditorBaseInfo = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #14: Tab — enter the selected group instance, or exit one level. */
     toggleGroupEdit: () => Promise<string[]>
+    /** #14: topbar breadcrumb — exit until `depth` levels remain (0 = top level). */
+    exitGroupTo: (depth: number) => Promise<string[]>
     /** #14: M — mute the selected nodes; returns how many changed. */
     toggleMuteSelected: () => Promise<number>
     /** #14: known group definitions, for placing another instance. */
@@ -577,8 +573,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
+            // Ctrl/Cmd are additive in addition to the configured modifier
+            // (Shift by default) — see selection-modifiers.ts. Background
+            // click deselection is rete's `unselectAll` and is unaffected.
             active: () => {
-                return checkKey(modifierCheckKey(editorSettings.getPreferences().accumulateModifier));
+                return isAccumulateHeld(checkKey, editorSettings.getPreferences().accumulateModifier);
             }
         }
     });
@@ -961,6 +960,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     const toggleGroupEdit = async (): Promise<string[]> => {
         await groupController.toggle(selectedInstanceId());
+        await settleConnections();
+        return groupController.breadcrumb();
+    };
+
+    /** Topbar breadcrumb: leave levels until `depth` remains (0 = top level). */
+    const exitGroupTo = async (depth: number): Promise<string[]> => {
+        await groupController.exitTo(depth);
         await settleConnections();
         return groupController.breadcrumb();
     };
@@ -1352,6 +1358,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         createFrameFromSelection,
         toggleFrameCollapsed,
         toggleGroupEdit,
+        exitGroupTo,
         canToggleGroupEdit,
         toggleMuteSelected,
         listGroupDefinitions,

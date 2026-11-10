@@ -213,6 +213,8 @@ export class EditorSettingsStore {
     private readonly storage: SettingsStorage;
     private readonly key: string;
     private persisted: PersistedEditorSettings;
+    /** Listeners notified after any persisted change (preference or binding). */
+    private readonly listeners = new Set<() => void>();
 
     constructor(storage: SettingsStorage = new MemoryStorage(), key: string = EDITOR_SETTINGS_KEY) {
         this.storage = storage;
@@ -245,6 +247,30 @@ export class EditorSettingsStore {
         } catch {
             // Storage may be unavailable (private mode); in-memory state still applies.
         }
+        this.notify();
+    }
+
+    /** Notify every subscriber; a throwing listener must not break the save path. */
+    private notify(): void {
+        for (const listener of this.listeners) {
+            try {
+                listener();
+            } catch {
+                // Subscribers are UI refreshers; one failure must not block others.
+            }
+        }
+    }
+
+    /**
+     * Subscribe to settings changes (preferences and bindings). Returns an
+     * unsubscribe function. Components use this to re-render live shortcut
+     * labels after a rebind — the store itself stays framework-free.
+     */
+    subscribe(listener: () => void): () => void {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
     }
 
     getPreferences(): EditorPreferences {
@@ -324,6 +350,7 @@ export class EditorSettingsStore {
         } catch {
             // ignore
         }
+        this.notify();
     }
 }
 

@@ -8,6 +8,7 @@ import { DefineFeatureNode } from "../nodes/definefeaturenode";
 import { CustomFeatureNode } from "../nodes/customfeaturenode";
 import { OutputFeatureNode } from "../nodes/outputfeaturenode";
 import { generateFeatureStudioSource } from "../graph-codegen";
+import { findFeatureScriptStructureError } from "../../onshape-utils/featurescriptstructure";
 import { connectGraphNodes } from "../serialization/graph-serializer";
 
 /**
@@ -107,5 +108,67 @@ describe("generateFeatureStudioSource", () => {
 
         expect(variableLines).toHaveLength(1);
         expect(variableLines[0]).toContain("qTransient('sel1')");
+    });
+
+    /**
+     * The dev default graph (src/app/rete/devEditor.ts) adds two Chamfer nodes,
+     * one Define Feature and one End Feature with no connections at all. Every
+     * node except the End Feature is a leaf, so `ReteOnshapeNodeProcessor`
+     * prunes them and the generator used to return a header plus one orphan
+     * `});` (181 bytes) that Build reported as success.
+     */
+    it("refuses the unwired default graph: no Define Feature chain", async () => {
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+
+        await editor.addNode(new CustomFeatureNode(FIXTURE_SPEC));
+        await editor.addNode(new CustomFeatureNode(FIXTURE_SPEC));
+        await editor.addNode(new DefineFeatureNode({
+            annotation: { type: "Feature Type Name", value: "My New Feature" },
+            preconditions: [
+                {
+                    annotation: { type: "Property Function Name", value: "entities" },
+                    btType: "BTParameterSpecQuery-174",
+                },
+            ],
+        } as never));
+        await editor.addNode(new OutputFeatureNode());
+
+        const build = generateFeatureStudioSource(editor, engine);
+
+        await expect(build).rejects.toThrowError(/structurally invalid/);
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.toThrowError(/Define Feature/);
+        await expect(generateFeatureStudioSource(editor, engine)).rejects.toThrowError(/End Feature/);
+    });
+
+    it("still builds a wired Define Feature -> End Feature graph", async () => {
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+
+        const definition = new DefineFeatureNode({
+            annotation: { type: "Feature Type Name", value: "My New Feature" },
+            preconditions: [
+                {
+                    annotation: { type: "Property Function Name", value: "entities" },
+                    btType: "BTParameterSpecQuery-174",
+                },
+            ],
+        } as never);
+        const chamfer = new CustomFeatureNode(FIXTURE_SPEC);
+        const end = new OutputFeatureNode();
+
+        await editor.addNode(definition);
+        await editor.addNode(chamfer);
+        await editor.addNode(end);
+        await addConnection(editor, definition, "context", chamfer, "context");
+        await addConnection(editor, chamfer, "context", end, "context");
+
+        const source = (await generateFeatureStudioSource(editor, engine)) as string;
+
+        expect(source).toContain("defineFeature(");
+        expect(source.match(/^\}\);$/gm)).toHaveLength(1);
+        expect(findFeatureScriptStructureError(source)).toBeUndefined();
     });
 });
