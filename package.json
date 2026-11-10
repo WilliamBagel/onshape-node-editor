@@ -65,7 +65,7 @@
     "rete-scopes-plugin": "^2.1.1",
     "rete-structures": "^2.0.3",
     "rete-vue-plugin": "^2.1.2",
-    "sass": "^1.100.0",
+    "sass": "^1.108.1",
     "sass-loader": "^16.0.8",
     "three": "^0.156.1",
     "vite-plugin-svgr": "^4.5.0",
