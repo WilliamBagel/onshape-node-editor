@@ -107,6 +107,36 @@ jobs:
           QA_URL: http://127.0.0.1:5173/onshape-node-editor/
         run: pnpm run qa:node-chrome
 
+      - name: Context menu and clipboard check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:context-copy
+
+      - name: Math field check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:math-field
+
+      - name: Search menus check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:search-menus
+
+      - name: Clipboard, load, and group utility check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:util-graph
+
+      - name: Feature panel check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:feature-panel
+
+      - name: Default graph check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:default-graph
+
       - name: Collapsed socket grid check
         env:
           QA_URL: http://127.0.0.1:5173/onshape-node-editor/
