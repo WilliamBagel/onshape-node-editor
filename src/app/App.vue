@@ -510,6 +510,20 @@ export default defineComponent({
           }
           break;
         }
+        case 'copy': {
+          const copied = this.controls?.copySelection() ?? 0;
+          if (copied > 0) {
+            this.featureStudioHost()?.reportMessage(`Copied ${copied} node${copied === 1 ? '' : 's'}.`);
+          }
+          break;
+        }
+        case 'paste': {
+          const pasted = (await this.controls?.pasteClipboard()) ?? 0;
+          if (pasted > 0) {
+            this.featureStudioHost()?.reportMessage(`Pasted ${pasted} node${pasted === 1 ? '' : 's'}.`);
+          }
+          break;
+        }
         case 'createFrame': {
           const frame = await this.controls?.createFrameFromSelection();
           if (frame != null) {

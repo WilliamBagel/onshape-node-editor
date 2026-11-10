@@ -1,5 +1,5 @@
 import { inject } from 'vue';
-import { NodeEditor } from "rete";
+import { NodeEditor, getUID } from "rete";
 import { Area2D, AreaExtensions, AreaPlugin, Drag } from "rete-area-plugin";
 import { VuePlugin, Presets as VuePresets } from "rete-vue-plugin";
 import { addCustomBackground } from "../customization/custom-background";
@@ -44,8 +44,10 @@ import { deserializeGraphText, serializeGraph as serializeEditorGraph } from "./
 import { pruneInvalidNodes, type SanitizeReport } from "./graph-sanitize";
 import type { SpecResolver } from "./serialization/graph-schema-types";
 import { editorSettings, applyCanvasPreferences, type EditorPreferences } from "../ui/editorSettings";
-import { ContextMenuPlugin, Presets as ContextMenuPresets } from "rete-context-menu-plugin";
+import { ContextMenuPlugin } from "rete-context-menu-plugin";
 import { editorContextMenuPreset } from "./editor-context-menu";
+import { buildEditorContextMenuList } from "./editor-context-menu-items";
+import { captureClipboard, planPaste, restoreClipboardNode, type ClipboardSnapshot } from "./clipboard";
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
@@ -105,6 +107,10 @@ export type EditorControls = {
     fitView: () => Promise<void>
     /** #36: remove the selected nodes; returns how many were removed. */
     deleteSelectedNodes: () => Promise<number>
+    /** Copy the selection (or one right-clicked node) into the editor clipboard. */
+    copySelection: (fallbackNode?: OnshapeNode) => number
+    /** Paste the editor clipboard with fresh ids; returns the pasted count. */
+    pasteClipboard: () => Promise<number>
     /** #13: wrap the selected non-frame nodes in a new frame. Null when nothing is selected. */
     createFrameFromSelection: () => Promise<FrameNode | null>
     /** #13: flip a frame's collapsed state; descendants hide/show in place. */
@@ -183,6 +189,10 @@ type EditorBaseInfo = {
     fitView: () => Promise<void>
     /** #36: remove selected nodes, returning the count. */
     deleteSelectedNodes: () => Promise<number>
+    /** Copy the selection (or one right-clicked node) into the editor clipboard. */
+    copySelection: (fallbackNode?: OnshapeNode) => number
+    /** Paste the editor clipboard with fresh ids; returns the pasted count. */
+    pasteClipboard: () => Promise<number>
     /** #13: wrap the selected non-frame nodes in a new frame. Null when nothing is selected. */
     createFrameFromSelection: () => Promise<FrameNode | null>
     /** #13: flip a frame's collapsed state; descendants hide/show in place. */
@@ -389,20 +399,30 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
     vueRender.addPreset(editorContextMenuPreset());
 
     // #8: canvas context menu ("Add node") listing the same catalog as the
-    // palette, grouped by category. The plugin's factory adds the node at
-    // the pointer, so placement is at the cursor.
+    // palette, grouped by category, plus the clipboard actions. The plugin's
+    // factory adds the node at the pointer, so placement is at the cursor.
+    // Every row (action, category, leaf) carries a sprite icon; action rows
+    // show the live binding from editorSettings as a keycap chip.
+    const menuGroups = groupByCategory(nodeableEntries(defaultCatalog.entries));
     const contextMenu = new ContextMenuPlugin<Schemes>({
-        items: ContextMenuPresets.classic.setup(
-            groupByCategory(nodeableEntries(defaultCatalog.entries)).map(
-                (group): [string, [string, () => OnshapeNode][]] => [
-                    group.category,
-                    group.entries.map((entry): [string, () => OnshapeNode] => [
-                        entry.name,
-                        () => createNodeFromCatalogEntry(entry, cachedSpecResolver) as OnshapeNode,
-                    ]),
-                ],
+        items: (context) =>
+            buildEditorContextMenuList(
+                context === "root" ? "root" : (context as OnshapeNode),
+                menuGroups,
+                {
+                    copy: (node) => { copySelection(node); },
+                    paste: () => { void pasteClipboard(); },
+                    remove: async (node) => {
+                        if (node != null && !selectedEditorNodes().some((selected) => selected.id === node.id)) {
+                            await selectNode(node.id);
+                        }
+                        await deleteSelectedNodes();
+                    },
+                    createNode: (entry) => () =>
+                        createNodeFromCatalogEntry(entry, cachedSpecResolver) as OnshapeNode,
+                },
+                editorSettings.getBindings(),
             ),
-        ),
     });
     area.use(contextMenu);
 
@@ -571,7 +591,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         syncRaise();
     };
 
-    AreaExtensions.selectableNodes(area, selector, {
+    const selectable = AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
             // Ctrl/Cmd are additive in addition to the configured modifier
             // (Shift by default) — see selection-modifiers.ts. Background
@@ -623,10 +643,113 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         if (node == null) {
             return;
         }
-        // AreaExtensions.selectableNodes registered `selector` for the area;
-        // adding to it is what a click does. `accumulate: false` replaces the
-        // current selection rather than adding to it.
-        await selector.add(node as unknown as Parameters<typeof selector.add>[0], false);
+        // Route through `selectableNodes`, as a canvas click does: it registers
+        // the entity wrapper whose unselect/translate callbacks keep
+        // `selected` and the selector in sync. `selector.add(node)` directly
+        // would store the bare node, which has no `unselect()` — the next
+        // unselectAll then throws.
+        await selectable.select(node.id, false);
+    };
+
+    /** Nodes currently selected through the canvas's real selector. */
+    const selectedEditorNodes = (): OnshapeNode[] => {
+        const ids = Array.from(selector.entities.values())
+            .filter((entity) => entity.label === "node")
+            .map((entity) => entity.id);
+        return ids
+            .map((id) => editor.getNodes().find((node) => node.id === id))
+            .filter((node): node is OnshapeNode => node != null);
+    };
+
+    // #82: editor clipboard. In-memory only (the browser clipboard cannot
+    // carry live feature specs), scoped to this editor instance. `pasteCount`
+    // makes repeated pastes cascade at +24px instead of stacking exactly.
+    let clipboardSnapshot: ClipboardSnapshot | null = null;
+    let clipboardPasteCount = 0;
+
+    const clipboardPositionOf = (id: string): { x: number; y: number } | null => {
+        const view = area.nodeViews.get(id);
+        return view != null ? { ...view.position } : null;
+    };
+
+    /**
+     * Copy the selection (or just `fallbackNode` when it is not selected, as
+     * when a node is right-clicked). Frames and boundary cards are skipped by
+     * the clipboard itself. Returns the number of copied nodes.
+     */
+    const copySelection = (fallbackNode?: OnshapeNode): number => {
+        const selected = selectedEditorNodes();
+        const nodes = fallbackNode != null && !selected.some((node) => node.id === fallbackNode.id)
+            ? [fallbackNode]
+            : selected;
+        const snapshot = captureClipboard(
+            nodes,
+            editor.getConnections(),
+            clipboardPositionOf,
+        );
+        if (snapshot == null) {
+            return 0;
+        }
+        clipboardSnapshot = snapshot;
+        clipboardPasteCount = 0;
+        return snapshot.entries.length;
+    };
+
+    /**
+     * Paste the clipboard with fresh ids, +24px per paste, internal wires
+     * remapped, and the pasted nodes left selected.
+     */
+    const pasteClipboard = async (): Promise<number> => {
+        if (clipboardSnapshot == null) {
+            return 0;
+        }
+        const offset = 24 * (clipboardPasteCount + 1);
+        const plan = planPaste(clipboardSnapshot, { x: offset, y: offset }, () => getUID());
+        const clones = new Map<string, OnshapeNode>();
+        for (const item of plan.nodes) {
+            let clone: OnshapeNode;
+            try {
+                clone = restoreClipboardNode(item.entry, item.id, (id) => groupDefinitions.get(id));
+            } catch (error) {
+                console.warn("Clipboard paste skipped a node:", error);
+                continue;
+            }
+            await editor.addNode(clone);
+            await area.translate(clone.id, item.position);
+            clones.set(clone.id, clone);
+        }
+        if (clones.size === 0) {
+            return 0;
+        }
+        for (const wire of plan.wires) {
+            const source = clones.get(wire.source);
+            const target = clones.get(wire.target);
+            if (source == null || target == null) continue;
+            const output = source.outputs[wire.sourceOutput];
+            const input = target.inputs[wire.targetInput];
+            if (output == null || input == null) continue;
+            await editor.addConnection(
+                new Connection(
+                    source,
+                    wire.sourceOutput,
+                    output.socket.name,
+                    target,
+                    wire.targetInput,
+                    input.socket.name,
+                    styleSettings,
+                ),
+            );
+        }
+        clipboardPasteCount++;
+
+        // Leave the pasted nodes selected so a second Ctrl+V is obviously a
+        // copy of what is now highlighted.
+        const pasted = [...clones.values()];
+        for (let index = 0; index < pasted.length; index++) {
+            await selectable.select(pasted[index].id, index > 0);
+        }
+        await settleConnections();
+        return clones.size;
     };
 
     const fitView = async (): Promise<void> => {
@@ -1355,6 +1478,8 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         accumulateModifier: () => editorSettings.getPreferences().accumulateModifier,
         fitView,
         deleteSelectedNodes,
+        copySelection,
+        pasteClipboard,
         createFrameFromSelection,
         toggleFrameCollapsed,
         toggleGroupEdit,

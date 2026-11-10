@@ -21,19 +21,27 @@
     <div id="context-menu-list">
     <template v-if="!query">
       <div v-for="item in items" :key="item.key" class="block"
-        :class="{ hasSubitems: hasChildren(item), 'block--active': item.key === activeKey }"
+        :class="{ hasSubitems: hasChildren(item), 'block--active': item.key === activeKey, 'block--section-start': item.sectionStart }"
         role="menuitem" :id="`cm-${item.key}`" tabindex="-1"
         :aria-expanded="hasChildren(item) ? openKey === item.key : undefined"
         @mouseenter="activeKey = item.key" @focus="activeKey = item.key"
         @click.stop="activate(item)">
+        <span v-if="item.icon" class="row-icon" aria-hidden="true">
+          <SvgIcon :href="item.icon" :size="16" />
+        </span>
         <div class="content">{{ item.label }}</div>
+        <kbd v-if="item.shortcut" class="row-shortcut">{{ item.shortcut }}</kbd>
         <div v-if="hasChildren(item) && openKey === item.key" class="subitems subitems-inline">
           <div v-for="sub in item.subitems" :key="sub.key" class="block subitem"
             :class="{ 'block--active': sub.key === activeKey }"
             role="menuitem" :id="`cm-${sub.key}`" tabindex="-1"
             @mouseenter="activeKey = sub.key" @focus="activeKey = sub.key"
             @click.stop="activate(sub)">
+            <span v-if="sub.icon" class="row-icon" aria-hidden="true">
+              <SvgIcon :href="sub.icon" :size="16" />
+            </span>
             <div class="content">{{ sub.label }}</div>
+            <kbd v-if="sub.shortcut" class="row-shortcut">{{ sub.shortcut }}</kbd>
           </div>
         </div>
       </div>
@@ -45,10 +53,14 @@
         role="menuitem" :id="`cm-${hit.item.key}`" tabindex="-1"
         @mouseenter="activeKey = hit.item.key" @focus="activeKey = hit.item.key"
         @click.stop="activate(hit.item)">
+        <span v-if="hit.item.icon" class="row-icon" aria-hidden="true">
+          <SvgIcon :href="hit.item.icon" :size="16" />
+        </span>
         <div class="content">
           <span class="hit-category">{{ hit.category }}</span>
           <span class="hit-label">{{ hit.item.label }}</span>
         </div>
+        <kbd v-if="hit.item.shortcut" class="row-shortcut">{{ hit.item.shortcut }}</kbd>
       </div>
       <div v-if="hits.length === 0" class="block">
         <div class="content menu-empty">No matching node.</div>
@@ -60,13 +72,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUpdated, ref, watch } from "vue";
-
-interface ContextMenuItem {
-  label: string;
-  key: string;
-  handler?: () => void | Promise<void>;
-  subitems?: ContextMenuItem[];
-}
+import SvgIcon from "../components/SvgIcon.vue";
+import type { EditorContextMenuItem as ContextMenuItem } from "./context-menu-types";
 
 interface Hit {
   item: ContextMenuItem;
@@ -273,7 +280,22 @@ onUpdated(() => {
 </script>
 
 <style scoped>
-.content { display: flex; align-items: baseline; gap: 6px; }
+.content { display: flex; align-items: baseline; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.row-icon { display: inline-flex; flex: none; color: var(--text-secondary); }
+/* Keycap chips: right-aligned, mono 10px, hairline border (STYLE_GUIDE). */
+.row-shortcut {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-keycap);
+  line-height: 1.2;
+  padding: 2px 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-keycap);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+  opacity: 1;
+}
 .hit-category { color: var(--text-secondary); font-size: var(--font-size-meta); white-space: nowrap; }
 .hit-label { color: var(--text-primary); overflow-wrap: anywhere; }
 .menu-empty { color: var(--text-secondary); font-style: italic; }
