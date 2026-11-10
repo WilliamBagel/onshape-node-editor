@@ -81,7 +81,7 @@ export function validateSnapGridSize(value: unknown): number | null {
 }
 
 /** A command the app actually honours, with its default binding. */
-export type CommandId = 'build' | 'run' | 'upload' | 'save' | 'open' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame' | 'createGroup' | 'addNode' | 'debugGrid' | 'actionPalette';
+export type CommandId = 'build' | 'run' | 'upload' | 'save' | 'open' | 'settings' | 'fitView' | 'deleteSelected' | 'createFrame' | 'createGroup' | 'addNode' | 'debugGrid' | 'actionPalette' | 'copy' | 'paste';
 
 export interface CommandDefinition {
     id: CommandId;
@@ -99,6 +99,8 @@ export const COMMANDS: readonly CommandDefinition[] = [
     { id: 'settings', label: 'Settings', description: 'Open this settings dialog.', defaultCombo: 'Ctrl+,' },
     { id: 'fitView', label: 'Fit view', description: 'Zoom the canvas to fit all nodes.', defaultCombo: 'Ctrl+0' },
     { id: 'deleteSelected', label: 'Delete selected nodes', description: 'Remove the currently selected nodes from the canvas.', defaultCombo: 'Delete' },
+    { id: 'copy', label: 'Copy', description: 'Copy the selected nodes and the wires between them.', defaultCombo: 'Ctrl+C' },
+    { id: 'paste', label: 'Paste', description: 'Paste the copied nodes with fresh ids, offset from the originals.', defaultCombo: 'Ctrl+V' },
     { id: 'createFrame', label: 'Frame selected nodes', description: 'Wrap the selected nodes in a grouping frame (#13).', defaultCombo: 'Ctrl+G' },
     { id: 'createGroup', label: 'Create Group from Selection', description: 'Turn the selected nodes into a reusable node group; Tab enters it, Tab again exits.', defaultCombo: 'Ctrl+Shift+G' },
     { id: 'addNode', label: 'Add node', description: 'Open the catalog palette to add a node (#8).', defaultCombo: 'Shift+A' },
@@ -118,6 +120,8 @@ export const DEFAULT_BINDINGS: ShortcutBindings = {
     settings: 'Ctrl+,',
     fitView: 'Ctrl+0',
     deleteSelected: 'Delete',
+    copy: 'Ctrl+C',
+    paste: 'Ctrl+V',
     createFrame: 'Ctrl+G',
     createGroup: 'Ctrl+Shift+G',
     addNode: 'Shift+A',
