@@ -10,7 +10,7 @@ const socket = new ClassicPreset.Socket('socket');
 
 export async function createEditor(container: HTMLElement): Promise<EditorControls> {
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, exitGroupTo, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, isDefineFeatureNode, getDefineFeatureState, setDefineFeatureName, addDefineFeatureParameter, updateDefineFeatureParameter, removeDefineFeatureParameter, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, sanitizeGraph, debugSources } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, copySelection, pasteClipboard, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, exitGroupTo, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, isDefineFeatureNode, getDefineFeatureState, setDefineFeatureName, addDefineFeatureParameter, updateDefineFeatureParameter, removeDefineFeatureParameter, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, sanitizeGraph, debugSources } = await editorBase(container);
 
   const chamferNode = new CustomFeatureNode(ChamferFeatureSpec);
 
@@ -84,6 +84,8 @@ export async function createEditor(container: HTMLElement): Promise<EditorContro
     getNodeOrder: () => nodeOrder.getOrder(),
     fitView,
     deleteSelectedNodes,
+    copySelection,
+    pasteClipboard,
     createFrameFromSelection,
     toggleFrameCollapsed,
     toggleGroupEdit,

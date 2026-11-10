@@ -163,6 +163,115 @@ async function paletteCheck(label, listSel, activeSel, parts, open) {
 
 const report = { url: URL, when: new Date().toISOString(), palettes: {} };
 
+// --- exact adjacency: keyboard order must equal rendered (DOM) order ------
+// NodePalette renders category groups (sorted by category, then name) while
+// its search ranker returns a score-ordered list. Navigating the ranker made
+// one ArrowDown jump thousands of rows away from the row visibly next to the
+// active one, so every step here asserts the active row is the option
+// immediately after the previously active option in DOM order.
+async function readList(listSel, activeSel) {
+  return page.evaluate(({ listSel, activeSel }) => {
+    const list = document.querySelector(listSel);
+    if (!list) return null;
+    const rows = [...list.querySelectorAll('[role="option"]')];
+    const active = document.querySelector(activeSel);
+    return {
+      ids: rows.map((r) => r.id),
+      labels: rows.map((r) => (r.textContent ?? '').trim().slice(0, 24)),
+      activeId: active?.id ?? null,
+      index: active ? rows.indexOf(active) : -1,
+      count: rows.length,
+      scrollTop: list.scrollTop,
+    };
+  }, { listSel, activeSel });
+}
+
+async function adjacencyRun(label, { listSel, activeSel, searchSel, open, query = null }) {
+  const reset = async () => {
+    await page.keyboard.press('Escape');
+    await sleep(300);
+    await open();
+    if (query != null) {
+      await page.locator(searchSel).fill(query);
+      await sleep(500);
+    }
+  };
+  await reset();
+
+  const first = await readList(listSel, activeSel);
+  const tag = `${label}${query == null ? '' : ` [${query}]`}`;
+  check(`${tag}: initial active row is the first rendered option`,
+    first != null && first.index === 0 && first.activeId === first.ids[0],
+    first && `index=${first.index} active=${first.activeId} first=${first.ids[0]}`);
+
+  const down = Math.max(1, Math.min(10, (first?.count ?? 1) - 1));
+  const visited = [first.index];
+  let broke = null;
+  for (let i = 0; i < down; i += 1) {
+    const before = await readList(listSel, activeSel);
+    await page.keyboard.press('ArrowDown');
+    await sleep(80);
+    const after = await readList(listSel, activeSel);
+    visited.push(after.index);
+    if (after.index !== before.index + 1 || after.activeId !== after.ids[after.index]) {
+      broke = broke ?? `step ${i}: ${before.index} -> ${after.index} (${after.activeId} vs ${after.ids[after.index]})`;
+    }
+  }
+  const contiguous = visited.every((v, i) => v === visited[0] + i);
+  check(`${tag}: ArrowDown walks the next rendered option, no skipped index`,
+    broke == null && contiguous,
+    broke ?? `indices ${visited.join(',')} of ${first?.count}`);
+
+  // ArrowUp retraces exactly those rows.
+  const upIndices = [];
+  let upBroke = null;
+  for (let i = 0; i < down; i += 1) {
+    const before = await readList(listSel, activeSel);
+    await page.keyboard.press('ArrowUp');
+    await sleep(80);
+    const after = await readList(listSel, activeSel);
+    upIndices.push(after.index);
+    if (after.index !== before.index - 1) upBroke = upBroke ?? `step ${i}: ${before.index} -> ${after.index}`;
+  }
+  check(`${tag}: ArrowUp retraces the same rows`,
+    upBroke == null && upIndices[upIndices.length - 1] === visited[0],
+    upBroke ?? `indices ${upIndices.join(',')}`);
+
+  // Mouse parked over the list: scrolling rows under a stationary pointer
+  // must not re-target the active row, so each arrow still advances exactly
+  // one row from the previous one.
+  await reset();
+  const box = await page.locator(listSel).boundingBox();
+  await page.mouse.move(box.x + 12, box.y + 8);
+  await page.mouse.move(box.x + 14, box.y + 10);
+  await sleep(250);
+  const hovered = await readList(listSel, activeSel);
+  // Enough steps that the list scrolls under the parked pointer (rows are
+  // ~34px, the viewport ~550px), which is exactly when the old
+  // mouseenter handler re-targeted the active row.
+  const mouseSteps = Math.max(1, Math.min(20, (hovered?.count ?? 1) - hovered.index - 1));
+  const mouseVisited = [hovered.index];
+  let mouseBroke = null;
+  for (let i = 0; i < mouseSteps; i += 1) {
+    const before = await readList(listSel, activeSel);
+    await page.keyboard.press('ArrowDown');
+    await sleep(120);
+    const after = await readList(listSel, activeSel);
+    mouseVisited.push(after.index);
+    if (after.index !== before.index + 1) {
+      mouseBroke = mouseBroke ?? `step ${i}: ${before.index} -> ${after.index} (pointer parked at ${Math.round(box.x + 14)},${Math.round(box.y + 10)}, scrollTop ${after.scrollTop})`;
+    }
+  }
+  check(`${tag}: mouse parked over the list — each arrow still steps one row`,
+    mouseBroke == null && mouseVisited.every((v, i) => v === mouseVisited[0] + i),
+    mouseBroke ?? `hover row ${hovered.index}, indices ${mouseVisited.join(',')}`);
+  await page.mouse.move(1200, 860);
+  await sleep(150);
+  await page.keyboard.press('Escape');
+  await sleep(300);
+}
+
+
 report.palettes.node = await paletteCheck('NodePalette', '.palette-list', '.palette-item--active',
   { name: '.palette-item-name', meta: '.palette-item-meta' },
   async () => {
@@ -180,6 +289,33 @@ report.palettes.actions = await paletteCheck('ActionPalette', '.actions-list', '
     await page.locator('.actions-search').fill('query');
     await sleep(600);
   });
+
+// Adjacency runs: empty and filtered queries, both palettes. NodePalette is
+// the one with a grouped DOM order (the bug); ActionPalette renders its
+// results 1:1, so the same assertions document that it stays correct.
+const openNodePalette = async () => {
+  await page.mouse.click(640, 420);
+  await sleep(200);
+  await page.keyboard.press('Shift+A');
+  await sleep(700);
+};
+const openActionPalette = async () => {
+  await page.keyboard.press('F3');
+  await sleep(700);
+};
+
+await adjacencyRun('NodePalette', {
+  listSel: '.palette-list', activeSel: '.palette-item--active', searchSel: '.palette-search', open: openNodePalette,
+});
+await adjacencyRun('NodePalette', {
+  listSel: '.palette-list', activeSel: '.palette-item--active', searchSel: '.palette-search', open: openNodePalette, query: 'fillet',
+});
+await adjacencyRun('ActionPalette', {
+  listSel: '.actions-list', activeSel: '.actions-item--active', searchSel: '.actions-search', open: openActionPalette,
+});
+await adjacencyRun('ActionPalette', {
+  listSel: '.actions-list', activeSel: '.actions-item--active', searchSel: '.actions-search', open: openActionPalette, query: 'query',
+});
 
 // Extra: a command row (empty query = actions only) carries a keycap chip;
 // measure its contrast too, since the 'query' rows above were node results.

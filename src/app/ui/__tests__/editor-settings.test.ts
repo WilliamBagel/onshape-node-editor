@@ -117,8 +117,10 @@ describe('editorSettings: persistence', () => {
 
 describe('editorSettings: shortcut registry', () => {
   it('lists exactly the implemented commands, each with a unique default', () => {
-    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'createFrame', 'createGroup', 'addNode', 'debugGrid', 'actionPalette']);
+    expect(COMMANDS.map((c) => c.id)).toEqual(['build', 'run', 'upload', 'save', 'open', 'settings', 'fitView', 'deleteSelected', 'copy', 'paste', 'createFrame', 'createGroup', 'addNode', 'debugGrid', 'actionPalette']);
     expect(new Set(Object.values(DEFAULT_BINDINGS)).size).toBe(COMMANDS.length);
+    expect(DEFAULT_BINDINGS.copy).toBe('Ctrl+C');
+    expect(DEFAULT_BINDINGS.paste).toBe('Ctrl+V');
   });
 
   it('lists Save/Open/Search-actions as real commands, with nothing omitted', () => {

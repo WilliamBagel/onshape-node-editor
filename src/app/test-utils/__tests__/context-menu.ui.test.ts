@@ -171,4 +171,46 @@ describe("EditorContextMenu", () => {
     expect(onHide).toHaveBeenCalledOnce();
     wrapper.unmount();
   });
+
+  it("renders an icon on every visible row and shortcut chips on the clipboard actions", async () => {
+    const items = [
+      { label: "Copy", key: "copy", icon: "#svg-icon-copy-button", shortcut: "Ctrl+C", handler: vi.fn() },
+      { label: "Paste", key: "paste", icon: "#svg-icon-paste-command", shortcut: "Ctrl+V", handler: vi.fn() },
+      { label: "Delete", key: "delete", icon: "#svg-icon-trash", shortcut: "Del", handler: vi.fn() },
+      {
+        label: "Modeling",
+        key: "cat-modeling",
+        icon: "#svg-icon-extrude-button",
+        sectionStart: true,
+        handler: vi.fn(),
+        subitems: [{ label: "Chamfer", key: "chamfer", icon: "#svg-icon-chamfer-button", handler: vi.fn() }],
+      },
+    ];
+    const wrapper = mount(EditorContextMenu, { props: { items, searchBar: true } });
+
+    const rows = wrapper.findAll("#context-menu-list > .block");
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      expect(row.find(".row-icon svg use").exists(), row.text()).toBe(true);
+    }
+    expect(rows[0].find(".row-icon use").attributes("href")).toBe("#svg-icon-copy-button");
+    expect(rows[0].find(".row-shortcut").text()).toBe("Ctrl+C");
+    expect(rows[1].find(".row-shortcut").text()).toBe("Ctrl+V");
+    expect(rows[2].find(".row-shortcut").text()).toBe("Del");
+    expect(rows[3].classes()).toContain("block--section-start");
+    expect(rows[3].find(".row-shortcut").exists()).toBe(false);
+
+    // Opening the category shows its icon-bearing leaf rows too.
+    await rows[3].find(".content").trigger("click");
+    await wrapper.vm.$nextTick();
+    const leaf = wrapper.find(".subitem");
+    expect(leaf.find(".row-icon svg use").attributes("href")).toBe("#svg-icon-chamfer-button");
+
+    // Search hits keep the icon and any shortcut chip.
+    await search(wrapper, "copy");
+    const hit = wrapper.find("#context-menu-list > .block");
+    expect(hit.find(".row-icon svg use").exists()).toBe(true);
+    expect(hit.find(".row-shortcut").text()).toBe("Ctrl+C");
+    wrapper.unmount();
+  });
 });

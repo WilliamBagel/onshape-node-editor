@@ -40,8 +40,10 @@
     "qa:build-validation": "node qa/harness/build-validation-check.mjs",
     "qa:feature-panel": "node qa/harness/feature-panel-check.mjs",
     "qa:collapsed-grid": "node qa/harness/collapsed-grid-check.mjs",
+    "qa:math-field": "node qa/harness/math-field-check.mjs",
     "qa:search-menus": "node qa/harness/search-menu-check.mjs",
     "qa:docs-nav": "node qa/harness/docs-nav-check.mjs",
+    "qa:context-copy": "node qa/harness/context-copy-check.mjs",
     "qa:report": "node qa/harness/report.mjs",
     "qa:review": "node qa/review/review-packet.mjs"
   },

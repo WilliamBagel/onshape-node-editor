@@ -34,7 +34,7 @@
           role="option"
           :aria-selected="result.key === activeKey"
           @click="choose(result)"
-          @mouseenter="activeKey = result.key"
+          @mousemove="onItemPointerMove(result.key, $event)"
         >
           <span class="actions-item-name">{{ result.label }}</span>
           <span class="actions-item-desc">{{ result.description }}</span>
@@ -121,10 +121,27 @@ const results = computed<PaletteResult[]>(() => {
 
 const activeId = computed(() => (activeKey.value != null ? `action-palette-item-${activeKey.value}` : undefined))
 
+/**
+ * Pointer intent, movement-gated — same rule as NodePalette. An unconditional
+ * `mouseenter` handler re-points activeKey at whatever row scrolls under a
+ * stationary pointer (wheel, or arrow-key scroll-into-view), so the next
+ * ArrowDown advances from the wrong row. `mousemove` only fires on real
+ * pointer movement; repeated events at the same coordinates are ignored.
+ */
+let lastPointer: { x: number; y: number } | null = null
+function onItemPointerMove(key: string, event: MouseEvent) {
+  const x = event.clientX
+  const y = event.clientY
+  if (lastPointer != null && lastPointer.x === x && lastPointer.y === y) return
+  lastPointer = { x, y }
+  activeKey.value = key
+}
+
 watch(() => props.open, async (v) => {
   if (v) {
     term.value = ''
     activeKey.value = results.value[0]?.key ?? null
+    lastPointer = null
     await nextTick()
     search.value?.focus()
   }
@@ -134,7 +151,7 @@ watch(results, () => {
     activeKey.value = results.value[0]?.key ?? null
   }
   scrollActiveIntoView()
-})
+}, { immediate: true })
 
 /**
  * Keep the active row inside the list by scrolling the list only.

@@ -153,10 +153,45 @@ export class MathExpressionNode extends OnshapeNode {
         this.collapsed = collapsed;
     }
 
-    /** Bind a variable to a value type (persisted; reapplied on recompile). */
+    /**
+     * Bind a variable to a value type (persisted; reapplied on recompile).
+     * Unknown means "unbound": the connecting producer was untyped, so the
+     * key is removed rather than stored as a no-op type.
+     */
     public setBinding(name: string, valueType: ValueType): void {
-        this.bindings[name] = valueType;
+        const previous = this.bindings[name];
+        if (valueType.name === 'unknown') {
+            if (previous == null) return;
+            delete this.bindings[name];
+        } else {
+            if (previous != null && valueTypeLabel(previous) === valueTypeLabel(valueType)) return;
+            this.bindings[name] = valueType;
+        }
         this.setSource(this.source);
+    }
+
+    /**
+     * `connectioncreate` type propagation: bind an input variable to the
+     * producer's socket type, then recompile so the `return` socket is
+     * retyped (e.g. `x * 2` with a quantity `x` returns ValueWithUnits).
+     *
+     * The input socket itself stays `unknown` (see `syncSockets`): the
+     * binding feeds only the type checker, keeping the input permissive so
+     * any producer value the compatibility matrix allows stays connectable.
+     */
+    public applyConnectedInputType(name: string, sourceType: ValueType | undefined): void {
+        if (sourceType == null || this.inputs[name] == null) return;
+        this.setBinding(name, sourceType);
+    }
+
+    /** `connectionremove`: drop the binding once no producer remains. */
+    public clearConnectedInputType(name: string): void {
+        this.setBinding(name, UNKNOWN);
+    }
+
+    /** The value type currently carried by the `return` socket. */
+    public getReturnType(): ValueType {
+        return this.outputType;
     }
 
     /** Set the literal emitted for an unconnected variable (or cleared with `undefined`). */
@@ -183,8 +218,11 @@ export class MathExpressionNode extends OnshapeNode {
         }
         for (const name of free) {
             if (this.inputs[name] == null) {
-                const type = this.bindings[name] ?? UNKNOWN;
-                this.addInput(name, new ClassicPreset.Input(new OnshapeSocket(name, type), name));
+                // Input sockets stay permissive (`unknown`): the variable's
+                // binding only feeds the type checker. Keeping the port
+                // untyped means a quantity, a Vector or a plain number all
+                // remain connectable; the return socket carries the result.
+                this.addInput(name, new ClassicPreset.Input(new OnshapeSocket(name, UNKNOWN), name));
             }
         }
     }

@@ -180,14 +180,28 @@ body {
 
 .menu[rete-context-menu][rete-context-menu] .block {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
     color: var(--text-primary);
     background-color: var(--surface);
     border-bottom: 1px solid var(--hairline);
-    font-size: var(--font-size-label);
+    font-size: var(--font-size-value);
     line-height: var(--line-height-body);
-    padding: 6px 8px;
+    padding: 6px 10px;
     white-space: normal;
     overflow-wrap: anywhere;
+}
+
+/* Section break (actions -> catalog) uses one hairline, not a second hue. */
+.menu[rete-context-menu][rete-context-menu] .block--section-start {
+    margin-top: 4px;
+    border-top: 1px solid var(--hairline);
+}
+
+.menu[rete-context-menu][rete-context-menu] .block.hasSubitems {
+    padding-right: 26px;
 }
 
 .menu[rete-context-menu][rete-context-menu] .block:hover {
