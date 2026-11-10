@@ -38,6 +38,7 @@
     "qa:defects": "node qa/harness/defect-checks.mjs",
     "qa:default-graph": "node qa/harness/default-graph-check.mjs",
     "qa:feature-panel": "node qa/harness/feature-panel-check.mjs",
+    "qa:collapsed-grid": "node qa/harness/collapsed-grid-check.mjs",
     "qa:search-menus": "node qa/harness/search-menu-check.mjs",
     "qa:report": "node qa/harness/report.mjs",
     "qa:review": "node qa/review/review-packet.mjs"

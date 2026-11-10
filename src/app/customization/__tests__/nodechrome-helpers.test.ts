@@ -7,8 +7,10 @@ import type { BTFeatureSpec129 } from 'onshape-typescript-fetch';
 import { OnshapeSocket } from '../../rete/onshapesockets.js';
 import { OnshapeFeatureSpecInput } from '../../rete/inputoutput/onshapefeaturespecinput.js';
 import {
+    COLLAPSED_SOCKET_MAX_ROWS,
     collectCollapsedOutputSockets,
     collectCollapsedSockets,
+    collapsedSocketRows,
     commitTitleEdit,
     expandedFromInput,
     isNestedMapInput,
@@ -129,6 +131,20 @@ describe('collapsible nodes (#72-4)', () => {
 
 
 describe('collapsed socket strip (node-chrome)', () => {
+    it('caps the grid at 3 rows by default and grows sideways instead', () => {
+        expect(COLLAPSED_SOCKET_MAX_ROWS).toBe(3);
+        // 7 sockets -> 3 columns of 3/3/1, each column starts at its top row.
+        expect(collapsedSocketRows(7)).toBe(3);
+        expect(collapsedSocketRows(2)).toBe(2);
+        expect(collapsedSocketRows(1)).toBe(1);
+        // Empty groups still declare one row: repeat(0, …) is invalid CSS.
+        expect(collapsedSocketRows(0)).toBe(1);
+        // The limit is configurable; invalid values fall back to one row.
+        expect(collapsedSocketRows(9, 5)).toBe(5);
+        expect(collapsedSocketRows(9, 0)).toBe(1);
+        expect(collapsedSocketRows(9, Number.NaN)).toBe(3);
+    });
+
     it('flattens leaf inputs and nested-map children to the expanded socket data', () => {
         const inner = mapInputWith([quantitySpec('a', 'A'), quantitySpec('b', 'B')]);
         const outer = mapInputWith([quantitySpec('x', 'X')]);
