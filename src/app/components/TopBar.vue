@@ -191,7 +191,7 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
       <!-- Open file button -->
       <div class="toolbar-btn-wrap">
         <button class="toolbar-btn" aria-label="Open file"
-          v-tooltip="{ label: 'Open File', description: 'Load a graph from a file idk really' }"
+          v-tooltip="{ label: 'Open File', description: 'Load a saved graph from this document' }"
           @click="emit('open')">
           <SvgIcon href="#svg-icon-folder" :size="16" aria-label="Open file" />
         </button>
