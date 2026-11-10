@@ -510,11 +510,24 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
             }
 
+            // Type propagation for math nodes: the producer's socket type
+            // becomes the variable's binding, so `x * 2` with a quantity
+            // producer returns a quantity. The binding must be applied
+            // BEFORE addConnection, because retyping the return socket
+            // replaces the output object the connection points at.
+            if (target instanceof MathExpressionNode) {
+                const sourceType = (output.socket as OnshapeSocket | undefined)?.valueType;
+                target.applyConnectedInputType(data.targetInput, sourceType);
+            }
+
             source.addConnection(output, input);
             target.addConnection(input, output);
 
             if (target instanceof OnshapeNode) {
                 (target as OnshapeNode).updateVisibilities();
+            }
+            if (target instanceof MathExpressionNode) {
+                target.update();
             }
         } else if (context.type === 'connectionremove') {
             const connectionIO = getConnectionIO(editor, context.data);
@@ -526,6 +539,14 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
             if (target instanceof CustomFeatureNode) {
                 (target as CustomFeatureNode).updateVisibilities();
+            }
+            // A math variable reverts to untyped when its last producer
+            // goes away, and the return socket recomputes from the source.
+            if (target instanceof MathExpressionNode) {
+                if ((input.connections?.length ?? 0) === 0) {
+                    target.clearConnectedInputType(context.data.targetInput);
+                    target.update();
+                }
             }
         }
         return context;
