@@ -148,11 +148,21 @@ try {
   check('search "fillet" finds a node', false, error.message);
 }
 
-// ── 4. Escape closes ───────────────────────────────────────────────────────
+// ── 4. Escape closes from the search field AND from article focus ──────────
 try {
+  // Clicking article text blurs the search field to <body>; Escape must still
+  // dismiss the sheet (the layer-scoped keydown never fires in that state).
+  await page.locator('.docs-article').click();
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.docs-panel', { state: 'detached', timeout: 5000 });
+  check('Escape closes the documentation panel from article focus', !(await panelVisible()));
+
+  await page.locator('button[aria-label="Documentation"]').click();
+  await page.waitForSelector('.docs-panel', { timeout: 5000 });
+  await sleep(200);
   await page.locator('input.docs-search').press('Escape');
   await page.waitForSelector('.docs-panel', { state: 'detached', timeout: 5000 });
-  check('Escape closes the documentation panel', !(await panelVisible()));
+  check('Escape closes the documentation panel from the search field', !(await panelVisible()));
 } catch (error) {
   check('Escape closes the documentation panel', false, error.message);
 }
