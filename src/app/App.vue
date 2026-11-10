@@ -4,7 +4,7 @@ import TopBar from './components/TopBar.vue'
 import AppDialog from './components/AppDialog.vue';
 import DebugGrid from './components/DebugGrid.vue';
 import { promptText, dialogService } from './ui/dialog';
-import { editorSettings, matchCommand } from './ui/editorSettings';
+import { editorSettings, matchCommand, isTypingTarget } from './ui/editorSettings';
 import { createEditor, createEditorDev } from './rete';
 import BottomBar from './components/BottomBar.vue';
 import LogPanel from './components/LogPanel.vue';
@@ -433,10 +433,14 @@ export default defineComponent({
      */
     async onShortcutKeydown(event: KeyboardEvent) {
       if (dialogService.current != null) return;
+      // Auto-repeat is not a new command. Without this, holding Ctrl+V pastes
+      // one cascade per OS repeat rate, and held M/Tab toggle chrome endlessly.
+      if (event.repeat) return;
       // #14: Tab enters/exits a group, M mutes the selection. Neither is a
-      // registered command, and neither may fire while typing.
+      // registered command, and neither may fire while typing (including a
+      // focused <select>, where the key is a type-ahead).
       const target = event.target as HTMLElement | null;
-      const typing = target != null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      const typing = isTypingTarget(target);
       if (!typing && event.key === 'Tab') {
         // Group enter/exit is a canvas gesture only. Tab on toolbar,
         // panel, dialog or any other chrome must stay normal browser

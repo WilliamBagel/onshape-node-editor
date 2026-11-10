@@ -71,12 +71,26 @@ export class MathExpressionNode extends OnshapeNode {
     public bindings: Record<string, ValueType> = {};
     /** Diagnostics from the last compile; empty means valid. */
     public diagnostics: MathDiagnostic[] = [];
+    /** Free variables of the last successfully compiled source. */
+    private sourceVariables: string[] = [];
     /** Collapsed nodes show the typeset expression as their title. */
     public collapsed = false;
     private compiled: CompileResult | undefined;
     private outputType: ValueType = UNKNOWN;
     /** Per-variable FeatureScript literals for unconnected inputs (group defaults). */
     private literals: Record<string, string> = {};
+    /**
+     * Called before an input socket is removed because its variable left the
+     * source. Returning `true` defers removal to the callback (the canvas uses
+     * this to disconnect the wire first, so a saved graph never names an input
+     * that no longer exists).
+     */
+    public onBeforeInputRemoved: ((node: MathExpressionNode, name: string) => boolean) | null = null;
+    /**
+     * Called when recompiling changes the `return` socket's value type, so the
+     * canvas can retype consumers of this node (connection order must not matter).
+     */
+    public onReturnTypeChanged: ((node: MathExpressionNode) => void) | null = null;
 
     constructor(source = '') {
         super('math-expression', source);
@@ -110,10 +124,19 @@ export class MathExpressionNode extends OnshapeNode {
 
     /** Compile, sync sockets, retype the output. Never throws. */
     public setSource(source: string): void {
+        const previous = valueTypeLabel(this.outputType);
+        this.compileSource(source);
+        if (valueTypeLabel(this.outputType) !== previous) {
+            this.onReturnTypeChanged?.(this);
+        }
+    }
+
+    private compileSource(source: string): void {
         this.source = source;
         if (source.trim() === '') {
             this.compiled = undefined;
             this.diagnostics = [];
+            this.sourceVariables = [];
             this.syncSockets([]);
             this.retypeOutput(UNKNOWN);
             return;
@@ -125,7 +148,9 @@ export class MathExpressionNode extends OnshapeNode {
         this.compiled = result;
         if (result.ok) {
             this.diagnostics = [];
-            this.syncSockets(freeVariables(result.ast));
+            const names = freeVariables(result.ast);
+            this.sourceVariables = names;
+            this.syncSockets(names);
             this.retypeOutput(result.valueType);
         } else {
             // Invalid: keep content and last good sockets; only diagnostics change.
@@ -179,14 +204,18 @@ export class MathExpressionNode extends OnshapeNode {
      * binding feeds only the type checker, keeping the input permissive so
      * any producer value the compatibility matrix allows stays connectable.
      */
-    public applyConnectedInputType(name: string, sourceType: ValueType | undefined): void {
-        if (sourceType == null || this.inputs[name] == null) return;
+    public applyConnectedInputType(name: string, sourceType: ValueType | undefined): boolean {
+        if (sourceType == null || this.inputs[name] == null) return false;
+        const previous = valueTypeLabel(this.outputType);
         this.setBinding(name, sourceType);
+        return valueTypeLabel(this.outputType) !== previous;
     }
 
     /** `connectionremove`: drop the binding once no producer remains. */
-    public clearConnectedInputType(name: string): void {
+    public clearConnectedInputType(name: string): boolean {
+        const previous = valueTypeLabel(this.outputType);
         this.setBinding(name, UNKNOWN);
+        return valueTypeLabel(this.outputType) !== previous;
     }
 
     /** The value type currently carried by the `return` socket. */
@@ -214,7 +243,13 @@ export class MathExpressionNode extends OnshapeNode {
 
     private syncSockets(free: string[]): void {
         for (const key of Object.keys(this.inputs)) {
-            if (!free.includes(key)) this.removeInput(key);
+            if (!free.includes(key)) {
+                // A connected variable that left the source must lose its wire
+                // before the socket disappears; the canvas callback owns that
+                // asynchronous removal and deletes the input afterwards.
+                if (this.onBeforeInputRemoved?.(this, key) === true) continue;
+                this.removeInput(key);
+            }
         }
         for (const name of free) {
             if (this.inputs[name] == null) {
@@ -227,11 +262,26 @@ export class MathExpressionNode extends OnshapeNode {
         }
     }
 
+    /** Variables named by the last successfully compiled source. */
+    public getSourceVariables(): string[] {
+        return [...this.sourceVariables];
+    }
+
     private retypeOutput(valueType: ValueType): void {
         if (valueTypeLabel(valueType) === valueTypeLabel(this.outputType)) return;
         this.outputType = valueType;
-        this.removeOutput('return');
-        this.addOutput('return', new OnshapeOutput(new OnshapeSocket('return', valueType), valueTypeLabel(valueType)));
+        const output = this.outputs['return'];
+        if (output == null) {
+            this.addOutput('return', new OnshapeOutput(new OnshapeSocket('return', valueType), valueTypeLabel(valueType)));
+            return;
+        }
+        // Reuse the output object: connected target inputs keep a reference to
+        // it (`OnshapeInput.connections`), so replacing it would make a later
+        // disconnect fail to find the producer and leave a stale binding.
+        const label = valueTypeLabel(valueType);
+        output.socket = new OnshapeSocket('return', valueType);
+        output.label = label;
+        if (output instanceof OnshapeOutput) output.setType(label);
     }
 
     public getVariableSymbols(): string[] {

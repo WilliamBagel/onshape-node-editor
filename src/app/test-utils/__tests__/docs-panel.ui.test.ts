@@ -50,6 +50,14 @@ describe('DocumentationPanel', () => {
     expect(wrapper.emitted('close')).toHaveLength(2)
   })
 
+  it('Escape closes when focus has left the panel for the document body', async () => {
+    const wrapper = await mountPanel()
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
   it('arrow keys move the option and Enter opens it', async () => {
     const wrapper = await mountPanel()
     const rows = wrapper.findAll('.docs-nav-item')

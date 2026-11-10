@@ -276,6 +276,11 @@ export function restoreClipboardNode(
         default:
             throw new Error(`Clipboard cannot restore node kind "${(data as { kind: string }).kind}".`);
     }
+    // Frames are never part of a snapshot. A copied child's `group` therefore
+    // names a frame that will not be pasted: clear it before the node reaches
+    // the canvas, or the paste silently re-parents into the source frame (or
+    // persists a dangling reference once that frame is gone).
+    node.group = null;
     node.id = newId;
     node.muted = entry.muted;
     return node;

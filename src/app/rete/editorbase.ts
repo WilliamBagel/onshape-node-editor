@@ -48,6 +48,7 @@ import { ContextMenuPlugin } from "rete-context-menu-plugin";
 import { editorContextMenuPreset } from "./editor-context-menu";
 import { buildEditorContextMenuList } from "./editor-context-menu-items";
 import { captureClipboard, planPaste, restoreClipboardNode, type ClipboardSnapshot } from "./clipboard";
+import { propagateMathReturnType, syncMathInputType } from "./math-type-propagation";
 import { defaultCatalog } from "../onshape/catalog/spec-catalog";
 import type { CatalogEntry } from "../onshape/catalog/types";
 import { createArrayNode, createMathExpressionNode, createNodeFromCatalogEntry, createUtilityNode, groupByCategory, nodeableEntries, type ArrayNodeVariant } from "./catalog-node-factory";
@@ -418,8 +419,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                         }
                         await deleteSelectedNodes();
                     },
-                    createNode: (entry) => () =>
-                        createNodeFromCatalogEntry(entry, cachedSpecResolver) as OnshapeNode,
+                    createNode: (entry) => () => { void addNodeFromCatalog(entry); },
                 },
                 editorSettings.getBindings(),
             ),
@@ -493,6 +493,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     TranslateLock.invert();
 
+    const pendingInputRemovals = new Set<string>();
     editor.addPipe(context => {
         if (context.type === 'nodecreate') {
             const node = context.data;
@@ -500,6 +501,46 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 area.update('node', node.id);
             }
             node['area'] = area;
+            // A math node's return type can change after it is wired (upstream
+            // connection or a source edit); retype its consumers then, so the
+            // direction/order the wires were drawn in does not matter.
+            if (node instanceof MathExpressionNode) {
+                node.onReturnTypeChanged = (changed) => propagateMathReturnType(editor, changed);
+                // Editing a source can drop a variable whose input is wired.
+                // The socket must not vanish before its wire does, or the
+                // saved graph names an input the node no longer has. Defer the
+                // socket removal until the wire is gone, then drop the socket
+                // (and its binding, via the connectionremove pipe).
+                node.onBeforeInputRemoved = (changed, name) => {
+                    const key = `${changed.id}:${name}`;
+                    const connections = editor
+                        .getConnections()
+                        .filter((connection) => connection.target === changed.id && connection.targetInput === name);
+                    if (connections.length === 0) return false;
+                    if (!pendingInputRemovals.has(key)) {
+                        pendingInputRemovals.add(key);
+                        void (async () => {
+                            try {
+                                for (const connection of connections) {
+                                    if (editor.getConnections().some((item) => item.id === connection.id)) {
+                                        await editor.removeConnection(connection.id);
+                                    }
+                                }
+                                if (
+                                    changed.inputs[name] != null &&
+                                    !changed.getSourceVariables().includes(name)
+                                ) {
+                                    changed.removeInput(name);
+                                    changed.update();
+                                }
+                            } finally {
+                                pendingInputRemovals.delete(key);
+                            }
+                        })();
+                    }
+                    return true;
+                };
+            }
         } else if (context.type === 'connectioncreate') {
             const data = context.data;
 
@@ -530,14 +571,14 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 }
             }
 
-            // Type propagation for math nodes: the producer's socket type
-            // becomes the variable's binding, so `x * 2` with a quantity
-            // producer returns a quantity. The binding must be applied
-            // BEFORE addConnection, because retyping the return socket
-            // replaces the output object the connection points at.
+            // Type propagation for math nodes: the first producer's socket
+            // type becomes the variable's binding, so `x * 2` with a quantity
+            // producer returns a quantity. The fallback supplies the type of
+            // the connection being created, which the editor has not recorded
+            // yet; a later producer must not override the first one.
             if (target instanceof MathExpressionNode) {
                 const sourceType = (output.socket as OnshapeSocket | undefined)?.valueType;
-                target.applyConnectedInputType(data.targetInput, sourceType);
+                syncMathInputType(editor, target.id, data.targetInput, { fallback: sourceType });
             }
 
             source.addConnection(output, input);
@@ -560,13 +601,15 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             if (target instanceof CustomFeatureNode) {
                 (target as CustomFeatureNode).updateVisibilities();
             }
-            // A math variable reverts to untyped when its last producer
-            // goes away, and the return socket recomputes from the source.
+            // A math variable follows its first remaining producer; when the
+            // last one goes away it reverts to untyped. The connection being
+            // removed is still in `editor.getConnections()` inside this pipe,
+            // so exclude it explicitly.
             if (target instanceof MathExpressionNode) {
-                if ((input.connections?.length ?? 0) === 0) {
-                    target.clearConnectedInputType(context.data.targetInput);
-                    target.update();
-                }
+                syncMathInputType(editor, target.id, context.data.targetInput, {
+                    ignoreConnectionId: context.data.id,
+                });
+                target.update();
             }
         }
         return context;
@@ -806,6 +849,14 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         const ordered = [...selectedNodes].sort(
             (a, b) => Number(a instanceof FrameNode) - Number(b instanceof FrameNode)
         );
+        // `NodeEditor.removeNode` only removes the node; a connection is a
+        // separate model record. Without this, deleting a wired node leaves
+        // dangling connections that serialize into an unloadable graph.
+        for (const connection of [...editor.getConnections()]) {
+            if (selectedIds.has(connection.source) || selectedIds.has(connection.target)) {
+                await editor.removeConnection(connection.id);
+            }
+        }
         for (const node of ordered) {
             if (await editor.removeNode(node.id)) removed++;
         }
@@ -927,6 +978,12 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             throw new Error(result.error);
         }
         const graph = result.graph;
+        // Connections are separate model records: removing nodes does not
+        // remove them. Clear them first, or a load duplicates every wire
+        // (old connection objects survive the node swap).
+        for (const connection of [...editor.getConnections()]) {
+            await editor.removeConnection(connection.id);
+        }
         // #13: the scopes plugin refuses to remove a frame that still has
         // children, so existing non-frame nodes go first and frames last.
         for (const node of [...editor.getNodes()].sort(
@@ -1084,6 +1141,9 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
             if (editor.getNode(nodeId) != null) {
                 await area.update("node", nodeId);
             }
+        },
+        adoptDefinition: (definition) => {
+            groupDefinitions.set(definition.id, definition);
         },
         settleConnections,
         onBoundaryChanged: () => boundaryChangedCb?.(),
