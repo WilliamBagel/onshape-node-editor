@@ -13,7 +13,11 @@
 //   6. The group breadcrumb is interactive: clicking an ancestor segment
 //      leaves the group in one step (and the explicit "Exit group" control
 //      keeps the one-level behaviour).
-//   7. No console errors, page errors or browser dialogs during the run.
+//   7. The panel is a real inset sheet at 1600x1000, 1280x800 and 1024x768:
+//      >= 8px of window on the top/right/bottom, the header title, close
+//      button and section tabs fully inside the panel and never painted over
+//      by the toolbar, and the article scrolling inside the panel.
+//   8. No console errors, page errors or browser dialogs during the run.
 //
 // Usage:
 //   pnpm exec vite --port 5226 --host 127.0.0.1   (or the build/preview server)
@@ -229,7 +233,152 @@ try {
   check('breadcrumb navigation', false, error.message);
 }
 
-// ── 7. Errors ──────────────────────────────────────────────────────────────
+// ── 7. Panel geometry: inset sheet, nothing clipped at the window top ──────
+// The panel used to start at viewport y=0 behind the 36px toolbar (z-index
+// 10000), so its header looked cut off. The contract below is layout, not
+// pixels: a visible margin, a frame that clips, and a header that hit-tests
+// to itself rather than to the toolbar.
+const GEOMETRY_VIEWPORTS = [
+  { width: 1600, height: 1000 },
+  { width: 1280, height: 800 },
+  { width: 1024, height: 768 },
+];
+
+const readPanelGeometry = () => page.evaluate(() => {
+  const box = (el) => {
+    const b = el.getBoundingClientRect();
+    return { top: b.top, left: b.left, right: b.right, bottom: b.bottom, width: b.width, height: b.height };
+  };
+  const panelEl = document.querySelector('.docs-panel');
+  const panel = box(panelEl);
+  const style = getComputedStyle(panelEl);
+  const insidePanel = (r) => r.top >= panel.top - 0.5 && r.bottom <= panel.bottom + 0.5
+    && r.left >= panel.left - 0.5 && r.right <= panel.right + 0.5;
+  const insideViewport = (r) => r.top >= 0 && r.left >= 0
+    && r.bottom <= window.innerHeight + 0.5 && r.right <= window.innerWidth + 0.5;
+  // Hit-test the element's centre: if the toolbar (or anything else) painted
+  // over it, elementFromPoint returns that element instead.
+  const onTop = (el) => {
+    const b = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    return hit != null && (hit === el || el.contains(hit));
+  };
+  const title = document.querySelector('#docs-panel-title');
+  const close = document.querySelector('.docs-close');
+  const tabs = document.querySelector('.docs-sections');
+  const tabButtons = [...document.querySelectorAll('.docs-section-tab')];
+  const article = document.querySelector('.docs-article');
+  const nav = document.querySelector('.docs-nav');
+  const titleBox = box(title);
+  const closeBox = box(close);
+  const tabsBox = box(tabs);
+  return {
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+    panel,
+    style: { borderRadius: style.borderTopLeftRadius, overflow: style.overflow, borderWidth: style.borderTopWidth },
+    title: { ...titleBox, insidePanel: insidePanel(titleBox), insideViewport: insideViewport(titleBox), onTop: onTop(title) },
+    close: { ...closeBox, insidePanel: insidePanel(closeBox), insideViewport: insideViewport(closeBox), onTop: onTop(close) },
+    tabs: {
+      ...tabsBox,
+      insidePanel: insidePanel(tabsBox),
+      insideViewport: insideViewport(tabsBox),
+      onTop: onTop(tabs),
+      buttonsVisible: tabButtons.every((tab) => {
+        const b = tab.getBoundingClientRect();
+        return b.width > 0 && b.height > 0 && b.top >= panel.top && b.bottom <= panel.bottom && onTop(tab);
+      }),
+    },
+    article: { ...box(article), insidePanel: insidePanel(box(article)), scrollHeight: article.scrollHeight, clientHeight: article.clientHeight },
+    nav: { scrollHeight: nav.scrollHeight, clientHeight: nav.clientHeight },
+  };
+});
+
+/** Scroll a container and report where it ended up, still inside the panel. */
+const scrollArticle = () => page.evaluate(async () => {
+  const article = document.querySelector('.docs-article');
+  const panel = document.querySelector('.docs-panel').getBoundingClientRect();
+  const before = article.scrollTop;
+  const scrollHeight = article.scrollHeight;
+  const clientHeight = article.clientHeight;
+  article.scrollTop = Math.min(240, scrollHeight - clientHeight);
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  const after = article.getBoundingClientRect();
+  return {
+    title: document.querySelector('.docs-article-title')?.textContent?.trim() ?? '',
+    before,
+    scrollTop: article.scrollTop,
+    scrollHeight,
+    clientHeight,
+    maxScroll: scrollHeight - clientHeight,
+    top: after.top,
+    bottom: after.bottom,
+    panelTop: panel.top,
+    panelBottom: panel.bottom,
+  };
+});
+
+try {
+  const help = page.locator('button[aria-label="Documentation"]');
+  for (const viewport of GEOMETRY_VIEWPORTS) {
+    const label = `${viewport.width}x${viewport.height}`;
+    await page.setViewportSize(viewport);
+    await sleep(250);
+    await help.click({ timeout: 5000 });
+    await page.waitForSelector('.docs-panel', { timeout: 5000 });
+    await sleep(250);
+    const geometry = await readPanelGeometry();
+
+    const margins = {
+      top: geometry.panel.top,
+      right: geometry.viewport.width - geometry.panel.right,
+      bottom: geometry.viewport.height - geometry.panel.bottom,
+      left: geometry.panel.left,
+    };
+    check(`[${label}] panel is inset from the window (top/right/bottom >= 8px)`,
+      margins.top >= 8 && margins.right >= 8 && margins.bottom >= 8 && margins.left > 0,
+      JSON.stringify(margins));
+    check(`[${label}] panel still uses nearly full height`,
+      geometry.panel.height >= geometry.viewport.height - 32,
+      `panel=${geometry.panel.height} viewport=${geometry.viewport.height}`);
+    check(`[${label}] panel is a rounded, hairline, clipping frame`,
+      geometry.style.borderRadius === '6px' && geometry.style.overflow === 'hidden' && parseFloat(geometry.style.borderWidth) >= 1,
+      JSON.stringify(geometry.style));
+    check(`[${label}] header title and close button are fully inside the panel and viewport, above the toolbar`,
+      geometry.title.insidePanel && geometry.title.insideViewport && geometry.title.onTop
+        && geometry.close.insidePanel && geometry.close.insideViewport && geometry.close.onTop,
+      JSON.stringify({ title: geometry.title, close: geometry.close }));
+    check(`[${label}] section tabs are visible and not clipped`,
+      geometry.tabs.insidePanel && geometry.tabs.insideViewport && geometry.tabs.onTop
+        && geometry.tabs.buttonsVisible && geometry.tabs.height > 0,
+      JSON.stringify(geometry.tabs));
+
+    // A long node article proves the article pane owns the scroll, not the page.
+    await page.fill('input.docs-search', 'extrude');
+    await sleep(250);
+    await page.locator('input.docs-search').press('Enter');
+    await sleep(250);
+    const scroll = await scrollArticle();
+    check(`[${label}] article scrolls inside the panel`,
+      geometry.article.insidePanel
+        && scroll.title === 'Extrude'
+        && scroll.scrollHeight > scroll.clientHeight + 20
+        && scroll.scrollTop > 0 && scroll.scrollTop <= scroll.maxScroll
+        && scroll.top >= scroll.panelTop && scroll.bottom <= scroll.panelBottom + 0.5,
+      JSON.stringify({ article: geometry.article, scroll }));
+    check(`[${label}] topic nav keeps its own scroll`,
+      geometry.nav.scrollHeight > geometry.nav.clientHeight + 20,
+      JSON.stringify(geometry.nav));
+
+    await shot(`08-docs-geometry-${label}.png`);
+    await page.locator('input.docs-search').press('Escape');
+    await page.waitForSelector('.docs-panel', { state: 'detached', timeout: 5000 });
+  }
+  await page.setViewportSize({ width: 1600, height: 1000 });
+} catch (error) {
+  check('documentation panel geometry', false, error.message);
+}
+
+// ── 8. Errors ──────────────────────────────────────────────────────────────
 check('no browser dialogs', dialogs.length === 0, dialogs.join('; ') || 'none');
 check('no console errors', consoleErrors.length === 0, consoleErrors.join('; ') || 'none');
 check('no page errors', pageErrors.length === 0, pageErrors.join('; ') || 'none');
