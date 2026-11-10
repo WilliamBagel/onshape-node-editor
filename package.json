@@ -68,7 +68,7 @@
     "sass": "^1.100.0",
     "sass-loader": "^16.0.8",
     "three": "^0.156.1",
-    "vite-plugin-svgr": "^4.5.0",
+    "vite-plugin-svgr": "^5.2.0",
     "vue": "^3.5.42",
     "vue3-select": "^0.1.2"
   },
