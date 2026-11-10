@@ -107,6 +107,21 @@ jobs:
           QA_URL: http://127.0.0.1:5173/onshape-node-editor/
         run: pnpm run qa:node-chrome
 
+      - name: Collapsed socket grid check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:collapsed-grid
+
+      - name: Documentation and group navigation check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:docs-nav
+
+      - name: Build validation check
+        env:
+          QA_URL: http://127.0.0.1:5173/onshape-node-editor/
+        run: pnpm run qa:build-validation
+
       - name: Defect checks (group wires + palette; advisory)
         env:
           QA_URL: http://127.0.0.1:5173/onshape-node-editor/
