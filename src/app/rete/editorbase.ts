@@ -54,17 +54,9 @@ import { GroupNode } from "./nodes/groupinstancenode";
 import { DefineFeatureNode, type DefineFeatureState } from "./nodes/definefeaturenode";
 import { assertGroupableSelection, commonGroupParent, createGroupDefinition, extractBoundarySockets, wouldCreateGroupCycle, type GroupDefinition, type GroupSocketPatch } from "./groups/groupmodel";
 import { GroupEditorController, type GroupBoundaryState } from "./groups/group-editor";
+import { isAccumulateHeld, modifierCheckKey } from "./selection-modifiers";
 
-/** Map a settings modifier name to the name `@rwh/keystrokes` `checkKey` tracks. */
-export function modifierCheckKey(modifier: string): string {
-    switch (modifier) {
-        case 'Control': return 'control';
-        case 'Shift': return 'Shift';
-        case 'Meta': return 'meta';
-        case 'Alt': return 'alt';
-        default: return modifier;
-    }
-}
+export { modifierCheckKey } from "./selection-modifiers";
 
 // import { accumulateOnCtrl, MySelector, selectableNodes } from "./testselector";
 
@@ -577,8 +569,11 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
 
     AreaExtensions.selectableNodes(area, selector, {
         accumulating: {
+            // Ctrl/Cmd are additive in addition to the configured modifier
+            // (Shift by default) — see selection-modifiers.ts. Background
+            // click deselection is rete's `unselectAll` and is unaffected.
             active: () => {
-                return checkKey(modifierCheckKey(editorSettings.getPreferences().accumulateModifier));
+                return isAccumulateHeld(checkKey, editorSettings.getPreferences().accumulateModifier);
             }
         }
     });

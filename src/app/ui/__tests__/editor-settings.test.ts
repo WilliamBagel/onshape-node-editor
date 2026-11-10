@@ -249,6 +249,48 @@ describe('editorSettings: canvas grid application', () => {
   });
 });
 
+describe('editorSettings: change notifications', () => {
+  it('notifies subscribers on rebind and reset, and stops after unsubscribe', () => {
+    const { store } = freshStore();
+    let calls = 0;
+    const unsubscribe = store.subscribe(() => { calls += 1; });
+
+    expect(store.setBinding('addNode', 'Alt+N')).toEqual({ ok: true });
+    expect(calls).toBe(1);
+    expect(store.getBindings().addNode).toBe('Alt+N');
+
+    store.resetBinding('addNode');
+    expect(calls).toBe(2);
+    expect(store.getBindings().addNode).toBe('Shift+A');
+
+    unsubscribe();
+    store.setBinding('addNode', 'Alt+N');
+    expect(calls).toBe(2);
+  });
+
+  it('notifies on preference changes and resetAll', () => {
+    const { store } = freshStore();
+    let calls = 0;
+    store.subscribe(() => { calls += 1; });
+
+    expect(store.setPreference('showGrid', false)).toBe(true);
+    expect(calls).toBe(1);
+    store.resetAll();
+    expect(calls).toBe(2);
+  });
+
+  it('a throwing subscriber does not break the save path', () => {
+    const { storage, store } = freshStore();
+    store.subscribe(() => { throw new Error('boom'); });
+    let seen = 0;
+    store.subscribe(() => { seen += 1; });
+
+    expect(store.setBinding('addNode', 'Alt+N')).toEqual({ ok: true });
+    expect(seen).toBe(1);
+    expect(storage.getItem(EDITOR_SETTINGS_KEY)).toContain('Alt+N');
+  });
+});
+
 describe('dialog service: settings request', () => {
   it('openSettings queues a settings request and closeSettings settles it', async () => {
     const seen: unknown[] = [];
