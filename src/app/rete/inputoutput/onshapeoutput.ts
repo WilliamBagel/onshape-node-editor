@@ -10,4 +10,8 @@ export class OnshapeOutput extends ClassicPreset.Output<ClassicPreset.Socket> {
     public get type(){
         return this._type;
     }
+    /** Re-label the output in place (math return-type changes keep object identity). */
+    public setType(type: string): void {
+        this._type = type;
+    }
 }

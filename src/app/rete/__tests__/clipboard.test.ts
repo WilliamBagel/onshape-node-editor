@@ -109,6 +109,16 @@ describe("editor clipboard capture", () => {
         expect(restored.getTitle()).toBe(math.getTitle());
     });
 
+    it("drops frame membership because frames are never copied", () => {
+        const math = new MathExpressionNode("2 * PI * radius");
+        math.group = "frame-source";
+        const snapshot = captureClipboard([math], [], positions([math]));
+        expect(snapshot!.entries[0].json.group).toBe("frame-source");
+
+        const restored = restoreClipboardNode(snapshot!.entries[0], "math-3", () => undefined);
+        expect(restored.group).toBeNull();
+    });
+
     it("keeps only wires whose two endpoints are copied", () => {
         const first = boxNode();
         const second = boxNode();

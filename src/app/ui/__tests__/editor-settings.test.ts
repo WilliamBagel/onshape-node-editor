@@ -207,6 +207,7 @@ describe('editorSettings: combo normalisation and matching', () => {
     expect(matchCommand({ key: 'x', ctrlKey: true }, null, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'INPUT' }, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'TEXTAREA' }, bindings)).toBeNull();
+    expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'SELECT' }, bindings)).toBeNull();
     expect(matchCommand({ key: 'b', ctrlKey: true }, { tagName: 'DIV', isContentEditable: true }, bindings)).toBeNull();
   });
 

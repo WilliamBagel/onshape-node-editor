@@ -12,6 +12,7 @@ import { createUtilityNode } from "../../catalog-node-factory";
 import { DefineFeatureNode } from "../../nodes/definefeaturenode";
 import { OutputFeatureNode } from "../../nodes/outputfeaturenode";
 import { FunctionNode } from "../../nodes/functionnode";
+import { MathExpressionNode } from "../../nodes/mathexpressionnode";
 import { generateFeatureStudioSource } from "../../graph-codegen";
 import {
     applyGraph,
@@ -274,6 +275,49 @@ describe("grouping v2 (#14)", () => {
         expect(afterDoc.nodes.map((node) => node.id).sort()).toEqual(beforeDoc.nodes.map((node) => node.id).sort());
         // Outside positions are untouched by the visit.
         expect(positions[fixture.define.id]).toEqual({ x: 0, y: 0 });
+    });
+
+    it("adopts a node added while editing the group", async () => {
+        const fixture = await buildFixture();
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        fixture.editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(fixture.editor, {
+            snapshot: () => ({
+                document: JSON.stringify(serializeGraph(fixture.editor, positions, fixture.editor.getNodes().map((node) => node.id))),
+                positions: { ...positions },
+            }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) {
+                    throw new Error(loaded.error);
+                }
+                for (const connection of [...fixture.editor.getConnections()]) {
+                    await fixture.editor.removeConnection(connection.id);
+                }
+                for (const node of [...fixture.editor.getNodes()]) {
+                    await fixture.editor.removeNode(node.id);
+                }
+                await applyGraph(fixture.editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => {
+                Object.assign(positions, next);
+            },
+        });
+
+        expect(await controller.enter(fixture.instance1.id)).toBe(true);
+        const added = new MathExpressionNode("1 + 2");
+        await fixture.editor.addNode(added as never);
+        expect(await controller.exit()).toBe(true);
+
+        expect(fixture.definition.nodes.some((node) => node.id === added.id)).toBe(true);
+        expect(await controller.enter(fixture.instance1.id)).toBe(true);
+        expect(fixture.editor.getNode(added.id)).not.toBeNull();
+        await fixture.editor.removeNode(added.id);
+        expect(await controller.exit()).toBe(true);
+        expect(fixture.definition.nodes.some((node) => node.id === added.id)).toBe(false);
     });
 
     it("an instance can be entered, exited, and entered again (Tab round-trip)", async () => {
