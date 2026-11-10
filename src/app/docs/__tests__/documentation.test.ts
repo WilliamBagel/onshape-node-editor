@@ -218,4 +218,20 @@ describe('DocumentationPanel', () => {
     await nextTick()
     expect(document.activeElement).toBe(trigger)
   })
+
+  it('section tabs reach General, Design practice and Nodes by click', async () => {
+    const wrapper = await mountPanel()
+    const tabs = wrapper.findAll('.docs-section-tab')
+    expect(tabs.map(tab => tab.text())).toEqual(['General', 'Design practice', 'Nodes'])
+    expect(tabs[0].attributes('aria-pressed')).toBe('true')
+
+    await tabs[1].trigger('click')
+    expect(wrapper.find('.docs-article-title').text()).toBe(DOC_SECTIONS[1].topics[0].title)
+    expect(wrapper.find('.docs-crumb').text()).toContain('Design practice')
+
+    await tabs[2].trigger('click')
+    expect(wrapper.find('.docs-article-title').text()).toBe(DOC_SECTIONS[2].topics[0].title)
+    expect(wrapper.find('.docs-crumb').text()).toContain('Nodes')
+    expect(tabs[2].attributes('aria-pressed')).toBe('true')
+  })
 })

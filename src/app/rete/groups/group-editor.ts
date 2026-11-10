@@ -632,6 +632,23 @@ export class GroupEditorController {
     }
 
     /**
+     * Leave levels until `depth` remain (0 = top level). Used by the toolbar
+     * breadcrumb, where an ancestor segment jumps straight to that group;
+     * a depth at or beyond the current one is a no-op. Each level is exited
+     * through `exit()` so snapshots, boundary positions and restored frames
+     * follow exactly the same path as Tab.
+     */
+    async exitTo(depth: number): Promise<boolean> {
+        const target = Math.max(0, Math.min(Math.trunc(depth), this.levels.length));
+        let changed = false;
+        while (this.levels.length > target) {
+            await this.exit();
+            changed = true;
+        }
+        return changed;
+    }
+
+    /**
      * Tab behaviour: when a GroupNode instance is selected, enter it (including
      * nested — entering a group instance inside an edited group pushes another
      * level); otherwise, inside a group, exit one level; otherwise noop.

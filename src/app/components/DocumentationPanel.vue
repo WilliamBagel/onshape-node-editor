@@ -26,6 +26,23 @@
         </button>
       </header>
 
+      <!-- Section tabs: General / Design practice / Nodes stay one click away
+           regardless of where the article currently is. -->
+      <nav class="docs-sections" aria-label="Documentation sections">
+        <button
+          v-for="section in sections"
+          :key="section.id"
+          type="button"
+          class="docs-section-tab"
+          :class="{ 'docs-section-tab--active': section.id === activeSection.id }"
+          :data-section="section.id"
+          :aria-pressed="section.id === activeSection.id"
+          @click="selectSection(section)"
+        >
+          {{ section.title }}
+        </button>
+      </nav>
+
       <div class="docs-search-row">
         <input
           ref="searchInput"
@@ -138,7 +155,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import { DOC_SECTIONS, resolveDocTarget, searchDocumentation } from '../docs'
-import type { DocSectionId, DocTopic } from '../docs/types'
+import type { DocSection, DocSectionId, DocTopic } from '../docs/types'
 
 const props = defineProps<{
   open: boolean
@@ -228,6 +245,13 @@ function selectTopic(topic: DocTopic) {
   selectedTopicId.value = topic.id
   activeOptionId.value = topic.id
   if (articleEl.value != null) articleEl.value.scrollTop = 0
+}
+
+/** Section tab: leave search mode and show the section's first topic. */
+function selectSection(section: DocSection) {
+  term.value = ''
+  const first = section.topics[0]
+  if (first != null) selectTopic(first)
 }
 
 /** Keep the active row inside the list by adjusting the list scroll only. */
@@ -396,6 +420,35 @@ onMounted(() => {
 }
 .docs-close:hover { background: var(--hover-tint); }
 .docs-close:focus-visible { outline: 2px solid var(--accent-steel); outline-offset: 1px; }
+
+/* Section tabs: quiet text buttons, steel underline for the active section. */
+.docs-sections {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 16px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.docs-section-tab {
+  padding: 6px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-section);
+  font-weight: var(--font-weight-section);
+  line-height: var(--line-height-title);
+  opacity: var(--opacity-secondary);
+  cursor: pointer;
+}
+.docs-section-tab:hover { opacity: 1; background: var(--hover-tint); }
+.docs-section-tab--active {
+  opacity: 1;
+  border-bottom-color: var(--accent-steel);
+}
+.docs-section-tab:focus-visible { outline: 2px solid var(--accent-steel); outline-offset: -2px; }
 
 .docs-search-row { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--hairline); }
 .docs-search {

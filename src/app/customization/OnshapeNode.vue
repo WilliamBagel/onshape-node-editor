@@ -102,11 +102,14 @@
             data-testid="collapsed-output-socket" />
         </span>
       </div>
-      <div class="dialog-help-container"><a class="os-help-link os-center-content"
-          href="./probably-a-popup-here-instead.error" target="help" aria-label="Open FeatureScript help" title="Help"><svg class="os-svg-icon os-help-btn"
-            xmlns="http://www.w3.org/2000/svg">
+      <div class="dialog-help-container">
+        <button type="button" class="os-help-link os-center-content node-help-btn"
+          :aria-label="`Open documentation for ${title}`" :title="`Documentation: ${title}`"
+          @pointerdown.stop @click.stop="openNodeHelp">
+          <svg class="os-svg-icon os-help-btn" xmlns="http://www.w3.org/2000/svg">
             <use xlink:href="#svg-icon-help-button"></use>
-          </svg></a>
+          </svg>
+        </button>
       </div>
       <ResizeHandle @resize="onResize" @resize-end="onResizeEnd"></ResizeHandle>
     </div>
@@ -119,6 +122,7 @@ import { defineComponent } from 'vue'
 import type { PropType } from 'vue'
 import { Ref } from 'rete-vue-plugin'
 import ResizeHandle from '../components/ResizeHandle.vue'
+import { requestDocHelp } from '../docs/help-request'
 import OnshapeControl from './OnshapeControl.vue'
 import TranslateLock from '../components/TranslateLock.vue'
 import OnshapeInput from './OnshapeInput.vue'
@@ -178,6 +182,14 @@ export default defineComponent({
     }
   },
   methods: {
+    /**
+     * In-app help: ask the host to open the documentation at this node's
+     * topic (title resolved against the generated node topics; unknown
+     * titles fall back to the Nodes section). No browser window/tab.
+     */
+    openNodeHelp() {
+      requestDocHelp({ section: 'nodes', topic: this.title })
+    },
     visibleInputs(): Array<[string, OnshapeInputType<any>]> {
       // Method, not computed: graph nodes are raw model objects (markRaw),
       // so socket mutations are not reactive. `area.update('node')` rerenders
@@ -599,6 +611,27 @@ export default defineComponent({
   position: relative;
   display: flex;
   flex-direction: row-reverse;
+}
+
+/* In-app help: the node's help glyph is a real button (no navigation); the
+   vendored .os-help-link/.os-help-btn classes only supply the glyph box. */
+.node-help-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 0;
+  cursor: pointer;
+}
+
+.node-help-btn:hover .os-help-btn {
+  opacity: 0.72;
+}
+
+.node-help-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .feature-dialog-main {

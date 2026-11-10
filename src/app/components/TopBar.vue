@@ -59,6 +59,12 @@ const emit = defineEmits<{
   (e: 'toggleGroupConfig'): void
   /** Feature config: toggle the Define Feature parameter panel. */
   (e: 'toggleFeatureConfig'): void
+  /** Documentation: open the in-app documentation panel. */
+  (e: 'help'): void
+  /** Group breadcrumb: exit until `depth` levels remain (segment index). */
+  (e: 'exitGroupTo', depth: number): void
+  /** Group breadcrumb: leave the current group by exactly one level. */
+  (e: 'exitGroup'): void
 }>()
 
 /* ── Tooltip hover state ────────────────────────────────────────── */
@@ -165,7 +171,24 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
 
     <!-- ── Centre: optional project name, or the group breadcrumb ── -->
     <div v-if="groupBreadcrumb && groupBreadcrumb.length > 1" class="toolbar-centre">
-      <span class="project-name group-breadcrumb">{{ groupBreadcrumb.join(' / ') }}</span>
+      <nav class="group-breadcrumb" aria-label="Group path">
+        <template v-for="(segment, index) in groupBreadcrumb" :key="segment + index">
+          <span v-if="index > 0" class="group-breadcrumb-sep" aria-hidden="true"> / </span>
+          <!-- Ancestor segments are real buttons: click one to leave every
+               group inside it in a single step. The last segment is where
+               the user already is, so it is plain text. -->
+          <button v-if="index < groupBreadcrumb.length - 1" type="button" class="group-breadcrumb-seg"
+            :aria-label="`Exit to ${segment}`" :title="`Exit to ${segment}`"
+            @click="emit('exitGroupTo', index)">{{ segment }}</button>
+          <span v-else class="group-breadcrumb-seg group-breadcrumb-current" aria-current="page">{{ segment }}</span>
+        </template>
+        <button type="button" class="toolbar-btn group-exit" aria-label="Exit group"
+          v-tooltip="{ label: 'Exit Group', description: 'Leave the current group. Tab does the same from the canvas.' }"
+          @click="emit('exitGroup')">
+          <SvgIcon href="#svg-icon-close-x" :size="14" aria-label="Exit group" />
+          <span class="toolbar-btn-label">Exit group</span>
+        </button>
+      </nav>
     </div>
     <div v-else-if="projectName" class="toolbar-centre">
       <span class="project-name">{{ projectName }}</span>
@@ -199,6 +222,15 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
 
       <!-- Divider before Settings -->
       <div class="toolbar-divider" aria-hidden="true" />
+
+      <!-- Documentation: the in-app panel (searchable, sectioned). -->
+      <div class="toolbar-btn-wrap">
+        <button class="toolbar-btn" aria-label="Documentation"
+          v-tooltip="{ label: 'Documentation', description: 'Open the in-app documentation: general usage, design practice and every node.' }"
+          @click="emit('help')">
+          <SvgIcon href="#svg-icon-help-button" :size="16" aria-label="Documentation" />
+        </button>
+      </div>
 
       <!-- Settings button -->
       <div class="toolbar-btn-wrap">
@@ -266,9 +298,56 @@ type ButtonKey = 'build' | 'run' | 'upload' | 'target' | 'save' | 'open' | 'sett
   color: var(--text-secondary);
 }
 
-/* #14: the group editing breadcrumb replaces the project name while editing. */
+/* #14: the group editing breadcrumb replaces the project name while editing.
+   Ancestor segments are buttons (jump out to that depth); the current
+   segment is plain ink so the trail still reads as one line. */
 .group-breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   color: var(--text-primary);
+  font-size: var(--font-size-title);
+}
+
+.group-breadcrumb-seg {
+  padding: 1px 3px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-meta);
+  font-weight: 500;
+  line-height: var(--line-height-title);
+  cursor: pointer;
+}
+
+.group-breadcrumb-seg:hover {
+  color: var(--text-primary);
+  background: var(--hover-tint);
+  border-color: var(--border-hairline);
+}
+
+.group-breadcrumb-seg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.group-breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-section);
+  cursor: default;
+}
+
+.group-breadcrumb-sep {
+  color: var(--text-secondary);
+  opacity: 0.6;
+  font-size: var(--font-size-meta);
+}
+
+.group-exit {
+  margin-left: 6px;
+  height: 24px;
 }
 
 /* ── Divider ────────────────────────────────────────────────────── */
