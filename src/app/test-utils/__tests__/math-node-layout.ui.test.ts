@@ -139,3 +139,26 @@ describe("MathExpressionNodeView title typography", () => {
     wrapper.unmount();
   });
 });
+
+describe("MathExpressionNodeView socket wiring contract", () => {
+  it("locks node translation on both ports so a wire drag cannot drag the card", () => {
+    // Without TranslateLock the card follows the pointer, keeping its own
+    // output under the cursor, so the drop always hits the source socket and
+    // no connection is made (qa:math-field drives the real pointer path).
+    expect(viewSrc).toMatch(/@pointerdown="lockTranslate"/);
+    expect(viewSrc.match(/@pointerdown="lockTranslate"/g) ?? []).toHaveLength(2);
+    expect(viewSrc).toMatch(/import \{ TranslateLock \} from "\.\.\/utils\/translatelock"/);
+  });
+
+  it("remounts the return port on type changes, not on every render seed", () => {
+    // The plugin mounts the socket component into the Ref element and does
+    // not push prop updates into it; keying by type updates the label/colour,
+    // while keying by `seed` churns the listener on every render.
+    expect(viewSrc).toMatch(/:key="'return-' \+ returnTypeKey\(\)"/);
+    expect(viewSrc).not.toMatch(/:key="'return-' \+ seed"/);
+  });
+
+  it("exposes the node id for stable harness lookups", () => {
+    expect(viewSrc).toMatch(/:data-node-id="data\.id"/);
+  });
+});

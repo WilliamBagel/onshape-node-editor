@@ -170,5 +170,20 @@ describe('MathExpressionNode', () => {
             node.applyConnectedInputType('missing', { name: 'number' });
             expect(node.bindings['missing']).toBeUndefined();
         });
+
+        it('notifies the editor when a source edit retypes a live return socket', () => {
+            const node = new MathExpressionNode('5 mm');
+            const seen: string[] = [];
+            node.onReturnTypeChange = (_node, valueType) => seen.push(valueType.name);
+
+            node.setSource('2');
+            expect(seen).toEqual(['number']);
+
+            node.setSource('3');
+            expect(seen).toEqual(['number']);
+
+            node.setSource('5 mm');
+            expect(seen).toEqual(['number', 'ValueWithUnits']);
+        });
     });
 });

@@ -73,6 +73,12 @@ export class MathExpressionNode extends OnshapeNode {
     public diagnostics: MathDiagnostic[] = [];
     /** Collapsed nodes show the typeset expression as their title. */
     public collapsed = false;
+    /**
+     * Installed by the editor on nodecreate: notifies it when this node's
+     * return type changes so live math wires can re-bind their consumers.
+     * Default no-op keeps construction/deserialization side-effect free.
+     */
+    public onReturnTypeChange: (node: MathExpressionNode, valueType: ValueType) => void = () => {};
     private compiled: CompileResult | undefined;
     private outputType: ValueType = UNKNOWN;
     /** Per-variable FeatureScript literals for unconnected inputs (group defaults). */
@@ -232,6 +238,11 @@ export class MathExpressionNode extends OnshapeNode {
         this.outputType = valueType;
         this.removeOutput('return');
         this.addOutput('return', new OnshapeOutput(new OnshapeSocket('return', valueType), valueTypeLabel(valueType)));
+        // A source edit can retype a live wire (5 mm -> 2). The editor owns the
+        // connection list, so it re-teaches connected math inputs from this
+        // callback; doing it here keeps load/constructor retypes side-effect
+        // free because no callback is installed until nodecreate.
+        this.onReturnTypeChange(this, valueType);
     }
 
     public getVariableSymbols(): string[] {

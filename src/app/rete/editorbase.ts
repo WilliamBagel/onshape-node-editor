@@ -500,6 +500,22 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                 area.update('node', node.id);
             }
             node['area'] = area;
+            if (node instanceof MathExpressionNode) {
+                // A source edit retypes a live return socket. Re-teach every
+                // connected math consumer from the editor's connection list so
+                // `5 mm -> 2` flips a downstream `x * 2` from quantity to
+                // number instead of leaving a stale binding.
+                node.onReturnTypeChange = (source, valueType) => {
+                    for (const connection of editor.getConnections()) {
+                        if (connection.source !== source.id || connection.sourceOutput !== 'return') continue;
+                        const target = editor.getNode(connection.target);
+                        if (target instanceof MathExpressionNode) {
+                            target.applyConnectedInputType(connection.targetInput, valueType);
+                            target.update();
+                        }
+                    }
+                };
+            }
         } else if (context.type === 'connectioncreate') {
             const data = context.data;
 

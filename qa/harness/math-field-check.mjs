@@ -384,7 +384,7 @@ try {
         JSON.stringify(collapsedChrome),
     );
     check(
-        'collapsed title still shows the typeset expression at 14px',
+        'collapsed title carries the LaTeX expression at 14px',
         collapsedChrome?.title?.includes('\\pi') === true && collapsedChrome?.titleFontSize === '14px',
         JSON.stringify({ title: collapsedChrome?.title, fontSize: collapsedChrome?.titleFontSize }),
     );
@@ -456,6 +456,7 @@ try {
     const inBox = await consumer.locator('[data-testid="math-input-socket-x"] .socket').boundingBox();
     check('both quantity wire endpoints are on screen', outBox != null && inBox != null, JSON.stringify({ outBox, inBox }));
     const connectionsBefore = await page.evaluate(() => window.editor.getConnections().length);
+    const producerBoxBefore = await producer.boundingBox();
     if (outBox != null && inBox != null) {
         const from = { x: outBox.x + outBox.width / 2, y: outBox.y + outBox.height / 2 };
         const to = { x: inBox.x + inBox.width / 2, y: inBox.y + inBox.height / 2 };
@@ -469,27 +470,23 @@ try {
         await page.mouse.up();
         await sleep(800);
     }
-    // Pointer wiring is the primary path; headless synthetic drags on a
-    // custom node view can miss, so fall back to the same editor API the
-    // drag calls (`window.editor.addConnection`), as the task allows.
-    let wiredBy = 'drag';
-    if ((await page.evaluate(() => window.editor.getConnections().length)) === connectionsBefore) {
-        wiredBy = 'editor-api';
-        await page.evaluate(async () => {
-            const nodes = window.editor.getNodes();
-            const producerNode = nodes.find((n) => n.source === '5 mm');
-            const consumerNode = nodes.find((n) => n.source === 'x * 2');
-            await window.editor.addConnection({
-                id: `qa-math-${Date.now()}`,
-                source: producerNode.id,
-                sourceOutput: 'return',
-                target: consumerNode.id,
-                targetInput: 'x',
-            });
-        });
-        await sleep(600);
-    }
-    check('a quantity producer is wired into the consumer input', (await page.evaluate(() => window.editor.getConnections().length)) > connectionsBefore, `via ${wiredBy}`);
+    const producerBoxAfter = await producer.boundingBox();
+    check(
+        'wiring by real pointer drag does not translate the math node',
+        producerBoxBefore != null &&
+            producerBoxAfter != null &&
+            Math.abs(producerBoxBefore.x - producerBoxAfter.x) < 1 &&
+            Math.abs(producerBoxBefore.y - producerBoxAfter.y) < 1,
+        JSON.stringify({ before: producerBoxBefore, after: producerBoxAfter }),
+    );
+    // No API fallback: a synthetic drag that misses is the exact regression
+    // this check exists to catch (the socket listener must survive the
+    // pointerdown and the node must not follow the pointer).
+    check(
+        'a quantity producer is wired into the consumer input by pointer drag',
+        (await page.evaluate(() => window.editor.getConnections().length)) > connectionsBefore,
+        'via drag',
+    );
     await shot('08-type-connected');
 
     const propagated = await page.evaluate(() => {
@@ -520,6 +517,110 @@ try {
         'rendered return socket type label is not "unknown"',
         propagated.returnLabel != null && propagated.returnLabel !== 'return' && /ValueWithUnits/.test(propagated.returnLabel),
         propagated.returnLabel ?? 'null',
+    );
+    const typedSocket = await consumer
+        .locator('[data-testid="math-return-socket"] .socket')
+        .evaluate((el) => ({ color: getComputedStyle(el).backgroundColor, title: el.getAttribute('title') }));
+    check(
+        'typed return socket paints the quantity colour (amber)',
+        typedSocket.color === 'rgb(229, 169, 61)',
+        JSON.stringify(typedSocket),
+    );
+
+    // Collapsed: the port must stay visible and keep the propagated type.
+    await consumer.locator('.math-toggle').click();
+    await sleep(450);
+    const collapsedTyped = await consumer.evaluate((el) => {
+        const socket = el.querySelector('[data-testid="math-return-socket"] .socket');
+        const node = el.getBoundingClientRect();
+        const rect = socket?.getBoundingClientRect();
+        return {
+            field: el.querySelector('[data-testid="math-field"]') != null,
+            socketTitle: socket?.getAttribute('title') ?? null,
+            socketVisible: rect != null && rect.width > 0 && rect.height > 0,
+            nodeHeight: Math.round(node.height),
+        };
+    });
+    check(
+        'collapsed math node keeps the typed return socket at the top-right',
+        collapsedTyped.field === false &&
+            collapsedTyped.socketVisible &&
+            /ValueWithUnits/.test(collapsedTyped.socketTitle ?? ''),
+        JSON.stringify(collapsedTyped),
+    );
+    check(
+        'collapsed math node stays compact (<= 60px tall)',
+        collapsedTyped.nodeHeight > 0 && collapsedTyped.nodeHeight <= 60,
+        `height=${collapsedTyped.nodeHeight}`,
+    );
+    await consumer.locator('.math-toggle').click();
+    await sleep(450);
+
+    // Copy/paste: source and the propagated type binding must survive.
+    await consumer.locator('[data-testid="math-title"]').click();
+    await page.keyboard.press('Control+c');
+    await sleep(250);
+    await page.mouse.click(900, 850);
+    await page.keyboard.press('Control+v');
+    await sleep(700);
+    const pasted = await page.evaluate(() => {
+        const nodes = window.editor.getNodes().filter((n) => n.source === 'x * 2');
+        const last = nodes[nodes.length - 1];
+        return {
+            count: nodes.length,
+            id: last?.id ?? null,
+            binding: last?.bindings?.x ?? null,
+            returnType: last?.getReturnType?.() ?? null,
+        };
+    });
+    check(
+        'copy/paste preserves the math source and propagated return type',
+        pasted.count === 2 &&
+            pasted.binding?.name === 'ValueWithUnits' &&
+            pasted.returnType?.name === 'ValueWithUnits',
+        JSON.stringify(pasted),
+    );
+    if (pasted.id != null) {
+        await page.evaluate(async (id) => {
+            for (const c of window.editor.getConnections()) {
+                if (c.source === id || c.target === id) await window.editor.removeConnection(c.id);
+            }
+            await window.editor.removeNode(id);
+        }, pasted.id);
+        await sleep(300);
+    }
+
+    // A live source edit retypes the wire: 5 mm -> 2 must flip the consumer
+    // from ValueWithUnits to number, and back again. Locate the producer by
+    // its node id because NodeOrderKeeper may reorder the DOM after selection.
+    const producerId = await page.evaluate(() => window.editor.getNodes().find((n) => n.source === '5 mm')?.id ?? null);
+    const producerNode = page.locator(`[data-testid="math-expression-node"][data-node-id="${producerId}"]`);
+    await typeInto(producerNode, '2');
+    await sleep(500);
+    const liveNumber = await page.evaluate(() => {
+        const producer = window.editor.getNodes().find((n) => n.source === '2');
+        const node = window.editor.getNodes().find((n) => n.source === 'x * 2');
+        return {
+            producerType: producer?.getReturnType?.() ?? null,
+            binding: node?.bindings?.x ?? null,
+            returnType: node?.getReturnType?.() ?? null,
+        };
+    });
+    check(
+        'editing a connected producer retypes the consumer return (quantity -> number)',
+        liveNumber.binding?.name === 'number' && liveNumber.returnType?.name === 'number',
+        JSON.stringify(liveNumber),
+    );
+    await typeInto(producerNode, '5 mm');
+    await sleep(500);
+    const liveQuantity = await page.evaluate(() => {
+        const node = window.editor.getNodes().find((n) => n.source === 'x * 2');
+        return { binding: node?.bindings?.x ?? null, returnType: node?.getReturnType?.() ?? null };
+    });
+    check(
+        'editing the producer back restores the quantity return',
+        liveQuantity.binding?.name === 'ValueWithUnits' && liveQuantity.returnType?.name === 'ValueWithUnits',
+        JSON.stringify(liveQuantity),
     );
 
     // Disconnect through the editor API: the binding and the derived return

@@ -3,6 +3,7 @@
     class="math-node node"
     :class="{ selected: data.selected, invalid: !data.isValid }"
     data-testid="math-expression-node"
+    :data-node-id="data.id"
     :style="{
       width: Number.isFinite(width) ? `${width}px` : Number.isFinite(data.width) ? `${data.width}px` : '',
       height: Number.isFinite(height) ? `${height}px` : '',
@@ -27,10 +28,11 @@
     <div class="math-output-row" data-testid="math-output-row">
       <span class="math-output-label">return</span>
       <Ref
-        :key="'return-' + seed"
+        :key="'return-' + returnTypeKey()"
         class="math-output-socket"
         data-testid="math-return-socket"
         :emit="emit"
+        @pointerdown="lockTranslate"
         :data="{ type: 'socket', side: 'output', key: 'return', btType: returnOutput()?.socket?.name ?? 'return', nodeId: data.id, payload: returnOutput() }"
       />
     </div>
@@ -135,6 +137,7 @@
             class="math-socket"
             :data-testid="`math-input-socket-${key}`"
             :emit="emit"
+            @pointerdown="lockTranslate"
             :data="{ type: 'socket', side: 'input', key, btType: input.socket?.name ?? key, nodeId: data.id, payload: input }"
           />
           <span class="math-socket-label">{{ key }}</span>
@@ -155,6 +158,8 @@ import {
   type PropType,
 } from "vue";
 import { Ref } from "rete-vue-plugin";
+import { TranslateLock } from "../utils/translatelock";
+import { valueTypeLabel } from "../onshape-utils/valuetypes";
 import type { MathExpressionNode } from "../rete/nodes/mathexpressionnode";
 import {
   getMathRenderer,
@@ -292,6 +297,27 @@ export default defineComponent({
       props.data.update();
     }
 
+    /**
+     * Sockets must not start a node translate: without this the card follows
+     * the pointer while a wire is being dragged, so the source port stays
+     * under the cursor and the drop always hits itself (no connection).
+     * Every Onshape node socket sits inside TranslateLock for this reason.
+     */
+    function lockTranslate(): void {
+      TranslateLock.unlock();
+    }
+
+    /**
+     * The socket component is mounted by rete-vue-plugin into the Ref element
+     * and does not receive prop updates, so key the Ref by the value type:
+     * a retype remounts it with the new label/colour, while an ordinary
+     * render (which changes `seed`) leaves the live socket element in place
+     * so the connection plugin's pointer listener survives the drag.
+     */
+    function returnTypeKey(): string {
+      return valueTypeLabel(props.data.getReturnType());
+    }
+
     return {
       source,
       editing,
@@ -305,6 +331,8 @@ export default defineComponent({
       commitEdit,
       cancelEdit,
       toggleCollapse,
+      lockTranslate,
+      returnTypeKey,
       inputs: () => Object.entries(props.data.inputs),
       returnOutput: () => props.data.outputs["return"],
     };

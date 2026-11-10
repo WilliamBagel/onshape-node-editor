@@ -152,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import SvgIcon from './SvgIcon.vue'
 import { DOC_SECTIONS, resolveDocTarget, searchDocumentation } from '../docs'
 import type { DocSection, DocSectionId, DocTopic } from '../docs/types'
@@ -323,6 +323,19 @@ function onLayerKeydown(event: KeyboardEvent) {
   }
 }
 
+/**
+ * Escape must dismiss the sheet even when focus is not inside it: clicking
+ * article text blurs the search field to <body>, so a layer-scoped keydown
+ * never fires. Capture at the document while open (the sheet is the topmost
+ * surface at z-index 10100) and stop the event so nothing behind it also acts.
+ */
+function onDocumentKeydown(event: KeyboardEvent) {
+  if (!props.open || event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  close()
+}
+
 watch(term, async () => {
   if (isSearching.value) {
     const first = results.value[0]?.topic
@@ -358,10 +371,15 @@ watch(
 )
 
 onMounted(() => {
+  document.addEventListener('keydown', onDocumentKeydown, true)
   if (props.open) {
     returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     activate()
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', onDocumentKeydown, true)
 })
 </script>
 
