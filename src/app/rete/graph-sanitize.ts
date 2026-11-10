@@ -130,6 +130,13 @@ export async function pruneInvalidNodes(
 ): Promise<SanitizeReport> {
     const report = sanitizeGraphNodes(editor.getNodes(), options);
     for (const pruned of report.pruned) {
+        // `removeNode` leaves model connections behind; drop the pruned
+        // node's wires too so the saved graph cannot reference a missing node.
+        for (const connection of [...editor.getConnections()]) {
+            if (connection.source === pruned.nodeId || connection.target === pruned.nodeId) {
+                await editor.removeConnection(connection.id);
+            }
+        }
         await editor.removeNode(pruned.nodeId);
         log({
             severity: "warning",

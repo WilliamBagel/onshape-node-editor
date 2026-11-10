@@ -57,6 +57,13 @@ export interface GroupEditHost {
     setPositions: (positions: Record<string, Vec2 | null>) => Promise<void>;
     /** Re-measure/repaint a node after its sockets changed. */
     updateNode?: (nodeId: string) => Promise<void>;
+    /**
+     * Make an edited definition authoritative in the host's definition map.
+     * Restoring a snapshot re-reads definitions from the saved document; the
+     * live edited object must win or the session's edits (new members, socket
+     * changes) are replaced by their pre-entry copies.
+     */
+    adoptDefinition?: (definition: GroupDefinition) => void;
     /** Fired after any boundary socket / wiring change so the host can
      * refresh its panel state. Must not write back into the editor
      * (read-only state refresh), so it cannot recurse into this driver. */
@@ -562,6 +569,20 @@ export class GroupEditorController {
         if (level == null) {
             return false;
         }
+        // Reconcile the definition with what the group session actually
+        // contains: nodes pasted or added inside the group become members,
+        // and members deleted in the session leave it. Without this, a paste
+        // into a group is silently discarded on exit.
+        const boundaryIds = new Set(
+            [level.boundaryInput?.id, level.boundaryOutput?.id].filter(
+                (id): id is string => id != null,
+            ),
+        );
+        const existingMembers = new Map(level.definition.nodes.map((node) => [node.id, node]));
+        level.definition.nodes = this.editor
+            .getNodes()
+            .filter((node) => !boundaryIds.has(node.id))
+            .map((node) => existingMembers.get(node.id) ?? node);
         const positions = this.host.getPositions();
         for (const memberId of Object.keys(positions)) {
             if (level.definition.nodes.some((node) => node.id === memberId)) {
@@ -606,6 +627,14 @@ export class GroupEditorController {
         }
         await this.host.restore(level.snapshot);
         await this.host.setPositions({ ...level.snapshot.positions });
+        // The restore re-read every definition from the snapshot document,
+        // replacing the live objects with their pre-entry copies. Re-adopt the
+        // edited definition (and any outer level still being edited) before
+        // rebinding instances, or pasted/added members are dropped on save.
+        this.host.adoptDefinition?.(level.definition);
+        for (const active of this.levels) {
+            this.host.adoptDefinition?.(active.definition);
+        }
         // The restore rebuilt instance nodes from the snapshot's copy of
         // the definition; rebind them to the edited definition object so
         // edits made in the group session are the ones that survive.

@@ -5,6 +5,8 @@ import { NodeEditor } from 'rete';
 import { deserializeGraph, serializeGraph } from '../serialization/graph-serializer';
 import { toLatex } from '../../onshape-utils/mathexpr';
 import { OnshapeSocket } from '../onshapesockets';
+import { OnshapeInput } from '../inputoutput/onshapeinput';
+import { propagateMathReturnType, syncMathInputType } from '../math-type-propagation';
 
 describe('MathExpressionNode', () => {
     it('2 * PI * r: r becomes a socket, PI stays inline', () => {
@@ -169,6 +171,122 @@ describe('MathExpressionNode', () => {
             const node = new MathExpressionNode('x * 2');
             node.applyConnectedInputType('missing', { name: 'number' });
             expect(node.bindings['missing']).toBeUndefined();
+        });
+
+        it('keeps the return output object identity when its type changes', () => {
+            const node = new MathExpressionNode('x * 2');
+            const output = node.outputs['return'];
+            node.applyConnectedInputType('x', { name: 'ValueWithUnits', units: 'millimeter' });
+            // A target input's `connections` array holds this object; replacing
+            // it makes a later disconnect fail to find the producer.
+            expect(node.outputs['return']).toBe(output);
+            expect(output.type).toBe('ValueWithUnits (millimeter)');
+        });
+
+        it('a consumer can still drop the producer after the producer retyped', () => {
+            const node = new MathExpressionNode('x * 2');
+            const input = new OnshapeInput(new OnshapeSocket('value', { name: 'unknown' }), 'value', 'unknown');
+            input.addConnection(node.outputs['return'] as never);
+            expect(input.isConnected()).toBe(true);
+
+            node.applyConnectedInputType('x', { name: 'number' });
+            input.removeConnection(node.outputs['return'] as never);
+
+            expect(input.isConnected()).toBe(false);
+        });
+
+        it('lets the canvas defer removing a still-connected input', () => {
+            const node = new MathExpressionNode('x * 2');
+            const removed: string[] = [];
+            node.onBeforeInputRemoved = (_node, name) => {
+                removed.push(name);
+                return true;
+            };
+
+            node.setSource('3');
+
+            expect(node.getSourceVariables()).toEqual([]);
+            expect(removed).toEqual(['x']);
+            // The socket survives until the canvas has disconnected its wire.
+            expect(node.inputs['x']).toBeDefined();
+            node.removeInput('x');
+            expect(node.inputs['x']).toBeUndefined();
+        });
+    });
+
+    describe('return type propagation', () => {
+        const wire = (
+            editor: NodeEditor<any>,
+            source: MathExpressionNode,
+            target: MathExpressionNode,
+            id: string,
+            targetInput = 'x',
+        ) =>
+            editor.addConnection({
+                id,
+                source: source.id,
+                sourceOutput: 'return',
+                target: target.id,
+                targetInput,
+            } as never);
+
+        it('follows the first producer and cascades retypes downstream', async () => {
+            const editor = new NodeEditor<any>();
+            const number = new MathExpressionNode('7');
+            const quantity = new MathExpressionNode('7 mm');
+            const middle = new MathExpressionNode('x * 2');
+            const last = new MathExpressionNode('y * 3');
+            for (const node of [number, quantity, middle, last]) await editor.addNode(node as never);
+            middle.onReturnTypeChanged = () => propagateMathReturnType(editor, middle);
+            last.onReturnTypeChanged = () => propagateMathReturnType(editor, last);
+
+            // Draw the downstream wire first: connection order must not matter.
+            await wire(editor, middle, last, 'middle-last', 'y');
+            expect(syncMathInputType(editor, middle.id, 'x')).toBe(false);
+            expect(last.bindings['y']).toBeUndefined();
+
+            await wire(editor, number, middle, 'number-middle');
+            expect(syncMathInputType(editor, middle.id, 'x')).toBe(true);
+            expect(middle.getReturnType().name).toBe('number');
+            expect(last.bindings['y']).toEqual({ name: 'number' });
+
+            // A second producer must not override the first (data() reads [0]).
+            await wire(editor, quantity, middle, 'quantity-middle');
+            expect(syncMathInputType(editor, middle.id, 'x')).toBe(false);
+            expect(middle.getReturnType().name).toBe('number');
+
+            // Dropping the first producer falls back to the next one.
+            await editor.removeConnection('number-middle');
+            expect(syncMathInputType(editor, middle.id, 'x')).toBe(true);
+            expect(middle.getReturnType().name).toBe('ValueWithUnits');
+            expect(last.bindings['y']).toEqual({ name: 'ValueWithUnits', units: 'millimeter' });
+
+            // Dropping the last producer reverts the whole chain to unknown.
+            await editor.removeConnection('quantity-middle');
+            expect(syncMathInputType(editor, middle.id, 'x')).toBe(true);
+            expect(middle.getReturnType().name).toBe('unknown');
+            expect(last.bindings['y']).toBeUndefined();
+        });
+
+        it('retypes consumers when an upstream source edit changes the return type', async () => {
+            const editor = new NodeEditor<any>();
+            const source = new MathExpressionNode('7 mm');
+            const middle = new MathExpressionNode('x * 2');
+            const last = new MathExpressionNode('y * 3');
+            for (const node of [source, middle, last]) await editor.addNode(node as never);
+            source.onReturnTypeChanged = () => propagateMathReturnType(editor, source);
+            middle.onReturnTypeChanged = () => propagateMathReturnType(editor, middle);
+            last.onReturnTypeChanged = () => propagateMathReturnType(editor, last);
+
+            await wire(editor, source, middle, 'source-middle');
+            await wire(editor, middle, last, 'middle-last', 'y');
+            syncMathInputType(editor, middle.id, 'x');
+            expect(middle.getReturnType().name).toBe('ValueWithUnits');
+            expect(last.bindings['y']).toEqual({ name: 'ValueWithUnits', units: 'millimeter' });
+
+            source.setSource('7');
+            expect(middle.getReturnType().name).toBe('number');
+            expect(last.bindings['y']).toEqual({ name: 'number' });
         });
     });
 });
