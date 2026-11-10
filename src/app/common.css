@@ -148,8 +148,9 @@ body {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: var(--hairline-strong) transparent;
-    margin-top: 0;
-    margin-left: 0;
+    /* woolsthorpe.css gives its demo .menu a 2em bottom margin; on a fixed
+       host that margin is an invisible 28px strip that swallows clicks. */
+    margin: 0;
     background: var(--surface);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-card);
@@ -200,9 +201,8 @@ body {
     border-top: 1px solid var(--hairline);
 }
 
-.menu[rete-context-menu][rete-context-menu] .block.hasSubitems {
-    padding-right: 26px;
-}
+/* Category rows reserve chevron room with the real `.row-chevron` flex item,
+   not padding, so the submenu line can span the full row width. */
 
 .menu[rete-context-menu][rete-context-menu] .block:hover {
     background-color: var(--surface-sunken);
@@ -259,11 +259,23 @@ body {
     width: auto;
     max-height: none;
     overflow: visible;
-    padding: 0 0 0 14px;
+    padding: 0;
     border: 0;
     border-radius: 0;
     box-shadow: none;
     background: transparent;
+}
+
+/* Inline leaf rows are a flat list under the category, not nested cards. */
+.menu[rete-context-menu][rete-context-menu] .subitems-inline .subitem,
+.menu[rete-context-menu][rete-context-menu] .subitems-inline .subitem:first-child,
+.menu[rete-context-menu][rete-context-menu] .subitems-inline .subitem:last-child {
+    border-radius: 0;
+}
+
+/* Indent the leaf content, not the whole list: hairlines run full width. */
+.menu[rete-context-menu][rete-context-menu] .subitems-inline .subitem {
+    padding-left: 24px;
 }
 
 .menu[rete-context-menu][rete-context-menu] .subitems {
@@ -284,15 +296,7 @@ body {
     padding: 4px;
 }
 
-.menu[rete-context-menu][rete-context-menu] .hasSubitems:after {
-    content: "";
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    width: 5px;
-    height: 5px;
-    border: solid var(--text-secondary);
-    border-width: 0 1.5px 1.5px 0;
-    transform: translateY(-50%) rotate(-45deg);
-    opacity: 1;
-}
+/* Category rows draw their chevron as a real element (EditorContextMenu
+   scoped `.row-chevron`) so it stays on the header line when the inline
+   submenu opens; the old ::after sat at 50% of the whole block and drifted
+   into the submenu. */

@@ -127,6 +127,7 @@ describe("EditorContextMenu", () => {
     await menu.trigger("keydown", { key: "Enter" });
     await wrapper.vm.$nextTick();
     expect(wrapper.findAll(".subitem").map(s => s.text())).toEqual(["sin", "cos"]);
+    expect(wrapper.find(".row-chevron--open").exists()).toBe(true);
     await menu.trigger("keydown", { key: "ArrowDown" });
     expect(menu.attributes("aria-activedescendant")).toBe("cm-sin");
 
@@ -199,6 +200,8 @@ describe("EditorContextMenu", () => {
     expect(rows[2].find(".row-shortcut").text()).toBe("Del");
     expect(rows[3].classes()).toContain("block--section-start");
     expect(rows[3].find(".row-shortcut").exists()).toBe(false);
+    expect(rows[3].find(".row-chevron").exists()).toBe(true);
+    expect(rows[0].find(".row-chevron").exists()).toBe(false);
 
     // Opening the category shows its icon-bearing leaf rows too.
     await rows[3].find(".content").trigger("click");
@@ -212,5 +215,27 @@ describe("EditorContextMenu", () => {
     expect(hit.find(".row-icon svg use").exists()).toBe(true);
     expect(hit.find(".row-shortcut").text()).toBe("Ctrl+C");
     wrapper.unmount();
+  });
+
+  it("returns focus to the canvas after activating a row", async () => {
+    const main = document.createElement("main");
+    main.className = "rete";
+    document.body.append(main);
+    const { items, sin } = menuItems();
+    const wrapper = mount(EditorContextMenu, {
+      props: { items, searchBar: false, onHide: vi.fn() },
+      attachTo: main,
+    });
+    const menu = wrapper.find('[data-testid="context-menu"]');
+
+    await menu.trigger("keydown", { key: "Enter" }); // open Math
+    await wrapper.vm.$nextTick();
+    await menu.trigger("keydown", { key: "ArrowDown" }); // sin
+    await menu.trigger("keydown", { key: "Enter" });
+
+    expect(sin).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(main);
+    wrapper.unmount();
+    main.remove();
   });
 });

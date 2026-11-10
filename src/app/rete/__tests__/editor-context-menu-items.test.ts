@@ -28,7 +28,7 @@ function actions() {
         copy: vi.fn(),
         paste: vi.fn(),
         remove: vi.fn(),
-        createNode: vi.fn(() => () => new CustomFeatureNode(setUpBoxFeatureSpec())),
+        createNode: vi.fn(() => () => undefined),
     };
 }
 
@@ -104,6 +104,19 @@ describe("buildEditorContextMenuList", () => {
             { ...BINDINGS, copy: "Alt+C" },
         );
         expect(rebound.list[0].shortcut).toBe("Alt+C");
+    });
+
+    it("catalog leaf handler runs the create action itself", () => {
+        const inner = vi.fn();
+        const spies = { ...actions(), createNode: vi.fn(() => inner) };
+        const { list } = buildEditorContextMenuList("root", GROUPS, spies, BINDINGS);
+        const leaf = list.find((item) => item.key === "category:Modeling")?.subitems?.[0];
+
+        expect(leaf).toBeDefined();
+        leaf?.handler();
+
+        expect(spies.createNode).toHaveBeenCalledWith(GROUPS[0].entries[0]);
+        expect(inner).toHaveBeenCalledOnce();
     });
 
     it("gives every category and catalog leaf an icon", () => {

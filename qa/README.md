@@ -29,6 +29,7 @@ pnpm run build:qa-dashboard          # -> dist/qa-dashboard
 pnpm run smoke:qa-dashboard          # http + Playwright, sample report
 pnpm run qa:node-chrome              # node chrome regression check (needs a dev server; QA_URL optional)
 pnpm run qa:defects -- --url http://127.0.0.1:5173/onshape-node-editor/   # group-wire + palette defect checks (exits 1 on defects; --advisory to stay green)
+pnpm run qa:context-menu-audit               # menu placement/icons/chips/keyboard/search + clipboard matrix, 3 viewports (owns 5241; exits 1 on a failed check)
 pnpm run qa:default-graph                     # default debug graph must open clean (exits 1 on invalid/orphaned nodes or console errors)
 pnpm run qa:build-validation                  # Build on the unwired default graph must fail, never log "Built FeatureScript" (boots vite on 5221; QA_URL skips the boot)
 QA_URL=http://127.0.0.1:5214/onshape-node-editor/ pnpm run qa:feature-panel   # feature/group toolbar + type-picker + live-I/O regression check (see below)

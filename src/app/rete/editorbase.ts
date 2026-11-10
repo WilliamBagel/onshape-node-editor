@@ -418,8 +418,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
                         }
                         await deleteSelectedNodes();
                     },
-                    createNode: (entry) => () =>
-                        createNodeFromCatalogEntry(entry, cachedSpecResolver) as OnshapeNode,
+                    createNode: (entry) => () => { void addNodeFromCatalog(entry); },
                 },
                 editorSettings.getBindings(),
             ),
