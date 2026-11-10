@@ -13,7 +13,7 @@ export async function createEditor(container: HTMLElement) {
     console.error('app could not be found');
   }
 
-  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, isDefineFeatureNode, getDefineFeatureState, setDefineFeatureName, addDefineFeatureParameter, updateDefineFeatureParameter, removeDefineFeatureParameter, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, sanitizeGraph, debugSources } = await editorBase(container);
+  const { editor, area, studioEvents, nodeOrder, fitView, deleteSelectedNodes, createFrameFromSelection, toggleFrameCollapsed, toggleGroupEdit, exitGroupTo, canToggleGroupEdit, toggleMuteSelected, listGroupDefinitions, addGroupInstance, createGroupFromSelection, getGroupBoundaryState, isGroupBoundaryNode, addGroupBoundarySocket, addGroupBoundarySocketAny, updateGroupBoundarySocket, removeGroupBoundarySocket, setGroupBoundaryChangedCallback, isDefineFeatureNode, getDefineFeatureState, setDefineFeatureName, addDefineFeatureParameter, updateDefineFeatureParameter, removeDefineFeatureParameter, applyPreferences, addNodeFromCatalog, addArrayNode, addMathExpressionNode, addUtilityNode, serializeGraph, loadGraph, sanitizeGraph, debugSources } = await editorBase(container);
 
   // #8: default graph nodes come from the catalog (#7) via the factory —
   // no inline spec literals. A value function and a statement feature.
@@ -90,6 +90,7 @@ export async function createEditor(container: HTMLElement) {
     createFrameFromSelection,
     toggleFrameCollapsed,
     toggleGroupEdit,
+    exitGroupTo,
     canToggleGroupEdit,
     toggleMuteSelected,
     listGroupDefinitions,

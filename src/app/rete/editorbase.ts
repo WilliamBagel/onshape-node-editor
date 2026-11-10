@@ -111,6 +111,8 @@ export type EditorControls = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #14: Tab — enter the selected group instance, or exit one level. */
     toggleGroupEdit: () => Promise<string[]>
+    /** #14: topbar breadcrumb — exit until `depth` levels remain (0 = top level). */
+    exitGroupTo: (depth: number) => Promise<string[]>
     /** #14: Tab hint — true when Tab can actually enter/exit a group. */
     canToggleGroupEdit: () => boolean
     /** #14: M — mute the selected nodes; returns how many changed. */
@@ -187,6 +189,8 @@ type EditorBaseInfo = {
     toggleFrameCollapsed: (frameId: string) => Promise<void>
     /** #14: Tab — enter the selected group instance, or exit one level. */
     toggleGroupEdit: () => Promise<string[]>
+    /** #14: topbar breadcrumb — exit until `depth` levels remain (0 = top level). */
+    exitGroupTo: (depth: number) => Promise<string[]>
     /** #14: M — mute the selected nodes; returns how many changed. */
     toggleMuteSelected: () => Promise<number>
     /** #14: known group definitions, for placing another instance. */
@@ -960,6 +964,13 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         return groupController.breadcrumb();
     };
 
+    /** Topbar breadcrumb: leave levels until `depth` remains (0 = top level). */
+    const exitGroupTo = async (depth: number): Promise<string[]> => {
+        await groupController.exitTo(depth);
+        await settleConnections();
+        return groupController.breadcrumb();
+    };
+
     const getGroupBoundaryState = (): GroupBoundaryState | null => groupController.boundaryState();
     const isGroupBoundaryNode = (nodeId: string): boolean => groupController.isBoundaryNode(nodeId);
     const addGroupBoundarySocket = (direction: "input" | "output", nodeId: string, socketKey: string): Promise<boolean> =>
@@ -1347,6 +1358,7 @@ export async function editorBase(container: HTMLElement): Promise<EditorBaseInfo
         createFrameFromSelection,
         toggleFrameCollapsed,
         toggleGroupEdit,
+        exitGroupTo,
         canToggleGroupEdit,
         toggleMuteSelected,
         listGroupDefinitions,

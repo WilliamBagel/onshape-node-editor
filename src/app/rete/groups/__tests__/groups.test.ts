@@ -777,6 +777,52 @@ describe("grouping v2 (#14)", () => {
         expect(controller.breadcrumb()).toEqual(["Top level"]);
     });
 
+    it("exitTo: a breadcrumb click leaves every group inside the clicked segment", async () => {
+        const editor = new NodeEditor<Schemes>();
+        const engine = new DataflowEngine<Schemes>();
+        editor.use(engine);
+        const positions: Record<string, { x: number; y: number } | null> = {};
+        const cross = utility("cross");
+        const transform = utility("transform");
+        const innerDef = createGroupDefinition("group-inner-exit", "InnerExit");
+        innerDef.nodes = [cross, transform];
+        innerDef.connections = [{ source: cross.id, sourceOutput: "return", target: transform.id, targetInput: "translation" }];
+        innerDef.inputs = [{ id: `${cross.id}.vector1`, label: "vector1", direction: "input", nodeId: cross.id, socketKey: "vector1" }];
+        innerDef.outputs = [{ id: `${transform.id}.return`, label: "return", direction: "output", nodeId: transform.id, socketKey: "return" }];
+        const innerInstance = new GroupNode(innerDef);
+        const outerDef = createGroupDefinition("group-outer-exit", "OuterExit");
+        outerDef.nodes = [innerInstance];
+        const outerInstance = new GroupNode(outerDef);
+        await editor.addNode(outerInstance);
+        editor.getNodes().forEach((node, index) => {
+            positions[node.id] = { x: index * 10, y: index * 20 };
+        });
+        const controller = new GroupEditorController(editor, {
+            snapshot: () => ({ document: JSON.stringify(serializeGraph(editor, positions, editor.getNodes().map((node) => node.id))), positions: { ...positions } }),
+            restore: async (snap) => {
+                const loaded = deserializeGraph(JSON.parse(snap.document), { resolveSpec: () => undefined });
+                if (!loaded.ok) throw new Error(loaded.error);
+                for (const connection of [...editor.getConnections()]) await editor.removeConnection(connection.id);
+                for (const node of [...editor.getNodes()]) await editor.removeNode(node.id);
+                await applyGraph(editor, loaded.graph);
+            },
+            getPositions: () => ({ ...positions }),
+            setPositions: async (next) => { Object.assign(positions, next); },
+        });
+        expect(await controller.toggle(outerInstance.id)).toBe("entered");
+        const nestedId = editor.getNodes().find((n) => n instanceof GroupNode)?.id;
+        expect(nestedId).toBeTruthy();
+        expect(await controller.toggle(nestedId!)).toBe("entered");
+        expect(controller.breadcrumb()).toEqual(["Top level", "OuterExit", "InnerExit"]);
+        // Clicking "Top level" (depth 0) leaves BOTH levels in one call...
+        expect(await controller.exitTo(0)).toBe(true);
+        expect(controller.depth).toBe(0);
+        expect(controller.breadcrumb()).toEqual(["Top level"]);
+        // ...and a depth at/beyond the current one is a safe no-op.
+        expect(await controller.exitTo(0)).toBe(false);
+        expect(controller.depth).toBe(0);
+    });
+
     it("panel add then exit shows new output on instance; remove leaves no stale socket/wire", async () => {
         const editor = new NodeEditor<Schemes>();
         const engine = new DataflowEngine<Schemes>();
