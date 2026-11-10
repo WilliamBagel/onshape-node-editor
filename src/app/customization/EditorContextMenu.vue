@@ -31,6 +31,8 @@
         </span>
         <div class="content">{{ item.label }}</div>
         <kbd v-if="item.shortcut" class="row-shortcut">{{ item.shortcut }}</kbd>
+        <span v-if="hasChildren(item)" class="row-chevron" :class="{ 'row-chevron--open': openKey === item.key }"
+          aria-hidden="true"></span>
         <div v-if="hasChildren(item) && openKey === item.key" class="subitems subitems-inline">
           <div v-for="sub in item.subitems" :key="sub.key" class="block subitem"
             :class="{ 'block--active': sub.key === activeKey }"
@@ -236,7 +238,10 @@ function activate(item: ContextMenuItem): void {
     return;
   }
   void item.handler?.();
-  props.onHide?.();
+  // Same hand-back as Escape: the menu root owns focus, so hiding it without
+  // this leaves keyboard focus on document.body. Mouse users get the canvas
+  // focused too, which is where the next gesture goes anyway.
+  closeAndRefocus();
 }
 
 function cancelHide(): void {
@@ -282,6 +287,21 @@ onUpdated(() => {
 <style scoped>
 .content { display: flex; align-items: baseline; gap: 6px; flex: 1 1 auto; min-width: 0; }
 .row-icon { display: inline-flex; flex: none; color: var(--text-secondary); }
+/* A category row wraps its header line and puts the inline submenu on its own
+   full-width line; without the wrap the submenu became a narrow column beside
+   the label (the block is a flex row). */
+.block.hasSubitems { flex-wrap: wrap; }
+.row-chevron {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border: solid var(--text-secondary);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(-45deg);
+}
+.row-chevron--open { transform: rotate(45deg); }
+.subitems-inline { flex: 1 0 100%; width: 100%; }
 /* Keycap chips: right-aligned, mono 10px, hairline border (STYLE_GUIDE). */
 .row-shortcut {
   flex: none;

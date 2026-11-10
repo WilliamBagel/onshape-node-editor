@@ -21,8 +21,8 @@ export interface EditorContextMenuActions {
     paste: () => void | Promise<void>;
     /** Delete the current selection, or `node` when it is not part of it. */
     remove: (node?: OnshapeNode) => void | Promise<void>;
-    /** Factory for a catalog leaf: the plugin calls it to create the node. */
-    createNode: (entry: CatalogEntry) => () => OnshapeNode;
+    /** Factory for a catalog leaf: creates AND adds the node at the pointer. */
+    createNode: (entry: CatalogEntry) => () => void;
 }
 
 /**
@@ -80,9 +80,10 @@ export function buildEditorContextMenuList(
                 key: `node:${group.category}:${entry.key}`,
                 label: entry.name,
                 icon: iconForCatalogEntry(entry),
-                // The plugin calls this and adds the returned node itself; the
-                // Item type only promises a void handler, so widen at the edge.
-                handler: actions.createNode(entry) as unknown as () => void,
+                // The custom renderer calls this handler directly and does not
+                // interpret its return value, so the action must add the node
+                // itself (editorbase.createNode does).
+                handler: actions.createNode(entry),
             })),
         }))
         : [];

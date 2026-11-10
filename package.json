@@ -45,6 +45,7 @@
     "qa:docs-nav": "node qa/harness/docs-nav-check.mjs",
     "qa:context-copy": "node qa/harness/context-copy-check.mjs",
     "qa:util-graph": "node qa/harness/util-graph-check.mjs",
+    "qa:context-menu-audit": "node qa/harness/context-menu-audit.mjs",
     "qa:report": "node qa/harness/report.mjs",
     "qa:review": "node qa/review/review-packet.mjs"
   },
