@@ -40,6 +40,7 @@ import {
     groupUsesExpressionPath,
 } from "./groups/groupmodel";
 import type { NodeFeaturescriptInfo } from "../onshape-utils/featurestudiogenerator";
+import { findFeatureScriptStructureError } from "../onshape-utils/featurescriptstructure";
 import { GroupNode } from "./nodes/groupinstancenode";
 
 /**
@@ -439,7 +440,19 @@ export async function generateFeatureStudioSource(
 
     const featureStudioGenerator = new FeatureStudioGenerator();
 
-    return featureStudioGenerator.generateFeatureStudioCode(featureScriptInfo);
+    const source = featureStudioGenerator.generateFeatureStudioCode(featureScriptInfo);
+
+    // A non-empty string is not the same thing as valid FeatureScript: an
+    // unwired graph flattens to the End Feature node alone and would otherwise
+    // return a header plus one orphan `});`. Refuse it here, naming the missing
+    // Define Feature / End Feature chain, so Build reports an error instead of
+    // "Built FeatureScript".
+    const structureError = findFeatureScriptStructureError(source);
+    if (structureError !== undefined) {
+        throw new Error(structureError);
+    }
+
+    return source;
 }
 
 /**

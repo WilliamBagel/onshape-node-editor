@@ -59,6 +59,7 @@ import { resolveRunTarget } from "./onshape-utils/partstudiotarget";
 import { saveGraphVerified, openGraph, type SaveOutcome, type OpenOutcome, type GraphListing } from "./onshape-utils/graphsaveopen";
 import { dialogService } from "./ui/dialog";
 import type { SpecResolver, FeatureSpecReference } from "./rete/serialization/graph-schema-types";
+import { findFeatureScriptStructureError } from "./onshape-utils/featurescriptstructure";
 import type { BTFeatureSpec129 } from "onshape-typescript-fetch";
 
 export class App extends BaseApp {
@@ -541,7 +542,21 @@ export class App extends BaseApp {
             this.log.add({
                 severity: 'error',
                 source: 'build',
-                message: 'Build produced no FeatureScript. Connect an Output node and try again.',
+                message: 'Build produced no FeatureScript. Connect a Define Feature to an End Feature and try again.',
+            });
+            return;
+        }
+        // A non-empty string is not proof of success: `generateFeatureStudioSource`
+        // now throws on malformed output, and this check keeps a future caller
+        // that hands Build an unwrapped source from logging it as "Built".
+        const structureError = findFeatureScriptStructureError(source);
+        if (structureError !== undefined) {
+            this.log.add({
+                severity: 'error',
+                source: 'build',
+                message: `Build failed: ${structureError}`,
+                detail: source,
+                detailLabel: 'Rejected FeatureScript',
             });
             return;
         }
