@@ -39,7 +39,7 @@
             role="option"
             :aria-selected="item.key === activeKey"
             @click="choose(item)"
-            @mouseenter="activeKey = item.key"
+            @mousemove="onItemPointerMove(item.key, $event)"
           >
             <span class="palette-item-name">{{ item.name }}</span>
             <span class="palette-item-meta">{{ item.meta }}</span>
@@ -103,15 +103,52 @@ function registerItem(key: string, el: unknown) {
 
 const flat = computed(() => searchPaletteInsertables(props.insertables, term.value))
 const groups = computed(() => groupInsertablesByCategory(flat.value))
+
+/**
+ * The rows in the order the user actually sees them: category groups in DOM
+ * order, each group sorted by name. Arrow keys, the active-descendant id and
+ * scroll-into-view all index THIS sequence — never the ungrouped search
+ * ranking. The two orders differ as soon as a query matches rows in more
+ * than one category, which made one ArrowDown jump thousands of rows away
+ * from the row next to the active one (search ranking is score-ordered, the
+ * DOM is category-ordered).
+ */
+const displayed = computed<PaletteInsertable[]>(() => groups.value.flatMap(group => group.entries))
+
 const activeId = computed(() => (activeKey.value != null ? `node-palette-item-${activeKey.value}` : undefined))
 
+/**
+ * Pointer intent, movement-gated. A hover must not steal the keyboard row:
+ * scrolling the list (wheel, or arrow-key scroll-into-view) moves new rows
+ * under a stationary pointer, and an unconditional `mouseenter` handler then
+ * re-points activeKey at whatever slid under the cursor — the next ArrowDown
+ * would advance from the wrong row. `mousemove` only fires on real pointer
+ * movement, so it is the signal we gate on; repeated events at the same
+ * coordinates (synthesised on scroll by some engines) are ignored.
+ */
+let lastPointer: { x: number; y: number } | null = null
+function onItemPointerMove(key: string, event: MouseEvent) {
+  const x = event.clientX
+  const y = event.clientY
+  if (lastPointer != null && lastPointer.x === x && lastPointer.y === y) return
+  lastPointer = { x, y }
+  activeKey.value = key
+}
+
 watch(() => props.open, async (v) => {
-  if (v) { term.value = ''; activeKey.value = flat.value[0]?.key ?? null; await nextTick(); search.value?.focus() }
+  if (v) {
+    term.value = ''
+    // First row on screen, not the top of the search ranking.
+    activeKey.value = displayed.value[0]?.key ?? null
+    lastPointer = null
+    await nextTick()
+    search.value?.focus()
+  }
 })
-watch(flat, () => {
-  if (activeKey.value == null || !flat.value.some(e => e.key === activeKey.value)) activeKey.value = flat.value[0]?.key ?? null
+watch(displayed, () => {
+  if (activeKey.value == null || !displayed.value.some(e => e.key === activeKey.value)) activeKey.value = displayed.value[0]?.key ?? null
   scrollActiveIntoView()
-})
+}, { immediate: true })
 
 /**
  * Keep the active row inside the list by scrolling the list only.
@@ -154,12 +191,17 @@ function onPanelKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') { event.preventDefault(); close(); return }
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
     event.preventDefault()
-    const idx = flat.value.findIndex(e => e.key === activeKey.value)
-    const next = event.key === 'ArrowDown' ? Math.min(idx + 1, flat.value.length - 1) : Math.max(idx - 1, 0)
-    activeKey.value = flat.value[next]?.key ?? null
+    // Navigate the rendered order, one row per press. An unknown active row
+    // (null) starts at the top; ends clamp instead of wrapping.
+    const rows = displayed.value
+    const idx = rows.findIndex(e => e.key === activeKey.value)
+    const next = event.key === 'ArrowDown'
+      ? (idx < 0 ? 0 : Math.min(idx + 1, rows.length - 1))
+      : (idx < 0 ? rows.length - 1 : Math.max(idx - 1, 0))
+    activeKey.value = rows[next]?.key ?? null
     scrollActiveIntoView()
   } else if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
-    const item = flat.value.find(e => e.key === activeKey.value)
+    const item = displayed.value.find(e => e.key === activeKey.value)
     if (item) choose(item)
   }
 }
